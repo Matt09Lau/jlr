@@ -1,0 +1,17 @@
+# ===== 代理工作区（.workbuddy）：默认全部忽略 =====
+# 仅放行设计稿源码 template.html 与 assemble.py，其余内部状态/依赖库不入库
+.workbuddy/**
+!.workbuddy/
+!.workbuddy/vendor/
+!.workbuddy/vendor/template.html
+!.workbuddy/vendor/assemble.py
+
+# ===== 操作系统/编辑器临时文件 =====
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# ===== Python 缓存 =====
+__pycache__/
+*.pyc
