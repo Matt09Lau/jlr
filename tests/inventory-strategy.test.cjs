@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict');
-const {schemas,seed,validate,normalize,transition,effective,uniqueKey,csvParse,csvEncode,isDisabled}=require('../前端设计稿/inventory-strategy.js');
+const {schemas,seed,validate,normalize,transition,effective,uniqueKey,csvParse,csvEncode,isDisabled,actionRole}=require('../前端设计稿/inventory-strategy.js');
 let checks=0;function test(name,fn){fn();checks++;console.log('PASS '+name);}
 test('9个模块均有唯一维度演示数据',()=>{assert.equal(Object.keys(schemas).length,9);for(const k in schemas){const r=seed(k);assert(r.length>=8,k);assert.equal(new Set(r.map(x=>uniqueKey(k,x))).size,r.length);}});
 test('目标满足率类型条件必填和清空',()=>{const r=normalize('service',{type:'配件目标满足率',part:'LR000001',wh:'SH01',abc:'A',rate:98});assert.equal(r.abc,'');assert.equal(validate('service',r).length,0);assert(isDisabled('service','abc',r));assert(validate('service',{...r,part:''}).some(e=>e.includes('必填')));assert(validate('service',{...r,rate:100}).length);const c=normalize('service',{...r,type:'ABC分类目标满足率',abc:'A'});assert.equal(c.part,'');assert.equal(validate('service',c).length,0);});
@@ -16,4 +16,8 @@ test('日期生效区间及零增储天数',()=>{const r={...seed('increase')[3]
 test('结果字段36项与采购/STO空值规则',()=>{assert.equal(schemas.result.cols.length,36);for(const r of seed('result')){if(r.buildType==='采购建储'){assert.equal(r.shipWh,'');assert.equal(r.weekly,'');}else{assert(r.shipWh);assert.equal(r.riskReorder,'');assert.equal(r.floorReorder,'');assert.equal(r.monthly,'');}}});
 test('人工调整原因和订购点上限',()=>{const r={...seed('result')[0],adjustTarget:100,adjustReorder:90,adjustReason:'活动备货'};assert.equal(validate('result',r).length,0);assert(validate('result',{...r,adjustReason:''}).length);assert(validate('result',{...r,adjustReorder:101}).length);});
 test('CSV中文、引号、逗号及跨行往返',()=>{const cols=[{key:'a',label:'字段A'},{key:'b',label:'字段B'}];let rows=[{a:'中文,带逗号',b:'双"引号\n跨行'}];const parsed=csvParse(csvEncode(rows,cols));assert.deepEqual(parsed,[['字段A','字段B'],[rows[0].a,rows[0].b]]);assert.throws(()=>csvParse('"未闭合'));});
+
+
+test('无需角色选择即可按操作与状态完成审批及撤回',()=>{let r=seed('increase')[0];for(const a of ['确认','计划经理确认','库存高级经理确认'])r=transition([r],a,actionRole(a,r.status))[0];assert.equal(r.status,'审批通过');for(const r of seed('increase').filter(x=>['待计划经理确认','待库存高级经理确认'].includes(x.status))){assert.equal(transition([r],'驳回',actionRole('驳回',r.status),'补充原因')[0].status,'已驳回');assert.equal(transition([r],'撤回',actionRole('撤回',r.status))[0].status,'已撤回');}});
+
 console.log(checks+' meaningful checks passed');

@@ -1032,7 +1032,7 @@ mark {
               </a-alert>
               <div class="toolbar-row">
                 <a-button type="primary" @click="genExportCsv(false)">⬇ 导出</a-button>
-                <a-button type="link" style="padding:0;" @click="genExportCsv(true)">全量导出</a-button>
+                <a-button :type="activeMenu.startsWith('inv-')?'primary':'link'" :style="activeMenu.startsWith('inv-')?{}:{padding:0}" @click="genExportCsv(true)">全量导出</a-button>
                 <a-button v-if="isFcLongBuyoutDraft" @click="lcOpenCoeffModal">系数调整</a-button>
                 <a-button v-if="isFcLongBuyout && !fcEditMode" @click="fcEditMode=true">编辑</a-button>
                 <a-button v-if="isFcLongBuyout && fcEditMode" type="primary" @click="fcSaveForecast">保存</a-button>
@@ -1053,7 +1053,7 @@ mark {
                       </a-menu>
                     </template>
                   </a-dropdown>
-                  <a-dropdown :trigger="['click']">
+                  <a-dropdown v-if="!activeMenu.startsWith('inv-')" :trigger="['click']">
                     <span title="列设置" @click.stop="() => {}">⚙</span>
                     <template #overlay>
                       <a-card style="width:190px;" :body-style="{padding:'8px 12px'}">
