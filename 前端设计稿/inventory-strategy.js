@@ -11,8 +11,8 @@ const partCols=[part,F('partName','配件名称')], whCols=[wh,F('whName','仓�
 const risk=[n('minCoef','最低风控线系数'),n('minDays','最低风控线调整天数'),n('maxCoef','最高风控线系数'),n('maxDays','最高风控线调整天数')];
 const types=['配件目标满足率','ABC分类目标满足率'];
 const statusList=['待审批','待计划经理确认','待库存高级经理确认','审批通过','已驳回','已撤回'];
-const resultLabels=['建储类型','配件号','配件名称','建储仓库编码','建储仓库名称','发货仓库编码','发货仓库名称','目标库存','最低风控线','最高风控线','风控后目标库存','风控后再订购点','兜底值','兜底后目标库存','兜底后再订购点','调整后目标库存','调整后再订购点','调整原因','周度预测','预测数据日期','周均销量','月度预测','月度预测日期','月均销量','需求波动','采购LT（天）','库间LT（天）','计划周期（天）','增储天数','增储生效日期','增储失效日期','目标满足率','服务水平','ABC分类','计划员','更新时间'];
-const resultKeys=['buildType','part','partName','wh','whName','shipWh','shipName','target','min','max','riskTarget','riskReorder','floor','floorTarget','floorReorder','adjustTarget','adjustReorder','adjustReason','weekly','weeklyDate','weeklySales','monthly','monthlyDate','monthlySales','volatility','purchaseDays','transferDays','cycle','days','start','end','rate','service','abc','planner','updated'];
+const resultLabels=['建储类型','建储版本','建储使用日期','配件号','配件名称','建储仓库编码','建储仓库名称','发货仓库编码','发货仓库名称','目标库存','最低风控线','最高风控线','风控后目标库存','风控后再订购点','兜底值','兜底后目标库存','兜底后再订购点','调整后目标库存','调整后再订购点','调整原因','周度预测','预测数据日期','周均销量','月度预测','月度预测日期','月均销量','需求波动','采购LT（天）','库间LT（天）','计划周期（天）','增储天数','增储生效日期','增储失效日期','目标满足率','服务水平','ABC分类','计划员','更新时间'];
+const resultKeys=['buildType','buildVersion','useDate','part','partName','wh','whName','shipWh','shipName','target','min','max','riskTarget','riskReorder','floor','floorTarget','floorReorder','adjustTarget','adjustReorder','adjustReason','weekly','weeklyDate','weeklySales','monthly','monthlyDate','monthlySales','volatility','purchaseDays','transferDays','cycle','days','start','end','rate','service','abc','planner','updated'];
 const schemas={
  purchase:{title:'采购LT',cols:[...partCols,F('planner','计划员'),sel('method','取值方式',['手工维护','25分位数','50分位数','75分位数','95分位数']),n('lt','采购LT（人工维护）'),n('samples','样本数'),n('q25','25分位数'),n('q50','50分位数'),n('q75','75分位数'),n('q95','95分位数'),F('calcDate','分位数最新计算日期'),...meta],edit:['part','method','lt'],filters:['part','partName','samples','method','lt','planner'],unique:['part'],note:'样本及分位数为只读演示快照；新增和人工维护为本地方案补充，原系统权限待核对。'},
  service:{title:'目标满足率',cols:[sel('type','类型',types),...partCols,F('partAbc','配件ABC分类'),...whCols,abc,n('rate','目标满足率(%)'),F('service','服务水平'),...meta],edit:['type','wh','part','abc','rate'],filters:['type','part','partName','wh','abc'],unique:['type','wh','part','abc'],note:'配件类型必填配件；ABC类型必填ABC分类；仓库、目标满足率始终必填。服务水平换算表尚待确认。'},
@@ -22,7 +22,7 @@ const schemas={
  cycle:{title:'计划周期',cols:[sel('type','类型',['配件计划周期','ABC分类计划周期']),...partCols,abc,n('cycle','计划周期'),...meta],edit:['type','part','abc','cycle'],filters:['type','part','partName','abc'],unique:['type','part','abc'],note:'配件类型必填配件；ABC类型必填ABC分类；计划周期为正整数。'},
  risk:{title:'配置风控线',cols:[...partCols,...whCols,...risk,...meta],edit:['part','wh',...risk.map(x=>x.key)],filters:['part','wh','minCoef','maxCoef','minDays','maxDays'],unique:['part','wh'],note:'四项风控参数作为一组配置；配件级优先，其次分类规则，再取全局参数。'},
  riskRule:{title:'配件风控线规则',cols:[...whCols,abc,sel('xyz','XYZ分类',['X','Y','Z']),sel('volume','体积分类',['大','中','小']),sel('amount','金额分类',['高','中','低']),...risk,...meta],edit:['wh','abc','xyz','volume','amount',...risk.map(x=>x.key)],filters:['wh','abc','xyz','volume','amount','minCoef','maxCoef','minDays','maxDays'],unique:['wh','abc','xyz','volume','amount'],note:'按仓库及分类组合维护；分类阈值与跨分类冲突处理规则待确认。'},
- result:{title:'建储水位线计算结果',cols:resultLabels.map((label,i)=>resultKeys[i]==='buildType'?sel('buildType',label,['PO 建储','STO 建储']):resultKeys[i]==='part'?part:resultKeys[i]==='wh'?{...wh,label}:resultKeys[i]==='shipWh'?sel('shipWh',label,wh.options):resultKeys[i]==='abc'?abc:F(resultKeys[i],label)),edit:['adjustTarget','adjustReorder','adjustReason'],filters:['buildType','part','partName','wh','shipWh','abc','planner'],unique:['buildType','part','wh','shipWh'],note:'固定演示结果，不代表已实现生产计算引擎。先展示水位线及风控、兜底、调整结果，再展示周月预测及其他参数；不适用字段留空。'}
+ result:{title:'建储水位线计算结果',cols:resultLabels.map((label,i)=>resultKeys[i]==='buildType'?sel('buildType',label,['PO 建储','STO 建储']):resultKeys[i]==='useDate'?F('useDate',label,'date'):resultKeys[i]==='part'?part:resultKeys[i]==='wh'?{...wh,label}:resultKeys[i]==='shipWh'?sel('shipWh',label,wh.options):resultKeys[i]==='abc'?abc:F(resultKeys[i],label)),edit:['adjustTarget','adjustReorder','adjustReason'],filters:['buildType','buildVersion','useDate','part','partName','wh','shipWh','abc','planner'],unique:['buildType','buildVersion','useDate','part','wh','shipWh'],note:'固定演示结果，不代表已实现生产计算引擎。先展示水位线及风控、兜底、调整结果，再展示周月预测及其他参数；不适用字段留空。'}
 };
 const buildTypes=['PO 建储','STO 建储'];
 const buildTypePages=['service','increase','risk','riskRule'];
@@ -31,6 +31,10 @@ const names=['机油滤清器','空气滤清器','前制动片','燃油泵','冷
 const whNames={SH01:'上海中心仓',BJ01:'北京区域仓',GZ01:'广州区域仓',CD01:'成都区域仓'};
 const today=()=>new Date().toISOString().slice(0,10);
 const stamp=()=>new Date().toLocaleString('sv-SE');
+// 周版本按ISO周历：周一开周，周四所属年份为周历年；日期用上海时区。
+function shanghaiDate(){return new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());}
+function isoWeekVersion(date){const d=new Date(date+'T00:00:00Z');d.setUTCDate(d.getUTCDate()+4-(d.getUTCDay()||7));const y=d.getUTCFullYear();const start=new Date(Date.UTC(y,0,1));return y+'-W'+String(Math.ceil(((d-start)/86400000+1)/7)).padStart(2,'0');}
+function resultPeriod(type,index=0,reference=shanghaiDate()){const d=new Date(reference+'T00:00:00Z');let useDate;if(type==='PO 建储')useDate=reference.slice(0,7)+'-01';else{d.setUTCDate(d.getUTCDate()-((d.getUTCDay()+6)%7)+(Math.floor(index/2)%2)*7);useDate=d.toISOString().slice(0,10);}return{buildVersion:isoWeekVersion(reference),useDate};}
 function decorate(r){r.partName=r.part?names[part.options.indexOf(r.part)]||'演示配件':'';r.whName=whNames[r.wh]||'';r.shipName=whNames[r.shipWh]||'';r.receiveName=whNames[r.receiveWh]||'';return r;}
 function effective(r,date=today()){
  const snap=r.status==='审批通过'?r:r.approved;
@@ -49,9 +53,10 @@ function seed(key){return Array.from({length:key==='increase'?12:16},(_,i)=>{
  if(key==='cycle'){r.type=i%2?'ABC分类计划周期':'配件计划周期';r.cycle=7+i%4*7;if(i%2)r.part='';else r.abc='';}
  if(key==='risk'||key==='riskRule')Object.assign(r,{minCoef:0.8,minDays:-2,maxCoef:1.2,maxDays:3,xyz:['X','Y','Z'][i%3],volume:['大','中','小'][i%3],amount:['高','中','低'][Math.floor(i/3)%3]});
  if(key==='result')Object.assign(r,{buildType:i%2?'STO 建储':'PO 建储',shipWh:i%2?wh.options[(Math.floor(i/8)+1)%4]:'',target:120+i*8,min:80+i*4,max:180+i*8,riskTarget:120+i*8,riskReorder:i%2?'':85+i*4,floor:i%2?'':100,floorTarget:i%2?'':Math.max(120+i*8,100),floorReorder:i%2?'':85+i*4,adjustTarget:'',adjustReorder:'',adjustReason:'',weekly:i%2?35+i:'',weeklyDate:i%2?today():'',weeklySales:i%2?31+i:'',monthly:i%2?'':145+i,monthlyDate:i%2?'':today(),monthlySales:i%2?'':137+i,volatility:4.2,purchaseDays:i%2?'':30,transferDays:i%2?3:'',cycle:7,days:5,start:'2026-01-01',end:'2030-01-01',rate:98,service:'',planner:'张计划'});
+ if(key==='result')Object.assign(r,resultPeriod(r.buildType,i));
  return decorate(r);
  }).filter((r,i,arr)=>arr.findIndex(x=>uniqueKey(key,x)===uniqueKey(key,r))===i);}
-function migrate(key,rows){const out=rows.map(row=>{const r=JSON.parse(JSON.stringify(row));if(key==='result'){if(r.buildType==='采购建储')r.buildType='PO 建储';if(r.buildType==='STO调拨建储')r.buildType='STO 建储';}else if(buildTypePages.includes(key)&&!r.buildType)r.buildType='PO 建储';return r;});if(buildTypePages.includes(key)&&!out.some(r=>r.buildType==='STO 建储'))for(const r of seed(key).filter(r=>r.buildType==='STO 建储')){if(!out.some(x=>uniqueKey(key,x)===uniqueKey(key,r)))out.push({...r,id:r.id+'-sto'});}return out;}
+function migrate(key,rows){const out=rows.map((row,index)=>{const r=JSON.parse(JSON.stringify(row));if(key==='result'){if(r.buildType==='采购建储')r.buildType='PO 建储';if(r.buildType==='STO调拨建储')r.buildType='STO 建储';const period=resultPeriod(r.buildType,index);if(!r.buildVersion)r.buildVersion=period.buildVersion;if(!r.useDate)r.useDate=period.useDate;}else if(buildTypePages.includes(key)&&!r.buildType)r.buildType='PO 建储';return r;});if(buildTypePages.includes(key)&&!out.some(r=>r.buildType==='STO 建储'))for(const r of seed(key).filter(r=>r.buildType==='STO 建储')){if(!out.some(x=>uniqueKey(key,x)===uniqueKey(key,r)))out.push({...r,id:r.id+'-sto'});}return out;}
 function uniqueKey(key,r){return schemas[key].unique.map(k=>r[k]??'').join('|');}
 function isDisabled(key,f,r){return (['service','cycle'].includes(key)&&((f==='abc'&&String(r.type).startsWith('配件'))||(f==='part'&&String(r.type).startsWith('ABC'))))||(key==='purchase'&&f==='lt'&&r.method!=='手工维护')||(key==='result'&&f==='adjustReorder'&&r.buildType!=='PO 建储');}
 function required(key,f,r){return !['remark','adjustReorder'].includes(f)&&!isDisabled(key,f,r);}
@@ -84,7 +89,7 @@ function transition(rows,action,role,reason){
 }
 function csvEncode(rows,cols){return '\ufeff'+[cols.map(c=>c.label),...rows.map(r=>cols.map(c=>r[c.key]??''))].map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');}
 function csvParse(text){const rows=[];let row=[],cell='',quoted=false;for(let i=0;i<text.length;i++){let c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}else if(c===','&&!quoted){row.push(cell);cell='';}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(cell);if(row.some(v=>v!==''))rows.push(row);row=[];cell='';}else cell+=c;}if(quoted)throw Error('CSV引号未闭合');row.push(cell);if(row.some(v=>v!==''))rows.push(row);if(rows[0])rows[0][0]=rows[0][0].replace(/^\ufeff/,'');return rows;}
-const api={schemas,seed,validate,normalize,transition,effective,uniqueKey,csvParse,csvEncode,isDisabled,required,actionRole,migrate};
+const api={schemas,seed,validate,normalize,transition,effective,uniqueKey,csvParse,csvEncode,isDisabled,required,actionRole,migrate,isoWeekVersion,resultPeriod};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 if(!root.Vue)return;
 const {ref,reactive,computed,watch}=root.Vue;
@@ -92,6 +97,8 @@ root.JlrInventoryStrategy={props:{pageKey:String},setup(props){
  const key=computed(()=>props.pageKey.replace('strategy-',''));const schema=computed(()=>schemas[key.value]);
  const store=reactive({});for(const k of Object.keys(schemas)){try{const saved=JSON.parse(localStorage.getItem('jlr-strategy-v1-'+k));store[k]=Array.isArray(saved)?migrate(k,saved):seed(k);}catch{store[k]=seed(k);}}
  const persist=()=>{for(const k in store)localStorage.setItem('jlr-strategy-v1-'+k,JSON.stringify(store[k]));};
+ // 保存首次补齐的版本与使用日期，后续刷新继续使用同一结果快照。
+ localStorage.setItem('jlr-strategy-v1-result',JSON.stringify(store.result));
  const query=reactive({}),applied=ref({}),expanded=ref(false),selected=ref([]),hidden=ref([]);
  const modal=ref(false),mode=ref('new'),form=reactive({}),errors=ref([]),batch=ref(false),parts=ref([]),warehouses=ref([]),preview=ref([]),previewed=ref(false);
  const importOpen=ref(false),importText=ref(''),importRows=ref([]),importErrors=ref([]),importChecked=ref(false),actionOpen=ref(false),actionName=ref(''),actionIds=ref([]),actionReason=ref('');
