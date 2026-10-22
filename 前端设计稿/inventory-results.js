@@ -857,6 +857,8 @@ const definitions={
 definitions.STO.splice(definitions.STO.findIndex(f=>f.key==='adjustTarget')+1,0,{key:'adjustReorder',label:'调整后再订购点',sourceOrder:null,sourceLabel:'用户确认新增',logic:'STO支持人工维护再订购点；未维护时为空，不代表新增系统计算公式。',type:'text'});
 const warehouses={SH01:'上海中心仓',BJ01:'北京区域仓',GZ01:'广州区域仓',CD01:'成都区域仓'};
 const partNames=['机油滤清器','空气滤清器','前制动片','燃油泵','冷却液管','点火线圈','车门锁','转向机'];
+for(const [key,after] of [['reorder','targetBreak'],['reorderBreak','reorder'],['riskReorder','riskTarget']]){const f=definitions.PO.find(f=>f.key===key);definitions.STO.splice(definitions.STO.findIndex(f=>f.key===after)+1,0,{...f,sourceOrder:null,logic:'STO结果展示字段；当前使用演示快照，生产计算口径待确认。'});}
+definitions.STO=definitions.STO.filter(f=>f.key!=='weeklyRiskSales');
 const sourcePairs={purchaseDays:'purchaseSource',transferDays:'transferSource',cycle:'cycleSource',transferCycle:'transferCycleSource',days:'daysSource',rate:'rateSource',service:'serviceSource',maxCoef:'maxCoefSource',maxDays:'maxDaysSource',minCoef:'minCoefSource',minDays:'minDaysSource'};
 const present=v=>v!==''&&v!==null&&v!==undefined;
 const dateNow=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
@@ -875,23 +877,23 @@ function isBreak(row,key){
 }
 function hasGlobal(row,key){return Boolean(sourcePairs[key]&&row[sourcePairs[key]]==='全局参数');}
 function finalize(input){
- const r={...input};const po=r.buildType==='PO 建储';
+ const r={...input};const po=r.buildType==='PO 建储';if(!po){if(!present(r.reorder))r.reorder=200;if(!present(r.riskReorder))r.riskReorder=Math.max(Number(r.min),Math.min(Number(r.max),Number(r.reorder)));}
  r.targetBreak=isBreak(r,'target')?'是':'否';
- if(po){r.reorderBreak=present(r.reorder)&&Number(r.reorder)>Number(r.max)?'突破最高风控线':present(r.reorder)&&Number(r.reorder)<Number(r.min)?'突破最低风控线':'否';r.floorApplied=present(r.floor)&&Number(r.riskTarget)<Number(r.floor)?'是':'否';}
+ r.reorderBreak=present(r.reorder)&&Number(r.reorder)>Number(r.max)?'突破最高风控线':present(r.reorder)&&Number(r.reorder)<Number(r.min)?'突破最低风控线':'否';if(po){r.floorApplied=present(r.floor)&&Number(r.riskTarget)<Number(r.floor)?'是':'否';}
  const sysTarget=po?r.floorTarget:r.riskTarget;
  r.adjustTarget=present(r.manualTarget)?Number(r.manualTarget):sysTarget;
  r.adjustMin=present(r.manualMin)?Number(r.manualMin):(po?r.floorMin:r.min);
  r.adjustMax=present(r.manualMax)?Number(r.manualMax):(po?r.floorMax:r.max);
- r.adjustReorder=present(r.manualReorder)?Number(r.manualReorder):(po?r.floorReorder:null);
+ r.adjustReorder=present(r.manualReorder)?Number(r.manualReorder):(po?r.floorReorder:r.riskReorder);
  r.adjustReason=r.manualReason||'';
- if(r.noStockReason){r.adjustTarget=0;r.adjustMin=0;r.adjustMax=0;if(po)r.adjustReorder=0;}
+ if(r.noStockReason){r.adjustTarget=0;r.adjustMin=0;r.adjustMax=0;r.adjustReorder=0;}
  return r;
 }
 function seed(kind,reference=dateNow()){
  return Array.from({length:16},(_,i)=>{
  const po=kind==='PO',fallback=po&&i%4===0,direct=po&&i%7===6,forbidden=!po&&i%7===6;
- const low=100,high=450,target=i%3===0?500:i%3===1?80:300,reorder=po?(i%5===0?500:i%5===4?80:200):null;
- const riskReorder=po?Math.max(low,Math.min(high,reorder)):null,riskTarget=po?Math.min(riskReorder+150,high):Math.max(low,Math.min(high,target));
+ const low=100,high=450,target=i%3===0?500:i%3===1?80:300,reorder=i%5===0?500:i%5===4?80:200;
+ const riskReorder=Math.max(low,Math.min(high,reorder)),riskTarget=po?Math.min(riskReorder+150,high):Math.max(low,Math.min(high,target));
  const floor=po?(fallback?550:50):null,apply=fallback&&riskTarget<floor;
  const r={id:'result-v5-'+kind+'-'+i,buildType:po?'PO 建储':'STO 建储',...period(kind,i,reference),part:'LR'+String(i%8+1).padStart(6,'0'),partName:partNames[i%8],wh:Object.keys(warehouses)[Math.floor(i/8)],whName:warehouses[Object.keys(warehouses)[Math.floor(i/8)]],shipWh:po?'':'GZ01',shipName:po?'':'广州区域仓',target,reorder,min:low,max:high,riskTarget,riskReorder,floor,floorReason:apply?'低频配件兜底规则':'',floorTarget:po?(apply?floor:riskTarget):null,floorReorder:po?(apply?Math.ceil(.75*floor):riskReorder):null,floorMin:po?(apply?Math.ceil(.5*floor):low):null,floorMax:po?(apply?floor:high):null,noStockReason:direct?'直供供应商，无需建储':forbidden?'备货规则禁止备货':'',abc:['A','B','C','D'][i%4],xyz:['X','Y','Z'][i%3],volume:['大','中','小'][i%3],planner:['张计划','李计划'][i%2],monthly:po?80+i*10:null,monthlyDate:po?reference+' 08:00:00':null,monthlySales:po?75+i*5:null,weekly:po?null:35+i,weeklyDate:po?null:reference+' 08:00:00',weeklySales:po?null:30+i,weeklyRiskSales:po?null:28+i,volatility:po?45+i:7+i*.2,purchaseDays:po?45:null,transferDays:po?null:3,cycle:po?7:null,transferCycle:po?null:7,days:i%3?5:0,start:i%3?'2026-01-01':'',end:i%3?'2030-01-01':'',rate:98,service:2.05,maxCoef:1.2,maxDays:3,minCoef:.8,minDays:-2,manualTarget:null,manualReorder:null,manualMin:null,manualMax:null,manualReason:'',updated:stamp(),history:[],calcStatus:'成功',formulaVersion:'待生产定版'};
  for(const k of Object.keys(sourcePairs))if(present(r[k]))r[sourcePairs[k]]=i%3===0||k==='transferCycle'?'全局参数':'配置表';
@@ -901,6 +903,7 @@ function seed(kind,reference=dateNow()){
 }
 function validateManual(row,input){
  const po=row.buildType==='PO 建储',keys=['manualTarget','manualReorder','manualMin','manualMax'];let errors=[];
+ for(const k of keys)if(!present(input[k]))errors.push('四项调整值均为必填');
  for(const k of keys)if(present(input[k])&&(!Number.isFinite(Number(input[k]))||Number(input[k])<0||!/^\d+(\.\d{1,2})?$/.test(String(input[k]))))errors.push('人工调整值须为非负数，最多两位小数');
  if(!String(input.manualReason||'').trim())errors.push('人工调整原因必填');
  const r=finalize({...row,...input});
@@ -962,7 +965,7 @@ root.CsppStorageResultsComponent={setup(){
 <a-table :key="kind" :columns="columns" :data-source="rows" row-key="id" size="middle" :scroll="{x:'max-content'}" @change="tableChange" :pagination="{current:page,pageSize:10,onChange:p=>page=p,showTotal:n=>'共 '+n+' 条'}"><template #bodyCell="{column,record}"><template v-if="column.key==='action'"><a @click="open(record)">详情</a><a v-if="!record.noStockReason" @click="open(record,true)" style="margin-left:12px">调整</a></template><a-tag v-else-if="column.key.endsWith('Source')" :color="record[column.key]==='全局参数'?'gold':'blue'">{{display(record[column.key])}}</a-tag><a-tag v-else-if="['targetBreak','reorderBreak','floorApplied'].includes(column.key)" :color="(record[column.key]==='是'||['突破最高风控线','突破最低风控线'].includes(record[column.key]))?(column.key==='floorApplied'?'green':'red'):'default'">{{display(record[column.key])}}</a-tag><span v-else :class="valueClass(record,column.key)" :title="isBreak(record,column.key)?'该值突破所属阶段的风控上下限':hasGlobal(record,column.key)?'实际取值来源：全局参数':''">{{display(record[column.key])}}</span></template></a-table></div>
 <a-modal v-model:open="modal" :title="(mode==='detail'?'详情':'人工调整')+' · '+kind+' 建储结果'" :width="1000" :footer="null" :mask-closable="false"><a-alert v-if="saveErrors.length" type="error" :message="saveErrors.join('；')" show-icon style="margin-bottom:16px"/>
 <template v-if="mode==='detail'"><section v-for="group in groups" :key="group.title" class="result-detail-group"><h3>{{group.title}}</h3><a-descriptions bordered :column="2" size="small"><a-descriptions-item v-for="f in group.fields" :key="f.key" :label="f.label"><a-tag v-if="f.type==='source'" :color="current[f.key]==='全局参数'?'gold':'blue'">{{display(current[f.key])}}</a-tag><span v-else :class="valueClass(current,f.key)">{{display(current[f.key])}}</span></a-descriptions-item></a-descriptions></section><section v-if="current.history?.length"><h3>人工调整记录</h3><div v-for="(h,i) in current.history" :key="i" class="strategy-history">{{h.at}} {{h.by}} · {{h.reason}}<div>目标库存：{{h.before.target}} → {{h.after.target}}；最低/最高线：{{h.before.min}} / {{h.before.max}} → {{h.after.min}} / {{h.after.max}}</div></div></section></template>
-<template v-else><a-descriptions bordered :column="2" size="small" style="margin-bottom:20px"><a-descriptions-item label="配件">{{current.part}} {{current.partName}}</a-descriptions-item><a-descriptions-item label="建储仓库">{{current.wh}} {{current.whName}}</a-descriptions-item><a-descriptions-item label="系统建议目标库存">{{kind==='PO'?current.floorTarget:current.riskTarget}}</a-descriptions-item><a-descriptions-item label="当前有效最低 / 最高线">{{current.adjustMin}} / {{current.adjustMax}}</a-descriptions-item></a-descriptions><div class="strategy-grid"><label v-for="f in editFields" :key="f.key"><span>{{f.label}}</span><a-input-number v-model:value="manual[f.key]" :min="0" style="width:100%"/></label></div><label class="result-reason"><span><b style="color:#ff4d4f">* </b>人工调整原因</span><a-textarea v-model:value="manual.manualReason" :rows="3" placeholder="请填写人工调整原因"/></label><a-alert type="info" :message="kind==='PO'?'须满足：最高风控线 ≥ 目标库存 > 再订购点 ≥ 最低风控线。':'最高风控线 ≥ 目标库存 ≥ 最低风控线；人工再订购点应在0与目标库存之间。'" style="margin-top:16px"/></template>
+<template v-else><div class="strategy-grid"><label v-for="f in editFields" :key="f.key"><span><b style="color:#ff4d4f">* </b>{{f.label}}</span><a-input-number v-model:value="manual[f.key]" :min="0" style="width:100%"/></label></div><label class="result-reason"><span><b style="color:#ff4d4f">* </b>人工调整原因</span><a-textarea v-model:value="manual.manualReason" :rows="3" placeholder="请填写人工调整原因"/></label></template>
 <div class="strategy-modal-footer"><a-button @click="modal=false">{{mode==='detail'?'关闭':'取消'}}</a-button><a-button v-if="mode==='edit'" type="primary" @click="save">保存调整</a-button></div></a-modal>
 </section>`};
 })(typeof window!=='undefined'?window:{});

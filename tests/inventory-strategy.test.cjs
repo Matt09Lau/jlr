@@ -35,3 +35,5 @@ test('旧审批名称迁移后仍可确认与查看操作记录',()=>{const r=mi
 console.log(checks+' meaningful checks passed');
 
 test("计划经理申请跳过计划经理审批，申请人保留",()=>{let r=seed("increase").find(x=>x.status==="待审批"&&x.applicant.includes("计划经理"));const applicant=r.applicant;r=transition([r],"确认","操作人")[0];assert.equal(r.status,"待库存控制高级经理确认");assert.throws(()=>transition([r],"计划经理确认","计划经理"));r=transition([r],"库存控制高级经理确认","库存控制高级经理")[0];assert.equal(r.status,"审批通过");assert.equal(r.applicant,applicant);});
+
+test("标准正态服务水平及旧数据迁移",()=>{const m=require("../前端设计稿/inventory-strategy.js");for(const [rate,z] of [[50,0],[95,1.644854],[97.5,1.959964],[99,2.326348]])assert(Math.abs(m.normalQuantile(rate/100)-z)<1e-6);assert.equal(m.normalQuantile(1),null);assert(seed("service").every(r=>Number.isFinite(r.service)));assert.equal(migrate("service",[{...seed("service")[0],rate:95,service:""}])[0].service,1.644854);});
