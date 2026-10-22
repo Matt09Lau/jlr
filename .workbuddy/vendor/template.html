@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>JLRS ｜ 主数据前端设计稿（配件 / 仓库 / 经销商 / 供应商 / 替代链）</title>
+<title>CSPP ｜ 主数据前端设计稿（配件 / 仓库 / 经销商 / 供应商 / 替代链）</title>
 <style>__VENDOR_RESET__</style>
 <style>
   html,body{height:100%;margin:0;background:#eff1f5;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;}
@@ -292,6 +292,7 @@
   .bt-drill-cause-t{font-size:13px;font-weight:600;color:#1f1f1f;margin-bottom:6px;}
   .bt-drill-cause-d{font-size:12px;color:#595959;line-height:1.8;}
 </style>
+<link rel="stylesheet" href="inventory-strategy.css">
 </head>
 <body>
 <script type="text/x-template" id="app-tpl">
@@ -317,7 +318,7 @@
       <!-- ================= 左侧菜单 ================= -->
       <div class="side-menu" :class="{collapsed:collapsed}">
         <div class="logo-row" v-if="!collapsed" @click="switchMenu('wh-abc')">
-          <span class="logo-jlr">JLR</span><span class="logo-jlrs">JLRS <span class="caret">▼</span></span>
+          <span class="logo-jlrs">CSPP <span class="caret">▼</span></span>
         </div>
         <div class="logo-row" v-else style="font-weight:800;">J</div>
         <div class="menu-search" v-if="!collapsed">
@@ -739,6 +740,8 @@
             </div>
           </template>
 
+          <template v-else-if="activeMenu.startsWith('strategy-')"><inventory-strategy :page-key="activeMenu" :key="activeMenu"/></template>
+
           <!-- ============ 通用主数据页面（配件 / 仓库 / 经销商扩展 / 供应商 / 替代链） ============ -->
           <template v-else-if="genericKeys.includes(activeMenu)">
 
@@ -776,7 +779,7 @@
               </a-alert>
               <div class="toolbar-row">
                 <a-button type="primary" @click="genExportCsv(false)">⬇ 导出</a-button>
-                <a-button type="link" style="padding:0;" @click="genExportCsv(true)">全量导出</a-button>
+                <a-button :type="activeMenu.startsWith('inv-')?'primary':'link'" :style="activeMenu.startsWith('inv-')?{}:{padding:0}" @click="genExportCsv(true)">全量导出</a-button>
                 <a-button v-if="isFcLongBuyoutDraft" @click="lcOpenCoeffModal">系数调整</a-button>
                 <a-button v-if="isFcLongBuyout && !fcEditMode" @click="fcEditMode=true">编辑</a-button>
                 <a-button v-if="isFcLongBuyout && fcEditMode" type="primary" @click="fcSaveForecast">保存</a-button>
@@ -786,6 +789,11 @@
                 <a-button v-if="isFcLong" :disabled="!fcLongSel.length" @click="fcLongBatchM.open=true">批量调整（{{ fcLongSel.length }}）</a-button>
                 <a-button v-if="activeMenu==='fc-regular' || activeMenu==='fc-wh-regular'" @click="fcGenRegularPo">生成常规采购计划</a-button>
                 <a-button v-if="activeDef.isExtension" type="default" @click="genImportOpen=true">⬆ 导入</a-button>
+                <a-button v-if="activeMenu==='part-group'" type="primary" @click="openPgModal('add')">＋ 新建分组</a-button>
+                <a-button v-if="activeMenu==='part-group'" :disabled="!pgSel.length" @click="pgBatchStatus('启用')">批量启用（{{ pgSel.length }}）</a-button>
+                <a-button v-if="activeMenu==='part-group'" :disabled="!pgSel.length" @click="pgBatchStatus('停用')">批量停用（{{ pgSel.length }}）</a-button>
+                <a-button v-if="activeMenu==='part-group'" danger :disabled="!pgSel.length" @click="pgBatchDelete">批量删除（{{ pgSel.length }}）</a-button>
+                <a-button v-if="activeMenu==='part-group'" @click="pgOpenImport">⬆ 批量导入配件</a-button>
                 <div class="toolbar-icons">
                   <a-dropdown>
                     <span title="密度" @click.stop="() => {}">↕</span>
@@ -797,7 +805,7 @@
                       </a-menu>
                     </template>
                   </a-dropdown>
-                  <a-dropdown :trigger="['click']">
+                  <a-dropdown v-if="!activeMenu.startsWith('inv-')" :trigger="['click']">
                     <span title="列设置" @click.stop="() => {}">⚙</span>
                     <template #overlay>
                       <a-card style="width:190px;" :body-style="{padding:'8px 12px'}">
@@ -1033,6 +1041,60 @@
               <div style="margin-top:18px;text-align:right;">
                 <a-button @click="lcCoefOpen=false">取 消</a-button>
                 <a-button type="primary" style="margin-left:8px;" @click="lcSaveCoeffs">保 存</a-button>
+              </div>
+            </a-modal>
+
+            <!-- 新增/编辑 配件组（仅配件组管理）：联合 MOQ 类型需设阈值，成套采购组无额外参数 -->
+            <a-modal v-model:open="pgModal.open" :title="pgModal.mode==='add' ? '新增配件组' : '编辑配件组'" :width="860" :footer="null" :mask-closable="false">
+              <a-form layout="vertical">
+                <div class="bt-sec-t" style="margin-bottom:12px;">基本信息<span class="bt-sec-sub">分组编码唯一；分组参数变更后自下一计算周期生效</span></div>
+                <a-row :gutter="12">
+                  <a-col :span="8"><a-form-item label="分组编码"><a-input v-model:value="pgModal.form.group_code" :disabled="pgModal.mode==='edit'"/></a-form-item></a-col>
+                  <a-col :span="8"><a-form-item label="分组名称"><a-input v-model:value="pgModal.form.group_name" placeholder="如：前照灯左右件组"/></a-form-item></a-col>
+                  <a-col :span="8"><a-form-item label="分组类型"><a-select v-model:value="pgModal.form.group_type" :options="pgTypeOptions.map(v=>({value:v,label:v}))"/></a-form-item></a-col>
+                </a-row>
+
+                <!-- 联合 MOQ：按组内合计凑单后分摊 -->
+                <template v-if="pgModal.form.group_type==='联合MOQ'">
+                  <div class="bt-sec-t" style="margin:6px 0 12px;">联合 MOQ 参数<span class="bt-sec-sub">组内合计达到阈值即可下单；与单品 MOQ 并存时以联合 MOQ 为准</span></div>
+                  <a-row :gutter="12">
+                    <a-col :span="6"><a-form-item label="联合 MOQ 阈值"><a-input-number v-model:value="pgModal.form.moq_qty" :min="1" style="width:100%"/></a-form-item></a-col>
+                  </a-row>
+                </template>
+
+                <!-- 组内配件清单：支持单个添加与批量粘贴 -->
+                <div class="bt-sec-t" style="margin:6px 0 12px;">组内配件清单（{{ (pgModal.form.parts||[]).length }}）<span class="bt-sec-sub">统一取每个配件的最新件；支持单个添加或批量粘贴</span></div>
+                <a-table :columns="pgPartCols" :data-source="pgModal.form.parts" row-key="part_code" :pagination="false" size="small" bordered>
+                  <template #bodyCell="{ column, record }">
+                    <template v-if="column.dataIndex==='supplier_code'"><a-input v-model:value="record.supplier_code" size="small" style="width:96px"/></template>
+                    <template v-else-if="column.dataIndex==='_op'"><a @click="pgRemovePart(record)" style="color:#ff4d4f;">删除</a></template>
+                  </template>
+                </a-table>
+                <div style="display:flex;gap:8px;align-items:center;margin-top:10px;">
+                  <a-input v-model:value="pgNewPartCode" placeholder="输入配件号后按回车或点击添加" style="width:280px" @press-enter="pgAddPart"/>
+                  <a-button @click="pgAddPart">添加配件</a-button>
+                </div>
+                <div style="margin-top:12px;">
+                  <div style="font-size:12px;color:#8c8c8c;margin-bottom:6px;">批量粘贴配件号（每行一个，自动去重，主数据未匹配时仍可保存）</div>
+                  <a-textarea v-model:value="pgPasteText" :rows="3" placeholder="每行一个配件号"/>
+                  <div style="margin-top:8px;text-align:right;"><a-button @click="pgPasteAddParts">批量添加</a-button></div>
+                </div>
+                <div style="margin-top:18px;text-align:right;">
+                  <a-button @click="pgModal.open=false">取 消</a-button>
+                  <a-button type="primary" style="margin-left:8px;" @click="pgSave">保 存</a-button>
+                </div>
+              </a-form>
+            </a-modal>
+
+            <!-- 批量导入配件到分组 -->
+            <a-modal v-model:open="pgImportOpen" title="批量导入配件" :width="640" :footer="null">
+              <a-form layout="vertical">
+                <a-form-item label="目标分组"><a-select v-model:value="pgImportTarget" :options="pgGroupOptions" show-search placeholder="请选择要导入的配件组"/></a-form-item>
+                <a-form-item label="配件号清单（每行一个，自动去重）"><a-textarea v-model:value="pgImportText" :rows="8" placeholder="每行一个配件号"/></a-form-item>
+              </a-form>
+              <div style="text-align:right;">
+                <a-button @click="pgImportOpen=false">取 消</a-button>
+                <a-button type="primary" style="margin-left:8px;" @click="pgConfirmImport">确认导入</a-button>
               </div>
             </a-modal>
           </template>
@@ -2540,6 +2602,7 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 </script>
 <script>__VENDOR_VUE__</script>
 <script>__VENDOR_ANTD__</script>
+<script src="inventory-strategy.js"></script>
 <script>
 /* ================= 模拟数据（确定性随机，每次打开一致） ================= */
 let _seed = 20260918;
@@ -3229,70 +3292,6 @@ const poStatuses = ['草稿','待审批','已审批','已下达','已驳回'];
 const poSources = ['常规预测','仓库级常规预测','长周期预测','一次买断','全新车型预测','手工创建'];
 const poIssueWays = ['IPOS离线文件','SAP接口'];
 
-// 服务水平定义（全局/仓库/配件 三级，按 ABC×XYZ 九宫格差异化）
-const invServiceLevelData = Vue.reactive([]);
-for(let i=0;i<36;i++){
-  const m = matData[i % matData.length];
-  const lvl = slLevels[i % 3];
-  invServiceLevelData.push({
-    id:'SL'+(i+1), code:'SL-2026-'+(1001+i), name:'服务水平策略-'+(i+1),
-    level:lvl, target:lvl==='全局'?'—':(lvl==='仓库'?whData[i % whData.length].warehouse_code:m.material_code),
-    abc:pick(fcABCs), xyz:pick(xyzTypes), sl_pct:[95,96,97,98,99,92][i%6], stockout_pct:[5,4,3,2,1,8][i%6],
-    updater:pick(fcPlanners), update_time:'2026-09-2'+(i%10+1)+' 09:'+(10+i%30)
-  });
-}
-
-// 提前期及波动维护
-const invLeadtimeData = Vue.reactive([]);
-for(let i=0;i<40;i++){
-  const m = matData[i % matData.length];
-  const s = supplierData[i % supplierData.length];
-  invLeadtimeData.push({
-    id:'LT'+(i+1), part_code:m.material_code, part_name:m.material_name, base:fcb(m.material_code),
-    supplier_code:s.supplier_code, supplier_name:s.supplier_name,
-    po_lt:5+(i%15), trans_lt:2+(i%8), cv:(0.05+0.25*(i%8)/7).toFixed(3),
-    source:i%3===0?'系统推荐':'人工维护', updater:pick(fcPlanners), update_time:'2026-09-2'+(i%10+1)+' 10:'+(10+i%30)
-  });
-}
-
-// 安全库存计算结果
-const invSafetyStockData = Vue.reactive([]);
-for(let i=0;i<44;i++){
-  const m = matData[i % matData.length];
-  const w = whData[i % whData.length];
-  const abc = pick(fcABCs); const xyz = pick(xyzTypes);
-  const std = Math.round(10 + rnd()*120); const lt = 3 + (i%12);
-  const sl = [95,97,99,92][i%4]; const z = [1.645,1.881,2.326,1.405][i%4];
-  const ss = Math.max(1, Math.round(z * std * Math.sqrt(lt)));
-  invSafetyStockData.push({
-    id:'SS'+(i+1), part_code:m.material_code, part_name:m.material_name, base:fcb(m.material_code),
-    wh_code:w.warehouse_code, wh_name:w.warehouse_name, abc, xyz,
-    demand_std:std, lead_time:lt, service_level:sl, safety_stock:ss,
-    version:'v1.'+(i%5+1), calc_time:'2026-09-30 06:'+(10+i%30)
-  });
-}
-
-// Min/Max/EOQ 策略
-const invMinmaxEoqData = Vue.reactive([]);
-for(let i=0;i<42;i++){
-  const m = matData[i % matData.length];
-  const w = whData[i % whData.length];
-  const abc = pick(fcABCs);
-  const ss = Math.max(5, Math.round(20+rnd()*180));
-  const rop = Math.round(ss * (1.2 + rnd()*0.5));
-  const max = Math.round(rop * (1.8 + rnd()*1.2));
-  const eoq = Math.max(10, Math.round(50 + rnd()*400));
-  const moq = Math.max(1, Math.round(eoq * 0.5 / 10) * 10);
-  const pack = [1,5,10,20,50][i%5];
-  invMinmaxEoqData.push({
-    id:'MM'+(i+1), part_code:m.material_code, part_name:m.material_name, base:fcb(m.material_code),
-    wh_code:w.warehouse_code, wh_name:w.warehouse_name, abc,
-    min:ss, max, current:Math.max(0, Math.round(rop*(0.4+rnd()*1.1))),
-    eoq, moq, pack, rop,
-    updater:pick(fcPlanners), update_time:'2026-09-2'+(i%10+1)+' 11:'+(10+i%30)
-  });
-}
-
 // 常规采购计划
 const poRegularData = Vue.reactive([]);
 for(let i=0;i<48;i++){
@@ -3365,106 +3364,6 @@ for(let i=0;i<32;i++){
   });
 }
 
-const invServiceLevelDef = {
-  detailTitle:'服务水平策略', idField:'id', scrollX:1680, isExtension:false,
-  filters:[
-    { key:'code', label:'策略编码', type:'input', field:'code', placeholder:'策略编码' },
-    { key:'name', label:'策略名称', type:'input', field:'name', placeholder:'策略名称' },
-    { key:'level', label:'适用层级', type:'select', field:'level', options:slLevels.map(v=>({value:v,label:v})) },
-    { key:'abc', label:'ABC分类', type:'select', field:'abc', options:fcABCs.map(v=>({value:v,label:v+' 类'})) },
-    { key:'xyz', label:'XYZ分类', type:'select', field:'xyz', options:xyzTypes.map(v=>({value:v,label:v+' 类'})) },
-  ],
-  columns:[
-    { title:'策略编码', key:'code', dataIndex:'code', width:145, fixed:'left', render:'link' },
-    { title:'策略名称', key:'name', dataIndex:'name', width:190, ellipsis:true },
-    { title:'适用层级', key:'level', dataIndex:'level', width:100, render:'tag', colorMap:{'全局':'purple','仓库':'blue','配件':'cyan'} },
-    { title:'适用对象', key:'target', dataIndex:'target', width:160, ellipsis:true },
-    { title:'ABC分类', key:'abc', dataIndex:'abc', width:90, render:'tag', colorMap:fcAbcColorMap },
-    { title:'XYZ分类', key:'xyz', dataIndex:'xyz', width:90, render:'tag', colorMap:{X:'green',Y:'orange',Z:'red'} },
-    { title:'目标满足率%', key:'sl_pct', dataIndex:'sl_pct', width:110, sorter:(a,b)=>a.sl_pct-b.sl_pct },
-    { title:'目标缺货率%', key:'stockout_pct', dataIndex:'stockout_pct', width:110, sorter:(a,b)=>a.stockout_pct-b.stockout_pct },
-    { title:'最后更新人', key:'updater', dataIndex:'updater', width:100 },
-    { title:'更新时间', key:'update_time', dataIndex:'update_time', width:160, sorter:(a,b)=>a.update_time.localeCompare(b.update_time) },
-    { title:'操作', key:'action', width:80, fixed:'right' },
-  ],
-  data: invServiceLevelData,
-};
-const invLeadtimeDef = {
-  detailTitle:'提前期记录', idField:'id', scrollX:1560, isExtension:false,
-  filters:[
-    { key:'part', label:'配件号', type:'input', field:'part_code', placeholder:'配件号' },
-    { key:'supplier', label:'供应商', type:'input', field:'supplier_code', placeholder:'供应商代码' },
-    { key:'source', label:'数据来源', type:'select', field:'source', options:[{value:'系统推荐',label:'系统推荐'},{value:'人工维护',label:'人工维护'}] },
-  ],
-  columns:[
-    { title:'配件号', key:'part_code', dataIndex:'part_code', width:140, fixed:'left', render:'link', sorter:(a,b)=>a.part_code.localeCompare(b.part_code) },
-    { title:'配件名称', key:'part_name', dataIndex:'part_name', width:180, ellipsis:true },
-    { title:'base', key:'base', dataIndex:'base', width:140 },
-    { title:'供应商代码', key:'supplier_code', dataIndex:'supplier_code', width:115 },
-    { title:'供应商名称', key:'supplier_name', dataIndex:'supplier_name', width:220, ellipsis:true },
-    { title:'采购提前期(天)', key:'po_lt', dataIndex:'po_lt', width:120, sorter:(a,b)=>a.po_lt-b.po_lt },
-    { title:'调拨提前期(天)', key:'trans_lt', dataIndex:'trans_lt', width:120, sorter:(a,b)=>a.trans_lt-b.trans_lt },
-    { title:'提前期波动系数', key:'cv', dataIndex:'cv', width:130, sorter:(a,b)=>parseFloat(a.cv)-parseFloat(b.cv) },
-    { title:'数据来源', key:'source', dataIndex:'source', width:110, render:'tag', colorMap:{'系统推荐':'blue','人工维护':'orange'} },
-    { title:'最后更新人', key:'updater', dataIndex:'updater', width:100 },
-    { title:'更新时间', key:'update_time', dataIndex:'update_time', width:160 },
-    { title:'操作', key:'action', width:80, fixed:'right' },
-  ],
-  data: invLeadtimeData,
-};
-const invSafetyStockDef = {
-  detailTitle:'安全库存记录', idField:'id', scrollX:1720, isExtension:false,
-  filters:[
-    { key:'part', label:'配件号', type:'input', field:'part_code', placeholder:'配件号' },
-    { key:'wh', label:'仓库', type:'select', field:'wh_code', options:whData.map(w=>({value:w.warehouse_code,label:w.warehouse_code+' '+w.warehouse_name})) },
-    { key:'abc', label:'ABC分类', type:'select', field:'abc', options:fcABCs.map(v=>({value:v,label:v+' 类'})) },
-    { key:'xyz', label:'XYZ分类', type:'select', field:'xyz', options:xyzTypes.map(v=>({value:v,label:v+' 类'})) },
-  ],
-  columns:[
-    { title:'配件号', key:'part_code', dataIndex:'part_code', width:140, fixed:'left', render:'link', sorter:(a,b)=>a.part_code.localeCompare(b.part_code) },
-    { title:'配件名称', key:'part_name', dataIndex:'part_name', width:180, ellipsis:true },
-    { title:'base', key:'base', dataIndex:'base', width:140 },
-    { title:'仓库编码', key:'wh_code', dataIndex:'wh_code', width:110 },
-    { title:'仓库名称', key:'wh_name', dataIndex:'wh_name', width:170, ellipsis:true },
-    { title:'ABC', key:'abc', dataIndex:'abc', width:80, render:'tag', colorMap:fcAbcColorMap },
-    { title:'XYZ', key:'xyz', dataIndex:'xyz', width:80, render:'tag', colorMap:{X:'green',Y:'orange',Z:'red'} },
-    { title:'需求标准差', key:'demand_std', dataIndex:'demand_std', width:110, sorter:(a,b)=>a.demand_std-b.demand_std },
-    { title:'提前期(天)', key:'lead_time', dataIndex:'lead_time', width:100, sorter:(a,b)=>a.lead_time-b.lead_time },
-    { title:'服务水平%', key:'service_level', dataIndex:'service_level', width:100, sorter:(a,b)=>a.service_level-b.service_level },
-    { title:'安全库存', key:'safety_stock', dataIndex:'safety_stock', width:110, sorter:(a,b)=>a.safety_stock-b.safety_stock },
-    { title:'版本', key:'version', dataIndex:'version', width:90 },
-    { title:'计算时间', key:'calc_time', dataIndex:'calc_time', width:160 },
-    { title:'操作', key:'action', width:80, fixed:'right' },
-  ],
-  data: invSafetyStockData,
-};
-const invMinmaxEoqDef = {
-  detailTitle:'Min/Max/EOQ 记录', idField:'id', scrollX:1820, isExtension:false,
-  filters:[
-    { key:'part', label:'配件号', type:'input', field:'part_code', placeholder:'配件号' },
-    { key:'wh', label:'仓库', type:'select', field:'wh_code', options:whData.map(w=>({value:w.warehouse_code,label:w.warehouse_code+' '+w.warehouse_name})) },
-    { key:'abc', label:'ABC分类', type:'select', field:'abc', options:fcABCs.map(v=>({value:v,label:v+' 类'})) },
-  ],
-  columns:[
-    { title:'配件号', key:'part_code', dataIndex:'part_code', width:140, fixed:'left', render:'link', sorter:(a,b)=>a.part_code.localeCompare(b.part_code) },
-    { title:'配件名称', key:'part_name', dataIndex:'part_name', width:180, ellipsis:true },
-    { title:'base', key:'base', dataIndex:'base', width:140 },
-    { title:'仓库编码', key:'wh_code', dataIndex:'wh_code', width:110 },
-    { title:'仓库名称', key:'wh_name', dataIndex:'wh_name', width:170, ellipsis:true },
-    { title:'ABC', key:'abc', dataIndex:'abc', width:80, render:'tag', colorMap:fcAbcColorMap },
-    { title:'Min', key:'min', dataIndex:'min', width:90, sorter:(a,b)=>a.min-b.min },
-    { title:'Max', key:'max', dataIndex:'max', width:90, sorter:(a,b)=>a.max-b.max },
-    { title:'当前库存', key:'current', dataIndex:'current', width:100, sorter:(a,b)=>a.current-b.current },
-    { title:'建议补货点', key:'rop', dataIndex:'rop', width:110, sorter:(a,b)=>a.rop-b.rop },
-    { title:'EOQ', key:'eoq', dataIndex:'eoq', width:90, sorter:(a,b)=>a.eoq-b.eoq },
-    { title:'MOQ', key:'moq', dataIndex:'moq', width:90, sorter:(a,b)=>a.moq-b.moq },
-    { title:'包装量', key:'pack', dataIndex:'pack', width:90, sorter:(a,b)=>a.pack-b.pack },
-    { title:'最后更新人', key:'updater', dataIndex:'updater', width:100 },
-    { title:'更新时间', key:'update_time', dataIndex:'update_time', width:160 },
-    { title:'操作', key:'action', width:80, fixed:'right' },
-  ],
-  data: invMinmaxEoqData,
-};
 const poRegularDef = {
   detailTitle:'常规采购计划', idField:'id', scrollX:1900, isExtension:false,
   filters:[
@@ -3567,6 +3466,65 @@ const poIssueDef = {
   data: poIssueData,
 };
 
+/* ===== 配件组管理（基础数据）：联合 MOQ / 成套采购 两类分组 ===== */
+const pgTypeOptions = ['联合MOQ','成套采购组'];
+
+const partGroupData = Vue.reactive([]);
+for(let i=0;i<14;i++){
+  const type = i%2===0 ? '联合MOQ' : '成套采购组';
+  const n = 2 + (i%4);
+  const parts = [];
+  for(let j=0;j<n;j++){
+    const m = matData[(i*3+j) % matData.length];
+    const sp = supplierData[(i+j) % supplierData.length];
+    parts.push({
+      id:'PGP'+(i+1)+'-'+(j+1),
+      part_code:m.material_code,
+      part_name:m.material_name,
+      supplier_code:sp.supplier_code,
+      _orig:null,
+    });
+  }
+  const rec = {
+    id:'PG'+(i+1),
+    group_code:'PG-2026-'+(1001+i),
+    group_name:(type==='联合MOQ'?'联合MOQ分组 ':'成套采购分组 ')+(i+1),
+    group_type:type,
+    status:i%5===0?'停用':'启用',
+    part_count:n,
+    part_codes:parts.map(p=>p.part_code).join(','),
+    updater:pick(fcPlanners),
+    update_time:'2026-10-1'+(i%9+1)+' 0'+(9+i%9)+':'+String(10+i%40).padStart(2,'0'),
+    parts:parts,
+  };
+  if(type==='联合MOQ'){
+    rec.moq_qty = [500,1000,1500,2000][i%4];
+  }
+  partGroupData.push(rec);
+}
+
+const partGroupDef = {
+  detailTitle:'配件组', idField:'id', scrollX:1200, isExtension:false,
+  filters:[
+    { key:'code', label:'分组编码', type:'input', field:'group_code', placeholder:'分组编码' },
+    { key:'name', label:'分组名称', type:'input', field:'group_name', placeholder:'分组名称' },
+    { key:'type', label:'分组类型', type:'select', field:'group_type', options:pgTypeOptions.map(v=>({value:v,label:v})) },
+    { key:'status', label:'状态', type:'select', field:'status', options:[{value:'启用',label:'启用'},{value:'停用',label:'停用'}] },
+    { key:'part', label:'组内配件号', type:'input', field:'part_codes', placeholder:'按组内配件号查询' },
+  ],
+  columns:[
+    { title:'分组编码', key:'group_code', dataIndex:'group_code', width:150, fixed:'left', render:'link', sorter:(a,b)=>a.group_code.localeCompare(b.group_code) },
+    { title:'分组名称', key:'group_name', dataIndex:'group_name', width:200, ellipsis:true },
+    { title:'分组类型', key:'group_type', dataIndex:'group_type', width:120, render:'tag', colorMap:{'联合MOQ':'blue','成套采购组':'purple'} },
+    { title:'状态', key:'status', dataIndex:'status', width:90, render:'tag', colorMap:{'启用':'green','停用':'default'} },
+    { title:'配件数', key:'part_count', dataIndex:'part_count', width:90, sorter:(a,b)=>a.part_count-b.part_count },
+    { title:'最后更新人', key:'updater', dataIndex:'updater', width:100 },
+    { title:'更新时间', key:'update_time', dataIndex:'update_time', width:150, sorter:(a,b)=>a.update_time.localeCompare(b.update_time) },
+    { title:'操作', key:'action', width:80, fixed:'right' },
+  ],
+  data: partGroupData,
+};
+
 const pageDefs = {
   'mat-master': matMasterDef,
   'mat-ext': Object.assign({}, matMasterDef, { isExtension:true }),
@@ -3576,6 +3534,7 @@ const pageDefs = {
   'supplier-ext': supplierExtDef,
   'part-supplier': partSupplierDef,
   'replace': replaceDef,
+  'part-group': partGroupDef,
   'fc-long': fcLongDef,
   'fc-buyout': fcBuyoutDef,
   'fc-long-draft': fcLongDef,
@@ -3584,10 +3543,6 @@ const pageDefs = {
   'fc-regular-draft': fcRegularDefDraft,
   'fc-wh-regular': fcWhRegularDef,
   'fc-best': fcBestDef,
-  'inv-service-level': invServiceLevelDef,
-  'inv-leadtime': invLeadtimeDef,
-  'inv-safety-stock': invSafetyStockDef,
-  'inv-minmax-eoq': invMinmaxEoqDef,
   'po-regular': poRegularDef,
   'po-eop': poEopDef,
   'po-approval': poApprovalDef,
@@ -3621,11 +3576,10 @@ const app = createApp({
     /* ---- 菜单 ---- */
     const collapsed = ref(false);
     const menuKeyword = ref('');
-    const openGroups = reactive({ base:true, draft:true, report:true });
-    const VALID_KEYS = ['mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier','plan-hier-2','plan-hier-3','gp-params','svc-dash',
+    const openGroups = reactive({ base:true, strategy:true, draft:false, report:false });
+    const VALID_KEYS = ['strategy-purchase','strategy-service','strategy-stocking','strategy-transfer','strategy-increase','strategy-cycle','strategy-risk','strategy-riskRule','strategy-result','mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier','plan-hier-2','plan-hier-3','gp-params','svc-dash',
       'fc-new','fc-new-draft','fc-long','fc-long-draft','fc-buyout','fc-buyout-draft','fc-regular','fc-regular-draft','fc-wh-regular','fc-best','fc-backtest','fc-backtest-draft',
-      'inv-service-level','inv-leadtime','inv-safety-stock','inv-minmax-eoq',
-      'po-regular','po-eop','po-approval','po-issue'];
+      'part-group','po-regular','po-eop','po-approval','po-issue'];
     function keyFromHash(){
       const h = (window.location.hash||'').replace(/^#/,'').trim();
       return VALID_KEYS.includes(h) ? h : 'wh-abc';
@@ -3644,6 +3598,7 @@ const app = createApp({
       { type:'item', key:'supplier', parent:'base', title:'供应商主数据', icon:'🏢' },
       { type:'item', key:'supplier-ext', parent:'base', title:'供应商扩展属性', icon:'🏷' },
       { type:'item', key:'part-supplier', parent:'base', title:'配件与供应商关系', icon:'🧾' },
+      { type:'item', key:'part-group', parent:'base', title:'配件组管理', icon:'🧩' },
       { type:'item', key:'replace', parent:'base', title:'替代链', icon:'🔗' },
       { type:'item', key:'plan-hier-3', parent:'base', title:'计划层级管理', icon:'🗂' },
       { type:'item', key:'gp-params', parent:'base', title:'全局参数', icon:'⚙' },
@@ -3655,18 +3610,23 @@ const app = createApp({
       { type:'item', key:'fc-wh-regular', parent:'fc', title:'仓库级常规预测', icon:'🏬' },
       { type:'item', key:'fc-best', parent:'fc', title:'最佳模型', icon:'🏆' },
       { type:'item', key:'fc-backtest', parent:'fc', title:'预测模拟', icon:'🧪' },
-      { type:'group', key:'report', title:'报表' },
-      { type:'item', key:'svc-dash', parent:'report', title:'服务水平dashboard', icon:'📊' },
-      { type:'group', key:'inv', title:'库存策略' },
-      { type:'item', key:'inv-service-level', parent:'inv', title:'服务水平定义', icon:'🎯' },
-      { type:'item', key:'inv-leadtime', parent:'inv', title:'提前期及波动维护', icon:'⏱' },
-      { type:'item', key:'inv-safety-stock', parent:'inv', title:'安全库存计算', icon:'🛡' },
-      { type:'item', key:'inv-minmax-eoq', parent:'inv', title:'Min/Max/EOQ策略', icon:'⚖' },
+      { type:'group', key:'strategy', title:'库存策略参数' },
+      {type:'item',key:'strategy-purchase',parent:'strategy',title:'采购LT',icon:'▦'},
+      {type:'item',key:'strategy-service',parent:'strategy',title:'目标满足率',icon:'▦'},
+      {type:'item',key:'strategy-stocking',parent:'strategy',title:'备货规则',icon:'▦'},
+      {type:'item',key:'strategy-transfer',parent:'strategy',title:'库间LT',icon:'▦'},
+      {type:'item',key:'strategy-increase',parent:'strategy',title:'增储天数',icon:'▦'},
+      {type:'item',key:'strategy-cycle',parent:'strategy',title:'计划周期',icon:'▦'},
+      {type:'item',key:'strategy-risk',parent:'strategy',title:'配置风控线',icon:'▦'},
+      {type:'item',key:'strategy-riskRule',parent:'strategy',title:'配件风控线规则',icon:'▦'},
+      {type:'item',key:'strategy-result',parent:'strategy',title:'建储水位线计算结果',icon:'▦'},
       { type:'group', key:'po', title:'采购计划' },
       { type:'item', key:'po-regular', parent:'po', title:'常规采购计划', icon:'📋' },
       { type:'item', key:'po-eop', parent:'po', title:'停产最后采购量', icon:'🔚' },
       { type:'item', key:'po-approval', parent:'po', title:'采购计划审批', icon:'✅' },
       { type:'item', key:'po-issue', parent:'po', title:'采购订单下达', icon:'📤' },
+      { type:'group', key:'report', title:'报表' },
+      { type:'item', key:'svc-dash', parent:'report', title:'服务水平dashboard', icon:'📊' },
       { type:'group', key:'draft', title:'草稿' },
       { type:'item', key:'plan-hier', parent:'draft', title:'计划层级管理', icon:'🧩' },
       { type:'item', key:'plan-hier-2', parent:'draft', title:'计划层级管理2', icon:'📋' },
@@ -3678,8 +3638,7 @@ const app = createApp({
     ];
     /* 注意：genericKeys 每增一个 key，必须同步在 pageDefs 中提供定义，否则 setup 初始化 genFilters 时会抛错导致白屏 */
     const genericKeys = ['mat-master','mat-ext','wh-master','dealer-ext','supplier','supplier-ext','part-supplier','replace','fc-long','fc-long-draft','fc-buyout','fc-buyout-draft','fc-regular','fc-regular-draft','fc-wh-regular','fc-best',
-      'inv-service-level','inv-leadtime','inv-safety-stock','inv-minmax-eoq',
-      'po-regular','po-eop','po-approval','po-issue'];
+      'part-group','po-regular','po-eop','po-approval','po-issue'];
     const isFcLongBuyoutDraft = computed(()=> activeMenu.value==='fc-long-draft' || activeMenu.value==='fc-buyout-draft');
     const isFcNewDraft = computed(()=> activeMenu.value==='fc-new-draft');
     /* 支持手工调整预测值的结果页（草稿页只读） */
@@ -4126,7 +4085,11 @@ const app = createApp({
     }
     function genToggleFav(){ genFav.value=!genFav.value; antd.message.success(genFav.value?'已收藏本页':'已取消收藏'); }
     function genToggleCol(k){ const i = genHiddenCols.value.indexOf(k); if(i>-1) genHiddenCols.value.splice(i,1); else genHiddenCols.value.push(k); }
-    function openGenEdit(r){ genEditTarget.value = r; genEditRow.value = reactive(Object.assign({}, r)); genEditOpen.value = true; }
+    function openGenEdit(r){
+      /* 配件组管理走专用弹窗：需按分组类型切换差异化参数，并维护组内配件清单 */
+      if(activeMenu.value==='part-group'){ openPgModal('edit', r); return; }
+      genEditTarget.value = r; genEditRow.value = reactive(Object.assign({}, r)); genEditOpen.value = true;
+    }
     function saveGenEdit(){ if(genEditTarget.value && genEditRow.value) Object.assign(genEditTarget.value, genEditRow.value); genEditOpen.value = false; antd.message.success('保存成功（设计稿示意）'); }
     function doGenImport(){ genImportOpen.value = false; antd.message.success('导入成功（设计稿示意），新增/更新记录已写入'); }
     function genExportCsv(all){
@@ -4210,6 +4173,22 @@ const app = createApp({
     const planAddSupplierSelected = ref([]);
     const planPlannerModal = reactive({ open:false, mode:'add', form:{ code:'', name:'', groupCode:undefined, status:'启用' } });
     const planGroupModal = reactive({ open:false, mode:'add', form:{ code:'', name:'', description:'', status:'启用' } });
+
+    /* ---- 配件组管理（part-group）---- */
+    const pgSel = ref([]);
+    const pgModal = reactive({ open:false, mode:'add', form:pgBlankForm() });
+    const pgImportOpen = ref(false);
+    const pgImportTarget = ref(undefined);
+    const pgImportText = ref('');
+    const pgPasteText = ref('');
+    const pgNewPartCode = ref('');
+    const pgPartCols = [
+      { title:'配件号', dataIndex:'part_code', width:150 },
+      { title:'配件名称', dataIndex:'part_name', width:220, ellipsis:true },
+      { title:'供应商', dataIndex:'supplier_code', width:130 },
+      { title:'操作', dataIndex:'_op', width:70 },
+    ];
+    const pgGroupOptions = computed(()=> partGroupData.map(g=>({ value:g.id, label:g.group_code+' '+g.group_name })));
 
     const planGroupOptions = computed(()=> planGroups.map(g=>({ value:g.code, label:g.name + '（' + g.code + '）' })));
     const planAddSupplierGroupName = computed(()=>{ const g=planGroups.find(x=>x.code===planAddSupplierGroup.value); return g?g.name:''; });
@@ -4366,6 +4345,118 @@ const app = createApp({
       planGroupModal.open=false;
       antd.message.success('计划组已保存');
     }
+    /* ---- 配件组管理：新增/编辑 ---- */
+    function pgLookupPart(code){
+      const m = matData.find(x=>x.material_code===code);
+      return m ? { part_name:m.material_name } : { part_name:'（主数据未匹配）' };
+    }
+    function pgBlankForm(){
+      return {
+        id:'', group_code:'PG-2026-'+String(1001+partGroupData.length), group_name:'',
+        group_type:'联合MOQ', status:'启用',
+        moq_qty:1000,
+        part_count:0, part_codes:'',
+        updater:'', update_time:'',
+        parts:[],
+      };
+    }
+    function openPgModal(mode, payload){
+      pgModal.mode = mode;
+      pgModal.form = payload
+        ? Object.assign({}, payload, { parts:(payload.parts||[]).map(p=>Object.assign({}, p)) })
+        : pgBlankForm();
+      pgNewPartCode.value = '';
+      pgPasteText.value = '';
+      pgModal.open = true;
+    }
+    function pgAddPart(){
+      const code = (pgNewPartCode.value||'').trim();
+      if(!code){ antd.message.warning('请输入配件号'); return; }
+      if(pgModal.form.parts.some(p=>p.part_code===code)){ antd.message.warning('该配件已在组内'); return; }
+      const info = pgLookupPart(code);
+      pgModal.form.parts.push(Object.assign({
+        id:'PGP-N'+(Date.now()+pgModal.form.parts.length), part_code:code,
+        supplier_code:'',
+      }, info));
+      pgModal.form.part_count = pgModal.form.parts.length;
+      pgNewPartCode.value = '';
+    }
+    function pgRemovePart(p){
+      pgModal.form.parts = pgModal.form.parts.filter(x=>x.part_code!==p.part_code);
+      pgModal.form.part_count = pgModal.form.parts.length;
+    }
+    function pgPasteAddParts(){
+      const lines = (pgPasteText.value||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      if(!lines.length){ antd.message.warning('请粘贴配件号，每行一个'); return; }
+      let added = 0;
+      lines.forEach(code=>{
+        if(pgModal.form.parts.some(p=>p.part_code===code)) return;
+        const info = pgLookupPart(code);
+        pgModal.form.parts.push(Object.assign({
+          id:'PGP-N'+(Date.now()+added), part_code:code,
+          supplier_code:'',
+        }, info));
+        added++;
+      });
+      pgModal.form.part_count = pgModal.form.parts.length;
+      pgPasteText.value = '';
+      antd.message.success('已批量添加 '+added+' 个配件');
+    }
+    function pgSave(){
+      const f = pgModal.form;
+      if(!f.group_name){ antd.message.warning('请填写分组名称'); return; }
+      if(!f.parts || !f.parts.length){ antd.message.warning('请至少添加 1 个配件'); return; }
+      if(f.group_type==='联合MOQ' && !(f.moq_qty>0)){ antd.message.warning('请填写联合 MOQ 阈值'); return; }
+      f.part_count = f.parts.length;
+      f.part_codes = f.parts.map(p=>p.part_code).join(',');
+      f.updater = '当前用户';
+      f.update_time = '2026-10-22 18:00';
+      if(pgModal.mode==='add'){
+        partGroupData.push(Object.assign({}, f, { id:'PG'+Date.now(), parts:f.parts.slice() }));
+      } else {
+        const g = partGroupData.find(x=>x.group_code===f.group_code);
+        if(g) Object.assign(g, f);
+      }
+      pgModal.open = false;
+      antd.message.success('配件组已保存');
+    }
+    /* ---- 配件组管理：批量操作 ---- */
+    function pgBatchStatus(st){
+      if(!pgSel.value.length){ antd.message.warning('请先勾选分组'); return; }
+      let n = 0;
+      partGroupData.forEach(g=>{ if(pgSel.value.includes(g.id)){ g.status = st; n++; } });
+      pgSel.value = [];
+      antd.message.success('已'+st+' '+n+' 个分组');
+    }
+    function pgBatchDelete(){
+      if(!pgSel.value.length){ antd.message.warning('请先勾选分组'); return; }
+      const n = pgSel.value.length;
+      for(let i=partGroupData.length-1;i>=0;i--){ if(pgSel.value.includes(partGroupData[i].id)) partGroupData.splice(i,1); }
+      pgSel.value = [];
+      antd.message.success('已删除 '+n+' 个分组');
+    }
+    function pgOpenImport(){ pgImportTarget.value = undefined; pgImportText.value = ''; pgImportOpen.value = true; }
+    function pgConfirmImport(){
+      const g = partGroupData.find(x=>x.id===pgImportTarget.value);
+      if(!g){ antd.message.warning('请选择目标分组'); return; }
+      const lines = (pgImportText.value||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      if(!lines.length){ antd.message.warning('请粘贴配件号，每行一个'); return; }
+      let added = 0;
+      lines.forEach(code=>{
+        if(g.parts.some(p=>p.part_code===code)) return;
+        const info = pgLookupPart(code);
+        g.parts.push(Object.assign({
+          id:'PGP-'+g.id+'-'+(Date.now()+added), part_code:code,
+          supplier_code:'',
+        }, info));
+        added++;
+      });
+      g.part_count = g.parts.length;
+      g.part_codes = g.parts.map(p=>p.part_code).join(',');
+      pgImportOpen.value = false;
+      antd.message.success('已向 '+g.group_code+' 批量导入 '+added+' 个配件');
+    }
+
     function openPlanAddSupplier(groupCode){
       planAddSupplierGroup.value = groupCode;
       planAddSupplierSelected.value = [];
@@ -5342,10 +5433,12 @@ const app = createApp({
       fcLongBatchM.open = false;
       antd.message.success('已对 ' + n + ' 个配件执行稀疏件圆整策略，调整有效期至 ' + until);
     }
-    /* 仅长周期结果页展示行勾选框，其余页面不启用 */
-    const genRowSelection = computed(()=> isFcLong.value
-      ? { selectedRowKeys: fcLongSel.value, onChange: k => { fcLongSel.value = k; }, columnWidth:48 }
-      : null);
+    /* 仅长周期结果页与配件组管理页展示行勾选框（供批量操作），其余页面不启用 */
+    const genRowSelection = computed(()=>{
+      if(isFcLong.value) return { selectedRowKeys: fcLongSel.value, onChange: k => { fcLongSel.value = k; }, columnWidth:48 };
+      if(activeMenu.value==='part-group') return { selectedRowKeys: pgSel.value, onChange: k => { pgSel.value = k; }, columnWidth:48 };
+      return null;
+    });
     function openTrendModal(rec){
       trendModal.row = rec; trendModal.open = true;
       setTimeout(initTrendChart, 60);
@@ -6377,6 +6470,9 @@ const app = createApp({
       planGroupOptions, planSelSupplierName, planGroupSuppliers, planPlannerSupplierCount, planUnlinkedSuppliers,
       planAddSupplierOpen, planAddSupplierGroup, planAddSupplierGroupName, planAddSupplierSelected, openPlanAddSupplier, planConfirmAddSupplier,
       planPlannerModal, openPlanPlannerModal, planSavePlanner, planGroupModal, openPlanGroupModal, planSaveGroup,
+      pgSel, pgModal, openPgModal, pgSave, pgAddPart, pgRemovePart, pgPasteText, pgPasteAddParts, pgNewPartCode,
+      pgBatchStatus, pgBatchDelete, pgImportOpen, pgImportTarget, pgImportText, pgOpenImport, pgConfirmImport,
+      pgPartCols, pgGroupOptions, pgTypeOptions,
       planDeleteNode, planRemoveSupplierRel, planSave,
       plan2Keyword, plan2PlannerColumns, plan2PlannerRows, plan2GroupCount, openPlan2PlannerModal, plan2PlannerModal, plan2SavePlanner,
       plan2PlannerOptions, openPlan2GroupModal, plan2GroupModal, plan2SaveGroup,
@@ -6419,6 +6515,7 @@ const app = createApp({
     };
   }
 });
+app.component('inventory-strategy', window.JlrInventoryStrategy);
 app.use(antd);
 app.mount('#app');
 </script>

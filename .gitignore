@@ -5,6 +5,7 @@
 !.workbuddy/vendor/
 !.workbuddy/vendor/template.html
 !.workbuddy/vendor/assemble.py
+!.workbuddy/vendor/validate.py
 
 # ===== 操作系统/编辑器临时文件 =====
 Thumbs.db
