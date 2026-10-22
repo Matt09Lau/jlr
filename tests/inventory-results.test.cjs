@@ -23,3 +23,5 @@ test('STO默认版本倒序，同版本建储日期升序，排序不修改原�
 
 test('PO与STO均支持四项调整，STO再订购点不冒充系统计算值',()=>{const r=m.seed('STO')[1];assert.equal(r.adjustReorder,null);const input={manualTarget:350,manualReorder:180,manualMin:80,manualMax:500,manualReason:'临时调整'};assert.deepEqual(m.validateManual(r,input),[]);const updated=m.finalize({...r,...input});assert.deepEqual([updated.adjustTarget,updated.adjustReorder,updated.adjustMin,updated.adjustMax],[350,180,80,500]);assert.equal(updated.target,r.target);assert(m.validateManual(r,{...input,manualReorder:351}).length);});
 console.log(count+' result checks passed');
+
+test("再订购点区分最高和最低突破且支持列筛选",()=>{const rows=m.seed("PO");for(const [value,key] of [[500,"突破最高风控线"],[80,"突破最低风控线"],[200,"否"],[100,"否"],[450,"否"]])assert.equal(m.finalize({...rows[0],reorder:value}).reorderBreak,key);for(const label of ["突破最高风控线","突破最低风控线","否"]){const out=m.filterRows(rows,{columnFilters:{reorderBreak:[label]}});assert(out.length);assert(out.every(r=>r.reorderBreak===label));}});
