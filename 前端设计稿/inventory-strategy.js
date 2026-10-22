@@ -30,7 +30,7 @@ const schemas={
  result:{title:'建储水位线计算结果',cols:resultLabels.map((label,i)=>resultKeys[i]==='buildType'?sel('buildType',label,['PO 建储','STO 建储']):resultKeys[i]==='useDate'?F('useDate',label,'date'):resultKeys[i]==='part'?part:resultKeys[i]==='wh'?{...wh,label}:resultKeys[i]==='shipWh'?sel('shipWh',label,wh.options):resultKeys[i]==='abc'?abc:F(resultKeys[i],label)),edit:['adjustTarget','adjustReorder','adjustReason'],filters:['buildType','buildVersion','useDate','part','partName','wh','shipWh','abc','planner'],unique:['buildType','buildVersion','useDate','part','wh','shipWh'],note:'固定演示结果，不代表已实现生产计算引擎。先展示水位线及风控、兜底、调整结果，再展示周月预测及其他参数；不适用字段留空。'}
 };
 const buildTypes=['PO 建储','STO 建储'];
-const buildTypePages=['service','increase','risk','riskRule'];
+const buildTypePages=['service','increase','risk','riskRule','cycle'];
 for(const k of buildTypePages){schemas[k].cols.unshift(sel('buildType','建储类型',buildTypes));schemas[k].edit.unshift('buildType');schemas[k].filters.unshift('buildType');schemas[k].unique.unshift('buildType');}
 const names=['机油滤清器','空气滤清器','前制动片','燃油泵','冷却液管','点火线圈','车门锁','转向机'];
 const whNames={SH01:'上海中心仓',BJ01:'北京区域仓',GZ01:'广州区域仓',CD01:'成都区域仓'};
