@@ -1,0 +1,551 @@
+{
+  "PO": [
+    {
+      "order": 1,
+      "label": "建储类型",
+      "logic": ""
+    },
+    {
+      "order": 2,
+      "label": "版本号",
+      "logic": "年度+周数；202643"
+    },
+    {
+      "order": 3,
+      "label": "建储日期",
+      "logic": "下个月 1 号，2026-11-01"
+    },
+    {
+      "order": 4,
+      "label": "配件号",
+      "logic": ""
+    },
+    {
+      "order": 5,
+      "label": "配件名称",
+      "logic": ""
+    },
+    {
+      "order": 6,
+      "label": "建储仓库编码",
+      "logic": ""
+    },
+    {
+      "order": 7,
+      "label": "建储仓库名称",
+      "logic": ""
+    },
+    {
+      "order": 8,
+      "label": "目标库存",
+      "logic": ""
+    },
+    {
+      "order": 9,
+      "label": "目标库存突破风控线",
+      "logic": "是：目标库存>最高风控线或目标库存＜最低风控线\n否：其他"
+    },
+    {
+      "order": 10,
+      "label": "再订购点",
+      "logic": ""
+    },
+    {
+      "order": 11,
+      "label": "再订购点突破风控线",
+      "logic": "是：再订购点>最高风控线或再订购点＜最低风控线\n否：其他"
+    },
+    {
+      "order": 12,
+      "label": "最低风控线",
+      "logic": ""
+    },
+    {
+      "order": 13,
+      "label": "最高风控线",
+      "logic": ""
+    },
+    {
+      "order": 14,
+      "label": "风控后目标库存",
+      "logic": ""
+    },
+    {
+      "order": 15,
+      "label": "风控后再订购点",
+      "logic": ""
+    },
+    {
+      "order": 16,
+      "label": "兜底值",
+      "logic": ""
+    },
+    {
+      "order": 17,
+      "label": "是否应用兜底值",
+      "logic": "是：风控后目标库存＜兜底值\n否：其他"
+    },
+    {
+      "order": 18,
+      "label": "兜底原因",
+      "logic": ""
+    },
+    {
+      "order": 19,
+      "label": "兜底后目标库存",
+      "logic": ""
+    },
+    {
+      "order": 20,
+      "label": "兜底后再订购点",
+      "logic": ""
+    },
+    {
+      "order": 21,
+      "label": "兜底后最低风控线",
+      "logic": ""
+    },
+    {
+      "order": 22,
+      "label": "兜底后最高风控线",
+      "logic": ""
+    },
+    {
+      "order": 23,
+      "label": "不建储原因",
+      "logic": "配件主数据.采购类别=D 直供供应商，显示为直供供应商，无需建储"
+    },
+    {
+      "order": 24,
+      "label": "调整后目标库存",
+      "logic": ""
+    },
+    {
+      "order": 25,
+      "label": "调整后再订购点",
+      "logic": ""
+    },
+    {
+      "order": 26,
+      "label": "调整后最低风控线",
+      "logic": ""
+    },
+    {
+      "order": 27,
+      "label": "调整后最高风控线",
+      "logic": ""
+    },
+    {
+      "order": 28,
+      "label": "调整原因",
+      "logic": "人工录入"
+    },
+    {
+      "order": 29,
+      "label": "ABC 分类",
+      "logic": ""
+    },
+    {
+      "order": 30,
+      "label": "XYZ 分类",
+      "logic": ""
+    },
+    {
+      "order": 31,
+      "label": "体积分类",
+      "logic": ""
+    },
+    {
+      "order": 32,
+      "label": "计划员",
+      "logic": ""
+    },
+    {
+      "order": 33,
+      "label": "月度预测数量",
+      "logic": ""
+    },
+    {
+      "order": 34,
+      "label": "月度预测数据日期",
+      "logic": ""
+    },
+    {
+      "order": 35,
+      "label": "近 3 个月月均销量",
+      "logic": ""
+    },
+    {
+      "order": 36,
+      "label": "近 6 个月需求波动标准差",
+      "logic": ""
+    },
+    {
+      "order": 37,
+      "label": "采购 LT（天）",
+      "logic": ""
+    },
+    {
+      "order": 38,
+      "label": "采购 LT取值来源",
+      "logic": ""
+    },
+    {
+      "order": 39,
+      "label": "计划周期（天）",
+      "logic": ""
+    },
+    {
+      "order": 40,
+      "label": "计划周期取值来源",
+      "logic": ""
+    },
+    {
+      "order": 41,
+      "label": "增储天数",
+      "logic": ""
+    },
+    {
+      "order": 42,
+      "label": "增储天数取值来源",
+      "logic": ""
+    },
+    {
+      "order": 43,
+      "label": "增储生效日期",
+      "logic": ""
+    },
+    {
+      "order": 44,
+      "label": "增储失效日期",
+      "logic": ""
+    },
+    {
+      "order": 45,
+      "label": "目标满足率",
+      "logic": ""
+    },
+    {
+      "order": 46,
+      "label": "目标满足率取值来源",
+      "logic": ""
+    },
+    {
+      "order": 47,
+      "label": "服务水平",
+      "logic": ""
+    },
+    {
+      "order": 48,
+      "label": "服务水平取值来源",
+      "logic": ""
+    },
+    {
+      "order": 49,
+      "label": "最高风控线系数",
+      "logic": ""
+    },
+    {
+      "order": 50,
+      "label": "最高风控线系数取值来源",
+      "logic": ""
+    },
+    {
+      "order": 51,
+      "label": "最高风控线调整天数",
+      "logic": ""
+    },
+    {
+      "order": 52,
+      "label": "最高风控线调整天数取值来源",
+      "logic": ""
+    },
+    {
+      "order": 53,
+      "label": "最高风控线系数",
+      "logic": ""
+    },
+    {
+      "order": 54,
+      "label": "最高风控线系数取值来源",
+      "logic": ""
+    },
+    {
+      "order": 55,
+      "label": "最高风控线调整天数",
+      "logic": ""
+    },
+    {
+      "order": 56,
+      "label": "最高风控线系数取值来源",
+      "logic": ""
+    },
+    {
+      "order": 57,
+      "label": "更新时间",
+      "logic": ""
+    }
+  ],
+  "STO": [
+    {
+      "order": 1,
+      "label": "建储类型",
+      "logic": ""
+    },
+    {
+      "order": 2,
+      "label": "版本号",
+      "logic": "年度+周数；202643"
+    },
+    {
+      "order": 3,
+      "label": "建储日期",
+      "logic": "本周建储：下周一\n下周建储：下下周一"
+    },
+    {
+      "order": 4,
+      "label": "配件号",
+      "logic": ""
+    },
+    {
+      "order": 5,
+      "label": "配件名称",
+      "logic": ""
+    },
+    {
+      "order": 6,
+      "label": "建储仓库编码",
+      "logic": ""
+    },
+    {
+      "order": 7,
+      "label": "建储仓库名称",
+      "logic": ""
+    },
+    {
+      "order": 8,
+      "label": "发货仓库编码",
+      "logic": ""
+    },
+    {
+      "order": 9,
+      "label": "发货仓库名称",
+      "logic": ""
+    },
+    {
+      "order": 10,
+      "label": "目标库存",
+      "logic": ""
+    },
+    {
+      "order": 11,
+      "label": "目标库存突破风控线",
+      "logic": "是：目标库存>最高风控线或目标库存＜最低风控线\n否：其他"
+    },
+    {
+      "order": 12,
+      "label": "再订购点",
+      "logic": ""
+    },
+    {
+      "order": 13,
+      "label": "再订购点突破风控线",
+      "logic": "是：再订购点>最高风控线或再订购点＜最低风控线\n否：其他"
+    },
+    {
+      "order": 14,
+      "label": "最低风控线",
+      "logic": ""
+    },
+    {
+      "order": 15,
+      "label": "最高风控线",
+      "logic": ""
+    },
+    {
+      "order": 16,
+      "label": "风控后目标库存",
+      "logic": ""
+    },
+    {
+      "order": 17,
+      "label": "风控后再订购点",
+      "logic": ""
+    },
+    {
+      "order": 18,
+      "label": "不建储原因",
+      "logic": "备货规则.配货表示=禁止备货，显示对应的不建储原因"
+    },
+    {
+      "order": 19,
+      "label": "调整后目标库存",
+      "logic": ""
+    },
+    {
+      "order": 20,
+      "label": "调整后再订购点",
+      "logic": ""
+    },
+    {
+      "order": 21,
+      "label": "调整后最低风控线",
+      "logic": ""
+    },
+    {
+      "order": 22,
+      "label": "调整后最高风控线",
+      "logic": ""
+    },
+    {
+      "order": 23,
+      "label": "调整原因",
+      "logic": "人工录入"
+    },
+    {
+      "order": 24,
+      "label": "ABC 分类",
+      "logic": ""
+    },
+    {
+      "order": 25,
+      "label": "XYZ 分类",
+      "logic": ""
+    },
+    {
+      "order": 26,
+      "label": "体积分类",
+      "logic": ""
+    },
+    {
+      "order": 27,
+      "label": "计划员",
+      "logic": ""
+    },
+    {
+      "order": 28,
+      "label": "周度预测数量",
+      "logic": ""
+    },
+    {
+      "order": 29,
+      "label": "月度预测数据日期",
+      "logic": ""
+    },
+    {
+      "order": 30,
+      "label": "近 3 个月月均销量",
+      "logic": ""
+    },
+    {
+      "order": 31,
+      "label": "近 6 个月需求波动标准差",
+      "logic": ""
+    },
+    {
+      "order": 32,
+      "label": "采购 LT（天）",
+      "logic": ""
+    },
+    {
+      "order": 33,
+      "label": "采购 LT取值来源",
+      "logic": "1.配置表\n2.全局参数"
+    },
+    {
+      "order": 34,
+      "label": "计划周期（天）",
+      "logic": ""
+    },
+    {
+      "order": 35,
+      "label": "计划周期取值来源",
+      "logic": "1.配置表\n2.全局参数"
+    },
+    {
+      "order": 36,
+      "label": "增储天数",
+      "logic": ""
+    },
+    {
+      "order": 37,
+      "label": "增储天数取值来源",
+      "logic": "1.配置表\n2.全局参数"
+    },
+    {
+      "order": 38,
+      "label": "增储生效日期",
+      "logic": ""
+    },
+    {
+      "order": 39,
+      "label": "增储失效日期",
+      "logic": ""
+    },
+    {
+      "order": 40,
+      "label": "目标满足率",
+      "logic": ""
+    },
+    {
+      "order": 41,
+      "label": "目标满足率取值来源",
+      "logic": "1.配置表\n2.全局参数"
+    },
+    {
+      "order": 42,
+      "label": "服务水平",
+      "logic": ""
+    },
+    {
+      "order": 43,
+      "label": "服务水平取值来源",
+      "logic": "1.配置表\n2.全局参数"
+    },
+    {
+      "order": 44,
+      "label": "最高风控线系数",
+      "logic": ""
+    },
+    {
+      "order": 45,
+      "label": "最高风控线系数取值来源",
+      "logic": "1.配置表\n2.全局参数"
+    },
+    {
+      "order": 46,
+      "label": "最高风控线调整天数",
+      "logic": ""
+    },
+    {
+      "order": 47,
+      "label": "最高风控线调整天数取值来源",
+      "logic": "1.配置表\n2.全局参数"
+    },
+    {
+      "order": 48,
+      "label": "最高风控线系数",
+      "logic": ""
+    },
+    {
+      "order": 49,
+      "label": "最高风控线系数取值来源",
+      "logic": "1.配置表\n2.全局参数"
+    },
+    {
+      "order": 50,
+      "label": "最高风控线调整天数",
+      "logic": ""
+    },
+    {
+      "order": 51,
+      "label": "最高风控线系数取值来源",
+      "logic": "1.配置表\n2.全局参数"
+    },
+    {
+      "order": 52,
+      "label": "更新时间",
+      "logic": ""
+    }
+  ]
+}

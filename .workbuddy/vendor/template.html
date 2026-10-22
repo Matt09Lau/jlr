@@ -292,7 +292,7 @@
   .bt-drill-cause-t{font-size:13px;font-weight:600;color:#1f1f1f;margin-bottom:6px;}
   .bt-drill-cause-d{font-size:12px;color:#595959;line-height:1.8;}
 </style>
-<link rel="stylesheet" href="inventory-strategy.css">
+<link rel="stylesheet" href="inventory-strategy.css?v=20261022-7">
 </head>
 <body>
 <script type="text/x-template" id="app-tpl">
@@ -365,26 +365,19 @@
             <div class="card">
               <div class="filter-row">
                 <div class="filter-items">
-                  <div class="f-item"><span class="f-label">仓库</span>
+                  <div class="f-item"><span class="f-label">仓库编码</span>
                     <a-select v-model:value="filters.wh" placeholder="请选择仓库" style="width:180px" allow-clear show-search
                       option-filter-prop="label" :options="whOptions"/></div>
+                  <div class="f-item"><span class="f-label">仓库名称</span><a-input v-model:value="filters.whName" placeholder="请输入仓库名称" style="width:170px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件号</span>
                     <a-input v-model:value="filters.code" placeholder="配件号" style="width:170px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="filters.name" placeholder="配件名称" style="width:170px" allow-clear/></div>
-                  <div class="f-item"><span class="f-label">ABC分类<span class="q" @click="ruleOpen=true">?</span></span>
-                    <a-select v-model:value="filters.abc" placeholder="ABC分类" style="width:150px" allow-clear
-                      :options="abcOptions"/></div>
-                  <div class="f-item"><span class="f-label">XYZ分类</span>
-                    <a-select v-model:value="filters.xyz" placeholder="XYZ分类" style="width:130px" allow-clear
-                      :options="xyzOptions"/></div>
                   <template v-if="filterExpanded">
                     <div class="f-item"><span class="f-label">备货标识</span>
                       <a-select v-model:value="filters.stock" placeholder="请选择" style="width:130px" allow-clear
                         :options="[{value:'允许',label:'允许'},{value:'禁止',label:'禁止'}]"/></div>
-                    <div class="f-item"><span class="f-label">仓库类型</span>
-                      <a-select v-model:value="filters.whType" placeholder="请选择" style="width:130px" allow-clear
-                        :options="[{value:1,label:'区域库'},{value:2,label:'中心库'},{value:3,label:'收货仓'}]"/></div>
+
                   </template>
                 </div>
                 <div class="filter-actions">
@@ -438,7 +431,7 @@
                   <a v-if="selectedCount < filteredRecords.length" style="margin-left:10px;" @click="selectAllFiltered">全选全部 {{ filteredRecords.length }} 条</a>
                 </span>
                 <span class="sel-actions">
-                  <a-button size="small" :disabled="!selectedCount" @click="openBlkBatch">批量设置备货标识</a-button>
+                  <a-button size="small" :disabled="!selectedCount" @click="openBlkBatch">批量设置备货规则</a-button>
                 </span>
               </div>
 
@@ -464,6 +457,7 @@
                   <template v-if="column.key==='xyz'">
                     <a-tag :color="xyzColor[record.xyz]" style="margin:0;">{{ record.xyz }}</a-tag>
                   </template>
+                  <template v-if="column.key==='remark'">{{record.remark || '—'}}</template>
                   <template v-if="column.key==='stock'">
                     <a-tag :color="record.stock_flag==='允许'?'green':'red'" style="margin:0;">{{ record.stock_flag }}</a-tag>
                   </template>
@@ -740,6 +734,7 @@
             </div>
           </template>
 
+          <template v-else-if="activeMenu==='strategy-result'"><inventory-results/></template>
           <template v-else-if="activeMenu.startsWith('strategy-')"><inventory-strategy :page-key="activeMenu" :key="activeMenu"/></template>
 
           <!-- ============ 通用主数据页面（配件 / 仓库 / 经销商扩展 / 供应商 / 替代链） ============ -->
@@ -2262,7 +2257,7 @@
                 <span style="color:rgba(0,0,0,.45);font-size:13px;">【{{ activeTitle }}】模块为设计稿占位页，交互原型聚焦「配件分仓级数据」「经销商主数据」等主数据页面</span>
               </div>
               <a-empty description="暂无数据" style="padding:40px 0;">
-                <a-button type="primary" @click="switchMenu('wh-abc')">返回配件分仓级数据</a-button>
+                <a-button type="primary" @click="switchMenu('wh-abc')">返回备货规则</a-button>
               </a-empty>
             </div>
           </template>
@@ -2276,12 +2271,13 @@
     </div>
 
     <!-- ===== 编辑备货标识（单个） ===== -->
-    <a-modal v-model:open="blkEditOpen" :width="520" title="编辑记录" :footer="null" :mask-closable="false">
+    <a-modal v-model:open="blkEditOpen" :width="520" title="编辑备货规则" :footer="null" :mask-closable="false">
       <div v-if="blkEditRow">
         <div class="blk-hint">仓库：{{ blkEditRow.whName }}（{{ blkEditRow.whCode }}）　配件：{{ blkEditRow.code }} {{ blkEditRow.name }}</div>
         <div class="blk-field"><div class="blk-label"><i>*</i>备货标识</div>
           <a-select v-model:value="blkEditRow.stock_flag" style="width:100%" placeholder="请选择"
             :options="[{value:'允许',label:'允许'},{value:'禁止',label:'禁止'}]"/></div>
+        <div class="blk-field" style="margin-top:16px"><div class="blk-label">备注（允许或禁止备货的原因）</div><a-textarea v-model:value="blkEditRow.remark" :rows="3" placeholder="请输入允许或禁止备货的原因"/></div>
       </div>
       <div class="blk-footer">
         <a-button @click="blkEditOpen=false">返 回</a-button>
@@ -2289,20 +2285,15 @@
       </div>
     </a-modal>
 
-    <!-- ===== 批量设置备货标识（基于已勾选项） ===== -->
-    <a-modal v-model:open="blkBatchOpen" :width="480" title="批量设置备货标识" :footer="null" :mask-closable="false">
-      <div>
-        <div class="blk-field"><div class="blk-label"><i>*</i>备货标识</div>
-          <a-select v-model:value="blkBatchTarget" style="width:100%" placeholder="请选择"
-            :options="[{value:'允许',label:'允许'},{value:'禁止',label:'禁止'}]"/></div>
-        <div class="blk-preview">
-          已将选中 <b>{{ selectedCount }}</b> 条「仓库 × 配件」记录设置为「<b>{{ blkBatchTarget }}</b>」，其中 <b style="color:#f5222d;">{{ blkBatchDiff }}</b> 条备货标识将发生变化。
-        </div>
-      </div>
-      <div class="blk-footer">
-        <a-button @click="blkBatchOpen=false">返 回</a-button>
-        <a-button type="primary" :disabled="!selectedCount" @click="applyBlkBatch">确 定</a-button>
-      </div>
+    <!-- ===== 批量设置备货规则 ===== -->
+    <a-modal v-model:open="blkBatchOpen" :width="560" title="批量设置备货规则" :footer="null" :mask-closable="false">
+      <p>已选择 {{selectedCount}} 条记录。勾选需要批量修改的内容，未勾选的字段保持原值。</p>
+      <a-checkbox v-model:checked="blkBatchSetFlag">修改备货标识</a-checkbox>
+      <a-select v-model:value="blkBatchTarget" :disabled="!blkBatchSetFlag" style="width:100%;margin:8px 0 18px" :options="[{value:'允许',label:'允许'},{value:'禁止',label:'禁止'}]"/>
+      <a-checkbox v-model:checked="blkBatchSetReason">修改备货原因（备注）</a-checkbox>
+      <a-textarea v-model:value="blkBatchReason" :disabled="!blkBatchSetReason" :rows="3" placeholder="请输入统一的备货原因；留空将清空所选记录的备注" style="margin:8px 0"/>
+      <div class="blk-preview">确认后统一更新 {{selectedCount}} 条记录{{blkBatchSetFlag?'的备货标识':''}}{{blkBatchSetFlag&&blkBatchSetReason?'和':''}}{{blkBatchSetReason?'备货原因':''}}。</div>
+      <div class="blk-footer"><a-button @click="blkBatchOpen=false">取消</a-button><a-button type="primary" :disabled="!selectedCount||(!blkBatchSetFlag&&!blkBatchSetReason)" @click="applyBlkBatch">确定</a-button></div>
     </a-modal>
 
     <!-- ===== 详情抽屉 ===== -->
@@ -2318,7 +2309,8 @@
             <a-descriptions-item label="国家">{{ detailRow.country }}</a-descriptions-item>
             <a-descriptions-item label="省/自治区">{{ detailRow.province }}</a-descriptions-item>
             <a-descriptions-item label="市">{{ detailRow.city }}</a-descriptions-item>
-            <a-descriptions-item label="数据同步时间">{{ detailRow.sync_data_time }}</a-descriptions-item>
+            <a-descriptions-item label="备注" :span="2">{{ detailRow.remark || '—' }}</a-descriptions-item>
+          <a-descriptions-item label="数据同步时间">{{ detailRow.sync_data_time }}</a-descriptions-item>
           </a-descriptions>
           <a-descriptions title="冻结状态" bordered size="small" :column="2" style="margin-top:18px;">
             <a-descriptions-item label="全局订单冻结">{{ detailRow.central_order_block ? '已冻结（X）' : '正常' }}</a-descriptions-item>
@@ -2336,8 +2328,8 @@
           <a-descriptions-item label="配件号">{{ detailRow.code }}</a-descriptions-item>
           <a-descriptions-item label="最新配件号">{{ detailRow.newCode || '—（最新可采购件）' }}</a-descriptions-item>
           <a-descriptions-item label="配件名称" :span="2">{{ detailRow.name }}</a-descriptions-item>
-          <a-descriptions-item label="仓库">{{ detailRow.whName }}（{{ detailRow.whCode }}）</a-descriptions-item>
-          <a-descriptions-item label="仓库类型">{{ whTypeText(detailRow.whType) }}</a-descriptions-item>
+          <a-descriptions-item label="仓库编码">{{ detailRow.whCode }}</a-descriptions-item>
+          <a-descriptions-item label="仓库名称">{{ detailRow.whName }}</a-descriptions-item>
           <a-descriptions-item label="车型代码">{{ detailRow.vehicle }}</a-descriptions-item>
           <a-descriptions-item label="车型名称">{{ detailRow.vehicleName }}</a-descriptions-item>
           <a-descriptions-item label="体积（m³）">{{ detailRow.volume.toFixed(3) }}</a-descriptions-item>
@@ -2352,10 +2344,6 @@
           <a-descriptions-item label="数据同步时间">{{ detailRow.sync_data_time }}</a-descriptions-item>
         </a-descriptions>
         <a-descriptions title="分类信息" bordered size="small" :column="2" style="margin-top:18px;">
-          <a-descriptions-item label="ABC分类">
-            <span class="col-chip" :style="{background:classColor[detailRow.abc]}">{{ detailRow.abc }}</span>
-          </a-descriptions-item>
-          <a-descriptions-item label="XYZ分类"><a-tag :color="xyzColor[detailRow.xyz]" style="margin:0;">{{ detailRow.xyz }}</a-tag></a-descriptions-item>
           <a-descriptions-item label="订单行占比">{{ detailRow.lineRatio }}%</a-descriptions-item>
           <a-descriptions-item label="本仓累计占比">{{ detailRow.cumRatio }}%</a-descriptions-item>
           <a-descriptions-item label="体积分类">{{ detailRow.volumeCls }}</a-descriptions-item>
@@ -2561,7 +2549,7 @@
     </a-modal>
 
     <!-- ===== 配件分仓级数据导入弹窗 ===== -->
-    <a-modal v-model:open="whImportOpen" title="导入配件分仓级数据" :footer="null" width="520px">
+    <a-modal v-model:open="whImportOpen" title="导入备货规则" :footer="null" width="520px">
       <a-alert style="margin-bottom:12px;" type="info" show-icon
         message="导入范围：备货标识（手工维护字段）"
         description="模板字段：仓库、配件号、备货标识（枚举值：允许 / 禁止）。ABC / XYZ 分类根据分仓重新计算获取，不支持导入。"/>
@@ -2602,7 +2590,8 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 </script>
 <script>__VENDOR_VUE__</script>
 <script>__VENDOR_ANTD__</script>
-<script src="inventory-strategy.js"></script>
+<script src="inventory-results.js?v=20261022-7"></script>
+<script src="inventory-strategy.js?v=20261022-13"></script>
 <script>
 /* ================= 模拟数据（确定性随机，每次打开一致） ================= */
 let _seed = 20260918;
@@ -2682,6 +2671,9 @@ warehouses.forEach(wh => {
     records.push(r);
   });
 });
+
+function persistWhRules(){const state={};records.forEach(r=>state[r.whCode+'|'+r.code]={stock_flag:r.stock_flag,remark:r.remark||'',updateTime:r.updateTime});localStorage.setItem('cspp-stock-rules-v1',JSON.stringify(state));}
+try{const saved=JSON.parse(localStorage.getItem('cspp-stock-rules-v1')||'{}');records.forEach(r=>{const v=saved[r.whCode+'|'+r.code];if(v)Object.assign(r,v);else r.remark=r.stock_flag==='允许'?'常规需求，允许备货':'低频需求，暂不备货';});}catch{records.forEach(r=>r.remark='');}
 
 /* ================= 经销商主数据（ods_dealer）模拟 ================= */
 const dealerCities = [
@@ -3582,6 +3574,7 @@ const app = createApp({
       'part-group','po-regular','po-eop','po-approval','po-issue'];
     function keyFromHash(){
       const h = (window.location.hash||'').replace(/^#/,'').trim();
+      if(h==='strategy-stocking')return 'wh-abc';
       return VALID_KEYS.includes(h) ? h : 'wh-abc';
     }
     const activeMenu = ref(keyFromHash());
@@ -3590,7 +3583,7 @@ const app = createApp({
       { type:'group', key:'base', title:'基础数据管理' },
       { type:'item', key:'mat-master', parent:'base', title:'配件主数据', icon:'📄' },
       { type:'item', key:'mat-ext', parent:'base', title:'配件扩展属性', icon:'🏷' },
-      { type:'item', key:'wh-abc', parent:'base', title:'配件分仓级数据', icon:'📦' },
+      { type:'item', key:'wh-abc', parent:'base', title:'备货规则', icon:'📦' },
       { type:'item', key:'wh-master', parent:'base', title:'仓库主数据', icon:'🏭' },
       { type:'item', key:'dealer', parent:'base', title:'经销商主数据', icon:'🏬' },
       { type:'item', key:'dms-dealer', parent:'base', title:'DMS经销商主数据', icon:'🗄' },
@@ -3613,12 +3606,11 @@ const app = createApp({
       { type:'group', key:'strategy', title:'库存策略参数' },
       {type:'item',key:'strategy-purchase',parent:'strategy',title:'采购LT',icon:'▦'},
       {type:'item',key:'strategy-service',parent:'strategy',title:'目标满足率',icon:'▦'},
-      {type:'item',key:'strategy-stocking',parent:'strategy',title:'备货规则',icon:'▦'},
       {type:'item',key:'strategy-transfer',parent:'strategy',title:'库间LT',icon:'▦'},
       {type:'item',key:'strategy-increase',parent:'strategy',title:'增储天数',icon:'▦'},
       {type:'item',key:'strategy-cycle',parent:'strategy',title:'计划周期',icon:'▦'},
-      {type:'item',key:'strategy-risk',parent:'strategy',title:'配置风控线',icon:'▦'},
-      {type:'item',key:'strategy-riskRule',parent:'strategy',title:'配件风控线规则',icon:'▦'},
+      {type:'item',key:'strategy-risk',parent:'strategy',title:'配件风控线',icon:'▦'},
+      {type:'item',key:'strategy-riskRule',parent:'strategy',title:'配件多分类风控线',icon:'▦'},
       {type:'item',key:'strategy-result',parent:'strategy',title:'建储水位线计算结果',icon:'▦'},
       { type:'group', key:'po', title:'采购计划' },
       { type:'item', key:'po-regular', parent:'po', title:'常规采购计划', icon:'📋' },
@@ -3738,9 +3730,12 @@ const app = createApp({
       if(t){
         t.block_status = blkEditRow.value.block_status;
         t.stock_flag = blkEditRow.value.stock_flag;
+        t.remark = String(blkEditRow.value.remark||'').trim();
+        t.updateTime = new Date().toLocaleString('sv-SE');
+        persistWhRules();
       }
       blkEditOpen.value = false;
-      msg('备货标识已更新', 'success');
+      msg('备货标识及原因已更新', 'success');
     }
 
     /* ---- 备货标识导入（设计稿示意） ---- */
@@ -3755,12 +3750,17 @@ const app = createApp({
     function selectAllFiltered(){ selectedKeys.value = filteredRecords.value.map(r=>r.id); }
     const blkBatchOpen = ref(false);
     const blkBatchTarget = ref('允许');
-    function openBlkBatch(){ if(!selectedCount.value){ msg('请先勾选需要设置的记录', 'warning'); return; } blkBatchOpen.value = true; }
+    const blkBatchReason = ref('');
+    const blkBatchSetFlag = ref(true);
+    const blkBatchSetReason = ref(false);
+    function openBlkBatch(){ if(!selectedCount.value){ msg('请先勾选需要设置的记录', 'warning'); return; } blkBatchTarget.value='允许';blkBatchReason.value='';blkBatchSetFlag.value=true;blkBatchSetReason.value=false;blkBatchOpen.value = true; }
     const blkBatchRows = computed(()=> records.filter(r=>selectedKeys.value.includes(r.id)));
     const blkBatchDiff = computed(()=> blkBatchRows.value.filter(r=>r.stock_flag!==blkBatchTarget.value).length);
     function applyBlkBatch(){
-      const n = blkBatchDiff.value;
-      blkBatchRows.value.forEach(r=>{ r.stock_flag = blkBatchTarget.value; });
+      if(!blkBatchSetFlag.value&&!blkBatchSetReason.value)return;
+      const n = blkBatchRows.value.length;
+      blkBatchRows.value.forEach(r=>{if(blkBatchSetFlag.value)r.stock_flag = blkBatchTarget.value;if(blkBatchSetReason.value)r.remark=String(blkBatchReason.value||'').trim();r.updateTime=new Date().toLocaleString('sv-SE');});
+      persistWhRules();
       blkBatchOpen.value = false;
       clearSelection();
       msg('批量设置成功，共更新 ' + n + ' 条记录', 'success');
@@ -3771,10 +3771,9 @@ const app = createApp({
       if(applied.code && !r.code.toLowerCase().includes(applied.code.toLowerCase())) return false;
       if(applied.name && !r.name.includes(applied.name)) return false;
       if(applied.wh && r.whCode!==applied.wh) return false;
-      if(applied.abc && r.abc!==applied.abc) return false;
-      if(applied.xyz && r.xyz!==applied.xyz) return false;
+
       if(applied.stock && r.stock_flag!==applied.stock) return false;
-      if(applied.whType && r.whType!==applied.whType) return false;
+      if(applied.whName && !r.whName.includes(applied.whName)) return false;
       if(applied.vehicle && r.vehicle!==applied.vehicle) return false;
       return true;
     }));
@@ -3782,13 +3781,12 @@ const app = createApp({
     /* ---- 表格 ---- */
     const tableSize = ref('middle');
     const allColumns = [
-      { title:'仓库', key:'wh', dataIndex:'whName', width:175, fixed:'left', sorter:(a,b)=>a.whCode.localeCompare(b.whCode) },
+      { title:'仓库编码', key:'whCode', dataIndex:'whCode', width:145, fixed:'left', sorter:(a,b)=>a.whCode.localeCompare(b.whCode) },
+      { title:'仓库名称', key:'whName', dataIndex:'whName', width:175, sorter:(a,b)=>a.whName.localeCompare(b.whName) },
       { title:'配件名称', key:'name', dataIndex:'name', width:200, ellipsis:true, sorter:(a,b)=>a.name.localeCompare(b.name) },
       { title:'配件号', key:'code', dataIndex:'code', width:150, sorter:(a,b)=>a.code.localeCompare(b.code) },
-      { title:'ABC分类', key:'abc', dataIndex:'abc', width:95, sorter:(a,b)=>a.abc.localeCompare(b.abc) },
-      { title:'XYZ分类', key:'xyz', dataIndex:'xyz', width:95, sorter:(a,b)=>a.xyz.localeCompare(b.xyz) },
       { title:'备货标识', key:'stock', dataIndex:'stock_flag', width:100, sorter:(a,b)=>a.stock_flag.localeCompare(b.stock_flag) },
-      { title:'仓库类型', key:'whType', dataIndex:'whType', width:105, sorter:(a,b)=>a.whType-b.whType },
+      { title:'备注', key:'remark', dataIndex:'remark', width:280, ellipsis:true },
       { title:'数据同步时间', key:'sync', dataIndex:'sync_data_time', width:165, sorter:(a,b)=>a.sync_data_time.localeCompare(b.sync_data_time) },
       { title:'操作', key:'action', width:110, fixed:'right' },
     ];
@@ -4114,9 +4112,9 @@ const app = createApp({
 
     /* ---- 导出 ---- */
     function downloadCsv(rows, filename){
-      const header = ['仓库编码','仓库名称','配件号','配件名称','ABC分类','XYZ分类','备货标识','数据同步时间'];
+      const header = ['仓库编码','仓库名称','配件号','配件名称','备货标识','备注','数据同步时间'];
       const lines = [header.join(',')].concat(rows.map(r=>[
-        r.whCode,'"'+r.whName+'"',r.code,'"'+r.name+'"',r.abc,r.xyz,r.stock_flag,
+        r.whCode,'"'+r.whName+'"',r.code,'"'+r.name+'"',r.stock_flag,'"'+String(r.remark||'').replace(/"/g,'""')+'"',
         r.sync_data_time
       ].join(',')));
       const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
@@ -4125,7 +4123,7 @@ const app = createApp({
       URL.revokeObjectURL(a.href);
     }
     function exportCsv(all){
-      downloadCsv(all ? records : filteredRecords.value, 'JLRS_配件分仓级数据_' + new Date().toISOString().slice(0,10) + '.csv');
+      downloadCsv(all ? records : filteredRecords.value, 'CSPP_备货规则_' + new Date().toISOString().slice(0,10) + '.csv');
       antd.message.success((all?'全量导出':'导出') + '成功，共 ' + (all?records.length:filteredRecords.value.length) + ' 条（CSV 已下载）');
     }
 
@@ -6444,7 +6442,7 @@ const app = createApp({
       blkEditOpen, blkEditRow, openBlkEdit, saveBlkEdit,
       whImportOpen, doWhImport,
       selectedKeys, selectedCount, onSelectChange, clearSelection, selectAllFiltered,
-      blkBatchOpen, blkBatchTarget, blkBatchDiff, applyBlkBatch, openBlkBatch,
+      blkBatchOpen, blkBatchTarget, blkBatchReason, blkBatchSetFlag, blkBatchSetReason, blkBatchDiff, applyBlkBatch, openBlkBatch,
       page, pagedRecords, customRow,
       detailType, openDealerDetail, dealerCustomRow, openDealerEdit, dealerEditOpen, dealerEditRow, saveDealerEdit,
       dmsTypeOptions, dmsDealTypeOptions, dmsYnOptions,
@@ -6515,6 +6513,7 @@ const app = createApp({
     };
   }
 });
+app.component('inventory-results', window.CsppStorageResultsComponent);
 app.component('inventory-strategy', window.JlrInventoryStrategy);
 app.use(antd);
 app.mount('#app');
