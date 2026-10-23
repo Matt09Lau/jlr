@@ -14,9 +14,11 @@ const dictionary=[
  ['PARM10','默认最低风控线调整天数',0,'integer',-100,100,'最低线覆盖期调整天数，允许0和负数']
 ].map(([code,desc,def,type,min,max,remark])=>({code,desc,def:String(def),type,min,max,remark}));
 function key(row){return row.buildType+'|'+row.code;}
+function validateRemark(row){return String(row.remark??'').trim().length>500?['备注最多500字']:[];}
+function savedRemark(old,fallback){return Object.hasOwn(old,'remark')&&typeof old.remark==='string'&&!validateRemark(old).length?old.remark:fallback;}
 function seed(){return ['PO 建储','STO 建储'].flatMap(buildType=>dictionary.filter(r=>r.code!==(buildType==='PO 建储'?'PARM02':'PARM01')).map(r=>({...r,id:key({...r,buildType}),buildType,editor:'系统初始化',time:''})));}
 function validate(row){
- const spec=dictionary.find(r=>r.code===row.code);const errors=[];
+ const spec=dictionary.find(r=>r.code===row.code);const errors=validateRemark(row);
  if(!spec)return ['未知参数代码'];
  if(!['PO 建储','STO 建储'].includes(row.buildType))return ['建储类型必填'];
  if(row.code===(row.buildType==='PO 建储'?'PARM02':'PARM01'))errors.push('参数不适用于当前建储类型');
@@ -28,8 +30,9 @@ function validate(row){
  if(!(n>spec.min&&n<spec.max))errors.push('默认值须大于'+spec.min+'且小于'+spec.max);
  return errors;
 }
-function restore(saved){const current=seed();if(!Array.isArray(saved))return current;return current.map(row=>{const old=saved.find(r=>key(r)===key(row));return old&&validate({...row,def:old.def}).length===0?{...row,def:String(old.def),editor:old.editor||row.editor,time:old.time||''}:row;});}
+function restore(saved){const current=seed();if(!Array.isArray(saved))return current;return current.map(row=>{const old=saved.find(r=>key(r)===key(row));return old&&validate({...row,def:old.def}).length===0?{...row,def:String(old.def),remark:savedRemark(old,row.remark),editor:old.editor||row.editor,time:old.time||''}:row;});}
+function restoreLegacy(rows,saved){return rows.map(row=>{const old=Array.isArray(saved)?saved.find(r=>key(r)===key(row)):null;return old&&String(old.def??'').trim()?{...row,def:String(old.def),remark:savedRemark(old,row.remark),editor:old.editor||row.editor,time:old.time||''}:row;});}
 function getDefault(rows,buildType,code){const row=rows.find(r=>r.buildType===buildType&&r.code===code);if(!row||validate(row).length)throw new Error('缺少有效全局参数：'+buildType+' '+code);return Number(row.def);}
-const api={storageKey,dictionary,key,seed,validate,restore,getDefault};
+const api={storageKey,dictionary,key,seed,validate,validateRemark,restore,restoreLegacy,getDefault};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;root.CsppGlobalParameters=api;
 })(typeof window!=='undefined'?window:globalThis);

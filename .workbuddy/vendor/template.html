@@ -2245,7 +2245,7 @@
                         <a-form-item label="默认值" required><a-input v-model:value="gpEdit.def" placeholder="请输入默认值"/></a-form-item>
                       </a-col>
                       <a-col :span="12">
-                        <a-form-item label="备注"><a-input :value="gpEdit.remark" disabled/></a-form-item>
+                        <a-form-item label="备注"><a-textarea v-model:value="gpEdit.remark" :rows="3" :maxlength="500" show-count placeholder="请输入备注（选填）"/></a-form-item>
                       </a-col>
                     </a-row>
                   </a-form>
@@ -2594,7 +2594,7 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 </script>
 <script>__VENDOR_VUE__</script>
 <script>__VENDOR_ANTD__</script>
-<script src="global-parameters.js?v=20261023-1"></script>
+<script src="global-parameters.js?v=20261023-edit-remark"></script>
 <script src="inventory-results.js?v=20261023-target-direction"></script>
 <script src="inventory-strategy.js?v=20261023-increase-periods"></script>
 <script>
@@ -6393,7 +6393,7 @@ const app = createApp({
     ].map(r=>({...r,buildType:'通用',id:'通用|'+r.code}));
     const gpModel=window.CsppGlobalParameters;
     let gpSaved=[];try{gpSaved=JSON.parse(localStorage.getItem(gpModel.storageKey)||'[]');}catch(e){}
-    const gpRaw=reactive([...gpModel.restore(gpSaved),...gpLegacy]);
+    const gpRaw=reactive([...gpModel.restore(gpSaved),...gpModel.restoreLegacy(gpLegacy,gpSaved)]);
     const gpFiltered=computed(()=>gpRaw.filter(r=>(!gpQ.buildType||r.buildType===gpQ.buildType)&&(!gpQ.kw||r.code.toLowerCase().includes(gpQ.kw.trim().toLowerCase()))));
     function gpSearch(){}
     const gpCols = [
@@ -6412,13 +6412,13 @@ const app = createApp({
     function gpBack(){gpView.value='list';}
     function gpSave(){
       if(gpView.value!=='edit')return;
-      const errors=gpEdit.buildType==='通用'?(!String(gpEdit.def??'').trim()?['默认值为必填项']:[]):gpModel.validate(gpEdit);
+      const errors=gpEdit.buildType==='通用'?[...(!String(gpEdit.def??'').trim()?['默认值为必填项']:[]),...gpModel.validateRemark(gpEdit)]:gpModel.validate(gpEdit);
       if(errors.length){antd.message.error(errors.join('；'));return;}
       const row=gpRaw.find(r=>r.id===gpEdit.id);
       if(!row){antd.message.error('配置不存在，请刷新');return;}
-      const next={...row,def:String(gpEdit.def).trim(),editor:'超级管理员',time:new Date().toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})};
+      const next={...row,def:String(gpEdit.def).trim(),remark:String(gpEdit.remark??'').trim(),editor:'超级管理员',time:new Date().toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})};
       const updated=gpRaw.map(r=>r.id===row.id?next:{...r});
-      try{localStorage.setItem(gpModel.storageKey,JSON.stringify(updated.filter(r=>r.buildType!=='通用')));}catch(e){antd.message.error('保存失败，请检查浏览器存储空间');return;}
+      try{localStorage.setItem(gpModel.storageKey,JSON.stringify(updated));}catch(e){antd.message.error('保存失败，请检查浏览器存储空间');return;}
       Object.assign(row,next);antd.message.success('保存成功');gpView.value='list';
     }
 
