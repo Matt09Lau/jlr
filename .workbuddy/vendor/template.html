@@ -2204,10 +2204,11 @@
               <!-- 列表页 -->
               <template v-if="gpView==='list'">
                 <a-form layout="inline" class="bt-form bt-query">
+                  <a-form-item label="建储类型"><a-select v-model:value="gpQ.buildType" style="width:160px" :options="[{value:'',label:'全部'},{value:'PO 建储',label:'PO 建储'},{value:'STO 建储',label:'STO 建储'},{value:'通用',label:'通用'}]"/></a-form-item>
                   <a-form-item label="参数代码"><a-input v-model:value="gpQ.kw" placeholder="参数代码" style="width:220px" allow-clear/></a-form-item>
                   <a-form-item style="margin-left:auto;"><a-button type="primary" @click="gpSearch">搜 索</a-button></a-form-item>
                 </a-form>
-                <a-table style="margin-top:16px;" :columns="gpCols" :data-source="gpFiltered" :pagination="{pageSize:8,size:'small',showTotal:t=>'共 '+t+' 条',showSizeChanger:true,pageSizeOptions:['8','15','30']}" :size="tableSize" row-key="code" :scroll="{x:1080}">
+                <a-table style="margin-top:16px;" :columns="gpCols" :data-source="gpFiltered" :pagination="{pageSize:8,size:'small',showTotal:t=>'共 '+t+' 条',showSizeChanger:true,pageSizeOptions:['8','15','30']}" :size="tableSize" row-key="id" :scroll="{x:1240}">
                   <template #bodyCell="{ column, record }">
                     <template v-if="column.key==='def'">
                       <span>{{ record.type==='coeff' ? '10 项年份系数' : record.def }}</span>
@@ -2231,6 +2232,9 @@
                   <div class="bt-sec-t">基础信息</div>
                   <a-form layout="vertical" class="gp-form" style="max-width:1080px;">
                     <a-row :gutter="24">
+                      <a-col :span="12">
+                        <a-form-item label="建储类型" required><a-input :value="gpEdit.buildType" readonly/></a-form-item>
+                      </a-col>
                       <a-col :span="12">
                         <a-form-item label="参数代码"><a-input :value="gpEdit.code" readonly/></a-form-item>
                       </a-col>
@@ -2590,6 +2594,7 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 </script>
 <script>__VENDOR_VUE__</script>
 <script>__VENDOR_ANTD__</script>
+<script src="global-parameters.js?v=20261023-1"></script>
 <script src="inventory-results.js?v=20261022-7"></script>
 <script src="inventory-strategy.js?v=20261022-13"></script>
 <script>
@@ -6372,8 +6377,8 @@ const app = createApp({
 
     /* ============ 基础数据管理 / 全局参数 ============ */
     const gpView = ref('list');
-    const gpQ = reactive({ kw:'' });
-    const gpRaw = reactive([
+    const gpQ = reactive({ kw:'', buildType:'' });
+    const gpLegacy = [
       { code:'WAREHOUSE_WARNING_COEFFICIENT', desc:'配件仓库预警系数', def:'3', remark:'用于配件分析报表数据计算算子中配件仓库预警系数', editor:'张明', time:'2026-09-24 19:32' },
       { code:'MATERIAL_WARNING_COEFFICIENT', desc:'配件预警系数', def:'3', remark:'用于配件分析报表数据计算配件预警系数', editor:'张明', time:'2026-09-24 19:30' },
       { code:'NATIONAL_OVERSTOCK_COEFFICIENT', desc:'配件全国超量数量阈值', def:'0', remark:'用于控制配件全国超量预警的触发阈值', editor:'李强', time:'2026-09-24 19:28' },
@@ -6385,49 +6390,36 @@ const app = createApp({
       { code:'BACKTEST_ANO_THRESHOLD', desc:'回测异常判定偏差阈值（%）', def:'30', remark:'bias 偏差超过该阈值判定为异常条目', editor:'陈晨', time:'2026-09-10 16:40' },
       { code:'SAFETY_STOCK_DAYS', desc:'安全库存覆盖天数', def:'45', remark:'库存策略计算中安全库存的默认覆盖天数', editor:'张明', time:'2026-09-02 11:05' },
       { code:'SUPPLIER_LEADTIME_DEFAULT', desc:'默认采购提前期（天）', def:'120', remark:'主数据缺失提前期时的默认取值，长周期件常用', editor:'赵磊', time:'2026-08-28 10:22' },
-    ]);
-    const gpFiltered = computed(()=> gpRaw.filter(r=> !gpQ.kw || r.code.toLowerCase().includes(gpQ.kw.trim().toLowerCase())));
-    function gpSearch(){ antd.message.success('已按参数代码筛选全局参数（设计稿示意）'); }
+    ].map(r=>({...r,buildType:'通用',id:'通用|'+r.code}));
+    const gpModel=window.CsppGlobalParameters;
+    let gpSaved=[];try{gpSaved=JSON.parse(localStorage.getItem(gpModel.storageKey)||'[]');}catch(e){}
+    const gpRaw=reactive([...gpModel.restore(gpSaved),...gpLegacy]);
+    const gpFiltered=computed(()=>gpRaw.filter(r=>(!gpQ.buildType||r.buildType===gpQ.buildType)&&(!gpQ.kw||r.code.toLowerCase().includes(gpQ.kw.trim().toLowerCase()))));
+    function gpSearch(){}
     const gpCols = [
-      { title:'参数代码', dataIndex:'code', key:'code', width:280 },
-      { title:'参数描述', dataIndex:'desc', key:'desc', width:200 },
-      { title:'默认值', dataIndex:'def', key:'def', width:130 },
-      { title:'备注', dataIndex:'remark', key:'remark', width:250, ellipsis:true },
-      { title:'修改人名称', dataIndex:'editor', key:'editor', width:110 },
-      { title:'更新时间', dataIndex:'time', key:'time', width:150 },
-      { title:'操作', key:'act', width:80, fixed:'right' },
+      {title:'建储类型',dataIndex:'buildType',key:'buildType',width:130},
+      {title:'参数代码',dataIndex:'code',key:'code',width:280},
+      {title:'参数描述',dataIndex:'desc',key:'desc',width:200},
+      {title:'默认值',dataIndex:'def',key:'def',width:130},
+      {title:'备注',dataIndex:'remark',key:'remark',width:250,ellipsis:true},
+      {title:'修改人名称',dataIndex:'editor',key:'editor',width:110},
+      {title:'更新时间',dataIndex:'time',key:'time',width:160},
+      {title:'操作',key:'act',width:80,fixed:'right'}
     ];
-    const gpEdit = reactive({ code:'', desc:'', def:'', remark:'', coeffs:[] });
-    const gpIsCoeff = computed(()=> gpEdit.code==='LONG_CYCLE_ADJUST_COEFFICIENT');
-    function gpOpenEdit(row){
-      gpEdit.code = row.code; gpEdit.desc = row.desc; gpEdit.def = row.def; gpEdit.remark = row.remark;
-      gpEdit.coeffs = (row.coeffs ? row.coeffs.slice() : []);
-      gpView.value = 'edit';
-    }
-    function gpBack(){
-      if(gpView.value==='list'){ return; }
-      gpView.value = 'list';
-    }
+    const gpEdit=reactive({id:'',buildType:'',code:'',desc:'',def:'',remark:''});
+    const gpIsCoeff=computed(()=>false);
+    function gpOpenEdit(row){Object.assign(gpEdit,row);gpView.value='edit';}
+    function gpBack(){gpView.value='list';}
     function gpSave(){
-      if(gpView.value!=='edit'){ return; }
-      if(gpIsCoeff.value){
-        const bad = [];
-        for(let i=0;i<10;i++){
-          const v = gpEdit.coeffs[i];
-          if(v===undefined || v===null || isNaN(Number(v)) || Number(v) <= 0){ bad.push(i+1); }
-        }
-        if(bad.length){ antd.message.error('第 ' + bad.join('、') + ' 年调整系数须为正数（支持小数），请修正后保存'); return; }
-      } else {
-        if(!String(gpEdit.def || '').trim().length){ antd.message.error('默认值为必填项'); return; }
-      }
-      const row = gpRaw.find(r=> r.code===gpEdit.code);
-      if(row){
-        row.def = gpEdit.def;
-        if(gpIsCoeff.value){ row.coeffs = gpEdit.coeffs.slice(); }
-        row.editor = '超级管理员'; row.time = '2026-10-07 21:10';
-      }
-      antd.message.success('全局参数已保存并即时生效（设计稿示意）');
-      gpView.value = 'list';
+      if(gpView.value!=='edit')return;
+      const errors=gpEdit.buildType==='通用'?(!String(gpEdit.def??'').trim()?['默认值为必填项']:[]):gpModel.validate(gpEdit);
+      if(errors.length){antd.message.error(errors.join('；'));return;}
+      const row=gpRaw.find(r=>r.id===gpEdit.id);
+      if(!row){antd.message.error('配置不存在，请刷新');return;}
+      const next={...row,def:String(gpEdit.def).trim(),editor:'超级管理员',time:new Date().toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})};
+      const updated=gpRaw.map(r=>r.id===row.id?next:{...r});
+      try{localStorage.setItem(gpModel.storageKey,JSON.stringify(updated.filter(r=>r.buildType!=='通用')));}catch(e){antd.message.error('保存失败，请检查浏览器存储空间');return;}
+      Object.assign(row,next);antd.message.success('保存成功');gpView.value='list';
     }
 
     return {
