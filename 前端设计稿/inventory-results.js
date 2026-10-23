@@ -71,7 +71,7 @@ const definitions={
       "label": "目标库存突破风控线",
       "sourceOrder": 9,
       "sourceLabel": "目标库存突破风控线",
-      "logic": "是：目标库存>最高风控线或目标库存＜最低风控线\n否：其他",
+      "logic": "目标库存>原最高风控线：突破最高风控线；目标库存<原最低风控线：突破最低风控线；其他：否，等于边界不突破。",
       "type": "flag"
     },
     {
@@ -545,7 +545,7 @@ const definitions={
       "label": "目标库存突破风控线",
       "sourceOrder": 11,
       "sourceLabel": "目标库存突破风控线",
-      "logic": "是：目标库存>最高风控线或目标库存＜最低风控线\n否：其他",
+      "logic": "目标库存>原最高风控线：突破最高风控线；目标库存<原最低风控线：突破最低风控线；其他：否，等于边界不突破。",
       "type": "flag"
     },
     {
@@ -876,10 +876,14 @@ function isBreak(row,key){
  return ['target','reorder','riskTarget','riskReorder','floorTarget','floorReorder','adjustTarget','adjustReorder'].includes(key)&&present(row[lo])&&present(row[hi])&&(Number(row[key])<Number(row[lo])||Number(row[key])>Number(row[hi]));
 }
 function hasGlobal(row,key){return Boolean(sourcePairs[key]&&row[sourcePairs[key]]==='全局参数');}
+function breachDirection(row,key){
+ if(!isBreak(row,key))return '否';
+ return Number(row[key])>Number(row.max)?'突破最高风控线':'突破最低风控线';
+}
 function finalize(input){
  const r={...input};const po=r.buildType==='PO 建储';if(!po){if(!present(r.reorder))r.reorder=200;if(!present(r.riskReorder))r.riskReorder=Math.max(Number(r.min),Math.min(Number(r.max),Number(r.reorder)));}
- r.targetBreak=isBreak(r,'target')?'是':'否';
- r.reorderBreak=present(r.reorder)&&Number(r.reorder)>Number(r.max)?'突破最高风控线':present(r.reorder)&&Number(r.reorder)<Number(r.min)?'突破最低风控线':'否';if(po){r.floorApplied=present(r.floor)&&Number(r.riskTarget)<Number(r.floor)?'是':'否';}
+ r.targetBreak=breachDirection(r,'target');
+ r.reorderBreak=breachDirection(r,'reorder');if(po){r.floorApplied=present(r.floor)&&Number(r.riskTarget)<Number(r.floor)?'是':'否';}
  const sysTarget=po?r.floorTarget:r.riskTarget;
  r.adjustTarget=present(r.manualTarget)?Number(r.manualTarget):sysTarget;
  r.adjustMin=present(r.manualMin)?Number(r.manualMin):(po?r.floorMin:r.min);
@@ -938,7 +942,7 @@ root.CsppStorageResultsComponent={setup(){
  const rows=computed(()=>filterRows(allRows.value,{...applied.value,columnFilters:columnFilters.value}));
  const sourceFields=computed(()=>fields.value.filter(f=>f.type==='source'));
  const metricOptions=computed(()=>fields.value.filter(f=>sourcePairs[f.key]).map(f=>({value:f.key,label:f.label})));
- const columns=computed(()=>[...fields.value.map((f,i)=>({title:f.label,key:f.key,dataIndex:f.key,width:f.label.length>8?195:145,fixed:i===0?'left':undefined,filters:f.type==='source'?['配置表','全局参数'].map(v=>({text:v,value:v})):f.type==='flag'?(f.key==='reorderBreak'?['突破最高风控线','突破最低风控线','否']:['是','否']).map(v=>({text:v,value:v})):undefined,filteredValue:columnFilters.value[f.key]||null,sorter:(a,b)=>typeof a[f.key]==='number'?a[f.key]-b[f.key]:String(a[f.key]??'').localeCompare(String(b[f.key]??''),'zh-CN')})),{title:'操作',key:'action',width:120,fixed:'right'}]);
+ const columns=computed(()=>[...fields.value.map((f,i)=>({title:f.label,key:f.key,dataIndex:f.key,width:f.label.length>8?195:145,fixed:i===0?'left':undefined,filters:f.type==='source'?['配置表','全局参数'].map(v=>({text:v,value:v})):f.type==='flag'?(['targetBreak','reorderBreak'].includes(f.key)?['突破最高风控线','突破最低风控线','否']:['是','否']).map(v=>({text:v,value:v})):undefined,filteredValue:columnFilters.value[f.key]||null,sorter:(a,b)=>typeof a[f.key]==='number'?a[f.key]-b[f.key]:String(a[f.key]??'').localeCompare(String(b[f.key]??''),'zh-CN')})),{title:'操作',key:'action',width:120,fixed:'right'}]);
  watch(kind,()=>{reset();message.value='';error.value='';modal.value=false;});
  function search(){applied.value={...q};page.value=1;}
  function tableChange(p,filters){page.value=p.current||1;columnFilters.value=filters;}
