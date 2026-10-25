@@ -39,6 +39,7 @@ PAGES = [
     ("po-atb",          "All Time Buy 计划", "全生命周期累计需求", False),
     ("po-bridge",       "Bridge Buy 计划",   "属地预期库存",  False),
     ("po-ref",          "参考零件采购计划",  "参考车型",      False),
+    ("po-roll",         "给供应商的滚动计划", "同步状态", False),
 ]
 
 def file_url(path, fragment=""):
@@ -129,7 +130,12 @@ def check_one(page_key, title_kw, field_kw, is_ext):
     return {"key":page_key, "ok":ok, "msg":detail}
 
 def check_po_pages():
-    """采购计划 4 个页面：每个页面都能正常挂载、渲染表格、包含关键业务字段。"""
+    """采购计划 4 个页面：每个页面都能正常挂载、渲染表格、包含关键业务字段。
+    另做一次源码级断言：常规采购计划的「需求仓库要求到货日期」字段已按用户要求整体删除。"""
+    # 源码级：该字段不应存在于 HTML 任一位置（弹窗默认不渲染，dump 级断言测不到）
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    field_left = [k for k in ["需求仓库要求到货日期", "wh_required_arrival_date"] if k in src]
+
     checks = [
         ("po-regular", "常规采购计划", "数据生成日期"),
         ("po-eop", "停产最后采购量", "末采数量"),
@@ -148,6 +154,9 @@ def check_po_pages():
         ok = rows > 0 and title_ok and field_ok
         if not ok: all_ok = False
         details.append(f"{key}({'Y' if ok else 'N'}:{rows})")
+    if field_left:
+        all_ok = False
+        details.append("残留字段:" + ",".join(field_left))
     return {"key":"po-4pages","ok":all_ok,"msg":' '.join(details)}
 
 def check_fc_buyout_btns():
@@ -1188,6 +1197,7 @@ def check_menu():
                  "配件组管理",
                  "采购计划", "常规采购计划", "本周调拨计划", "下周调拨计划",
                  "All Time Buy 计划", "Bridge Buy 计划", "参考零件采购计划",
+                 "给供应商的滚动计划",
                  "停产最后采购量", "采购计划审批", "采购订单下达"]
     miss = [k for k in must_have if k not in r]
     # 不应出现（已移除的纯占位菜单 / 已更名的旧称）
@@ -1326,6 +1336,34 @@ def check_po_plan():
     if bad:
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
     return {"ok": True, "msg": "3 页渲染正常，列集对齐 PRD 第 6/7 章"}
+
+def check_po_roll():
+    """给供应商的滚动计划（PRD 4.4.3.2 支持供应商协同）：
+    15 个基础字段 + 6 个月份列（M1~M6，PRD 口径：增加LT后未来 6 个月）+ 同步状态页签 + 同步到 SAP。
+    顶部口径说明条已按用户要求移除，且不应残留 M7~M12 与 12 个月口径。"""
+    r = rendered(dump("po-roll"))
+    base_cols = ["数据日期", "计划批次", "计划行", "供应商编码", "供应商名称", "配件号", "配件名称",
+                 "车型", "计划数量", "采购LT(月)", "预测起始月份", "未来6个月合计", "同步状态", "同步时间", "操作"]
+    miss = [c for c in base_cols if not has_col(r, c)]
+    month_miss = [("M%d" % i) for i in range(1, 7) if not has_col(r, "M%d" % i)]
+    tab_miss = [t for t in ["全部", "未同步", "已同步SAP"] if t not in r]
+    bad = []
+    if "同步到 SAP" not in r:
+        bad.append("缺同步到SAP按钮")
+    # 已移除：顶部口径说明条、12 个月列、发布状态口径
+    if "滚动计划口径" in r:
+        bad.append("顶部口径说明条未移除")
+    if "未来12个月" in r or has_col(r, "M7"):
+        bad.append("不应残留 12 个月口径")
+    if "发布状态" in r or "供应商已确认" in r:
+        bad.append("不应残留发布状态口径")
+    if "重新同步" in r:
+        bad.append("不应残留重新同步按钮")
+    rows = r.count("ant-table-row")
+    ok = not miss and not month_miss and not tab_miss and not bad and rows > 0
+    detail = (f"基础列={len(base_cols)-len(miss)}/{len(base_cols)} 月份列={6-len(month_miss)}/6 "
+              f"页签缺失={tab_miss if tab_miss else '无'} 行={rows} 异常={bad if bad else '无'} 列缺失={miss if miss else '无'}")
+    return {"key": "po-roll", "ok": ok, "msg": detail}
 
 def main():
     only = sys.argv[1] if len(sys.argv) > 1 else None
@@ -1510,6 +1548,10 @@ def main():
         r = check_po_plan()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-plan-3pages {r['msg']}")
+    if only in (None, 'po-roll', 'po-plan'):
+        r = check_po_roll()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-roll        {r['msg']}")
     print("==== 汇总:", "全部通过" if all_ok else "存在失败", "====")
 
 if __name__ == "__main__":

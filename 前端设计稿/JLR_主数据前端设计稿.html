@@ -1171,8 +1171,6 @@ mark {
                     <a-input v-model:value="poRegEditRow.adjust_reason" placeholder="调整数量时必填，100 字以内" :maxlength="100" allow-clear/></label>
                   <label><span>要求到货日期</span>
                     <a-date-picker v-model:value="poRegEditRow._req_date" :disabled="poRegEditRow.plan_type!=='紧急采购计划'" value-format="YYYY-MM-DD" placeholder="紧急采购计划可维护"/></label>
-                  <label><span>需求仓库要求到货日期</span>
-                    <a-date-picker v-model:value="poRegEditRow._wh_req_date" :disabled="!(poRegEditRow.plan_type==='紧急采购计划' && poRegEditRow.receive_mode==='代收发收货')" value-format="YYYY-MM-DD" placeholder="紧急采购 + 代收发收货可维护"/></label>
                 </div>
                 <div class="jlrs-modal-footer">
                   <a-button @click="poRegEditOpen=false">取消</a-button>
@@ -1617,6 +1615,184 @@ mark {
               <div class="jlrs-modal-footer">
                 <a-button @click="stoExportOpen=false">取消</a-button>
                 <a-button type="primary" @click="stoDoExport">导出</a-button>
+              </div>
+            </a-modal>
+          </template>
+
+          <!-- ============ 7. 给供应商的滚动计划（PRD 4.4.3.2 支持供应商协同，未来 6 个月） ============ -->
+          <template v-else-if="activeMenu==='po-roll'">
+
+            <!-- 同步状态页签 -->
+            <a-tabs v-model:activeKey="rollTab" type="card" style="margin-bottom:12px;">
+              <a-tab-pane v-for="t in rollTabs" :key="t.key" :tab="t.label + (t.key==='all' ? '' : '（'+rollTabCount(t.key)+'）')"/>
+            </a-tabs>
+
+            <!-- 筛选卡片 -->
+            <div class="card">
+              <div class="filter-row">
+                <div class="filter-items">
+                  <div class="f-item"><span class="f-label">供应商编码</span>
+                    <a-input v-model:value="rollFilters.supplier_code" placeholder="供应商编码" style="width:130px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">供应商名称</span>
+                    <a-input v-model:value="rollFilters.supplier_name" placeholder="供应商名称" style="width:190px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">配件号</span>
+                    <a-input v-model:value="rollFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">配件名称</span>
+                    <a-input v-model:value="rollFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">计划批次</span>
+                    <a-input v-model:value="rollFilters.plan_batch" placeholder="计划批次" style="width:130px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">同步状态</span>
+                    <a-select v-model:value="rollFilters.sync_status" placeholder="同步状态" style="width:140px" allow-clear
+                      :options="rollSyncStatuses.map(v=>({value:v,label:v}))"/></div>
+                  <template v-if="rollFilterExpanded">
+                    <div class="f-item"><span class="f-label">车型</span>
+                      <a-select v-model:value="rollFilters.vehicle_code" placeholder="车型" style="width:120px" allow-clear
+                        :options="poRegVehicleCodes.map(v=>({value:v,label:v}))"/></div>
+                    <div class="f-item"><span class="f-label">采购LT(月)</span>
+                      <a-select v-model:value="rollFilters.purchase_lt" placeholder="采购LT" style="width:110px" allow-clear
+                        :options="[2,3,4,6].map(v=>({value:v,label:v+' 个月'}))"/></div>
+                  </template>
+                </div>
+                <div class="filter-actions">
+                  <a-button type="primary" @click="rollDoSearch">搜索</a-button>
+                  <a-button @click="rollResetFilters">重置</a-button>
+                  <span class="act" :style="{color:rollFav?'#faad14':''}" @click="rollFav=!rollFav">{{ rollFav ? '★' : '☆' }}</span>
+                  <span class="act" @click="msg('分享链接已复制（设计稿示意）')">⤴</span>
+                  <span class="act" @click="rollFilterExpanded=!rollFilterExpanded">
+                    <span class="txt">{{ rollFilterExpanded ? '收起' : '展开' }}</span><span style="font-size:10px;">▾</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 表格卡片 -->
+            <div class="card" style="margin-bottom:0;">
+              <div class="toolbar-row">
+                <a-button type="primary" :disabled="!rollCanSync" @click="rollOpenPublish">同步到 SAP</a-button>
+                <a-button @click="rollExportOpen=true">导出</a-button>
+                <span style="margin-left:8px;color:#888;font-size:12px;" v-if="rollSelKeys.length">已选 {{ rollSelKeys.length }} 行</span>
+                <div class="toolbar-icons">
+                  <a-dropdown>
+                    <span title="密度" @click.stop="() => {}">↕</span>
+                    <template #overlay>
+                      <a-menu @click="({key})=>tableSize=key">
+                        <a-menu-item key="large">默认</a-menu-item>
+                        <a-menu-item key="middle">中等</a-menu-item>
+                        <a-menu-item key="small">紧凑</a-menu-item>
+                      </a-menu>
+                    </template>
+                  </a-dropdown>
+                  <span title="全屏" @click="toggleFull">⛶</span>
+                </div>
+              </div>
+
+              <a-table
+                :columns="rollColumns"
+                :data-source="rollPaged"
+                :pagination="false"
+                :size="tableSize"
+                row-key="id"
+                :scroll="{x: rollScrollX }"
+                :row-selection="rollRowSelection"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key==='part_code'">
+                    <a @click.stop="rollOpenDetail(record)">{{ record.part_code }}</a>
+                  </template>
+                  <template v-else-if="column.key==='sync_status'">
+                    <a-tag :color="rollSyncColor(record.sync_status)" style="margin:0;">{{ record.sync_status }}</a-tag>
+                  </template>
+                  <template v-else-if="column.key==='month_total'">
+                    <b>{{ record.month_total }}</b>
+                  </template>
+                  <template v-else-if="column.key==='action'">
+                    <span class="link-btn" @click.stop="rollOpenDetail(record)">详情</span>
+                    <span class="link-btn" v-if="record.sync_status!=='已同步SAP'" @click.stop="rollPublishOne(record)">同步</span>
+                  </template>
+                  <template v-else>{{ record[column.dataIndex] }}</template>
+                </template>
+              </a-table>
+
+              <div class="pager-row">
+                <span class="total">共 {{ rollRows.length }} 条<span style="color:#8c8c8c;">（M1~M6 自「预测起始月份」起滚动 6 个自然月）</span></span>
+                <a-pagination
+                  v-model:current="rollPage.current"
+                  v-model:pageSize="rollPage.size"
+                  :total="rollRows.length"
+                  :page-size-options="['15','30','50']"
+                  show-size-changer
+                  :show-quick-jumper="true"
+                />
+              </div>
+            </div>
+
+            <!-- 详情弹窗：字段详情 + 6 个月滚动明细（预测 / 管道库存 / 净需求） -->
+            <a-modal v-model:open="rollDetailOpen" title="详情 · 给供应商的滚动计划" :width="1000" :footer="null" :mask-closable="false">
+              <template v-if="rollDetailRow">
+                <a-descriptions bordered size="small" :column="2" style="margin-bottom:14px;">
+                  <a-descriptions-item label="数据日期">{{ rollDetailRow.data_date }}</a-descriptions-item>
+                  <a-descriptions-item label="计划批次">{{ rollDetailRow.plan_batch }}</a-descriptions-item>
+                  <a-descriptions-item label="计划行">{{ rollDetailRow.plan_line }}</a-descriptions-item>
+                  <a-descriptions-item label="采购LT（月）">{{ rollDetailRow.purchase_lt }}</a-descriptions-item>
+                  <a-descriptions-item label="供应商编码">{{ rollDetailRow.supplier_code }}</a-descriptions-item>
+                  <a-descriptions-item label="供应商名称">{{ rollDetailRow.supplier_name }}</a-descriptions-item>
+                  <a-descriptions-item label="配件号">{{ rollDetailRow.part_code }}</a-descriptions-item>
+                  <a-descriptions-item label="配件名称">{{ rollDetailRow.part_name }}</a-descriptions-item>
+                  <a-descriptions-item label="车型">{{ rollDetailRow.vehicle_code }}</a-descriptions-item>
+                  <a-descriptions-item label="计划数量（最终下单数量）">{{ rollDetailRow.plan_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="未来 6 个月合计">{{ rollDetailRow.month_total }}</a-descriptions-item>
+                  <a-descriptions-item label="同步状态">
+                    <a-tag :color="rollSyncColor(rollDetailRow.sync_status)" style="margin:0;">{{ rollDetailRow.sync_status }}</a-tag>
+                  </a-descriptions-item>
+                  <a-descriptions-item label="同步时间">{{ rollDetailRow.sync_time }}</a-descriptions-item>
+                  <a-descriptions-item label="同步人">{{ rollDetailRow.sync_by }}</a-descriptions-item>
+                  <a-descriptions-item label="预测起始月份">{{ rollDetailRow.start_month }}（M1，数据月+采购LT）</a-descriptions-item>
+                </a-descriptions>
+
+                <div class="bt-sec-t" style="margin:6px 0 10px;">6 个月滚动明细
+                  <span class="bt-sec-sub">净需求量＝当月预测值 − 当月管道库存（open PO 未交付＋在途−BO）；供应商按「净需求量」备货</span>
+                </div>
+                <a-table :columns="rollMonthDetailCols" :data-source="rollDetailRow.months" row-key="short"
+                  :pagination="false" size="small" bordered/>
+
+                <div class="jlrs-modal-footer">
+                  <a-button @click="rollDetailOpen=false">关闭</a-button>
+                  <a-button type="primary" v-if="rollDetailRow.sync_status!=='已同步SAP'" @click="rollPublishOne(rollDetailRow)">同步到 SAP</a-button>
+                </div>
+              </template>
+            </a-modal>
+
+            <!-- 同步到 SAP 确认弹窗 -->
+            <a-modal v-model:open="rollPublishOpen" title="同步滚动计划到 SAP" :width="620" :footer="null" :mask-closable="false">
+              <a-alert type="warning" :show-icon="true" style="margin-bottom:14px;">
+                <template #message>将把 <b>{{ rollPublishRows.length }}</b> 行计划、<b>{{ rollPublishSupplierCount }}</b> 家供应商的未来 6 个月滚动计划同步到 SAP；同步成功后回写「已同步SAP」与同步时间，供应商在 SAP 内查看。</template>
+              </a-alert>
+              <a-descriptions bordered size="small" :column="2" style="margin-bottom:14px;">
+                <a-descriptions-item label="数据日期">{{ rollDataDate }}</a-descriptions-item>
+                <a-descriptions-item label="预测起始月份">按各行采购LT（如 {{ rollPublishStartSample }}）</a-descriptions-item>
+                <a-descriptions-item label="覆盖月份">M1~M6（6 个自然月）</a-descriptions-item>
+                <a-descriptions-item label="同步目标">SAP</a-descriptions-item>
+              </a-descriptions>
+              <div class="bt-sec-t" style="margin:10px 0 8px;">同步说明<span class="bt-sec-sub">选填</span></div>
+              <a-textarea v-model:value="rollPublishNote" :rows="3" :maxlength="200" show-count placeholder="例如：本月滚动计划已按最新需求更新，请按净需求量备货。"/>
+              <div class="jlrs-modal-footer">
+                <a-button @click="rollPublishOpen=false">取消</a-button>
+                <a-button type="primary" @click="rollDoPublish">确认同步</a-button>
+              </div>
+            </a-modal>
+
+            <!-- 导出滚动计划弹窗 -->
+            <a-modal v-model:open="rollExportOpen" title="导出滚动计划" :width="600" :footer="null" :mask-closable="false">
+              <div style="font-weight:600;margin-bottom:8px;">选择导出字段</div>
+              <div style="max-height:320px;overflow:auto;border:1px solid #eee;padding:8px 12px;border-radius:6px;">
+                <a-checkbox v-for="c in rollColumns.filter(x=>x.key!=='action')" :key="c.key"
+                  :checked="rollExportFields.includes(c.key)" @change="rollToggleExportField(c.key)" style="display:block;margin:4px 0;">
+                  {{ c.exportTitle || c.title }}
+                </a-checkbox>
+              </div>
+              <div class="jlrs-modal-footer">
+                <a-button @click="rollExportOpen=false">取消</a-button>
+                <a-button type="primary" @click="rollDoExport">导出</a-button>
               </div>
             </a-modal>
           </template>
@@ -4424,7 +4600,6 @@ for(let i=0;i<64;i++){
   const singleMaxLimit = Math.round(targetStock*1.2);
   const etaBase = new Date(2026, 9, 10 + (i % 18));
   const requiredArrivalDate = etaBase.toISOString().slice(0,10);
-  const whRequiredArrivalDate = new Date(etaBase.getTime() + 86400000*2).toISOString().slice(0,10);
   // 计划批次 / 计划行：审批通过且调整数量>0 时生成
   let planBatch = '—', planLine = '—';
   if(billStatus==='审批通过' && adjustQty > 0){
@@ -4453,7 +4628,7 @@ for(let i=0;i<64;i++){
     set_group:setGroup, set_fill_qty:setFillQty, suggest_set_qty:suggestSetQty, mpq,
     suggest_mpq_qty:suggestMpqQty, suggest_qty:suggestQty, is_blocked:isBlocked, block_reason:blockReason,
     adjust_qty:adjustQty, adjust_reason:'', required_arrival_date:requiredArrivalDate,
-    wh_required_arrival_date:whRequiredArrivalDate, bill_status:billStatus, approve_remark:approveRemark,
+    bill_status:billStatus, approve_remark:approveRemark,
     update_time:'2026-10-'+(1+i%20)+' 09:'+(10+i%50), modifier:pick(fcPlanners),
     approver, approve_time:approveTime, push_status:(billStatus==='审批通过')?(i%2?'已推送':'待推送'):'—',
     receive_mode:poRegReceiveModes[i%2]
@@ -4928,7 +5103,7 @@ const app = createApp({
     const VALID_KEYS = ['strategy-purchase','strategy-service','strategy-stocking','strategy-transfer','strategy-increase','strategy-cycle','strategy-risk','strategy-riskRule','strategy-result','mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier','plan-hier-2','plan-hier-3','gp-params','svc-dash',
       'fc-new','fc-new-draft','fc-long','fc-long-draft','fc-buyout','fc-buyout-draft','fc-regular','fc-regular-draft','fc-wh-regular','fc-best','fc-backtest','fc-backtest-draft',
       'part-group','po-regular','po-eop','po-approval','po-issue','sto-week','sto-next',
-      'po-atb','po-bridge','po-ref'];
+      'po-atb','po-bridge','po-ref','po-roll'];
     function keyFromHash(){
       const h = (window.location.hash||'').replace(/^#/,'').trim();
       if(h==='strategy-stocking')return 'wh-abc';
@@ -4976,6 +5151,7 @@ const app = createApp({
       { type:'item', key:'po-atb', parent:'po', title:'All Time Buy 计划', icon:'🧾' },
       { type:'item', key:'po-bridge', parent:'po', title:'Bridge Buy 计划', icon:'🌉' },
       { type:'item', key:'po-ref', parent:'po', title:'参考零件采购计划', icon:'🆕' },
+      { type:'item', key:'po-roll', parent:'po', title:'给供应商的滚动计划', icon:'📨' },
       { type:'group', key:'report', title:'报表' },
       { type:'item', key:'svc-dash', parent:'report', title:'服务水平dashboard', icon:'📊' },
       { type:'group', key:'draft', title:'草稿' },
@@ -5525,7 +5701,7 @@ const app = createApp({
     const poRegEditErrList = computed(()=> Object.values(poRegEditErr).filter(Boolean));
     function poRegOpenEdit(r){
       poRegEditTarget.value = r;
-      poRegEditRow.value = reactive(Object.assign({}, r, { _req_date:r.required_arrival_date, _wh_req_date:r.wh_required_arrival_date }));
+      poRegEditRow.value = reactive(Object.assign({}, r, { _req_date:r.required_arrival_date }));
       poRegEditErr.adjustQty=''; poRegEditErr.adjustReason=''; poRegEditOpen.value=true;
     }
     function poRegSaveEdit(){
@@ -5536,10 +5712,9 @@ const app = createApp({
       const today = new Date().toISOString().slice(0,10);
       if(row.plan_type==='紧急采购计划'){
         if(!row._req_date || row._req_date <= today){ poRegEditErr.adjustReason = poRegEditErr.adjustReason ? poRegEditErr.adjustReason+'；' : ''; poRegEditErr.adjustReason += '紧急采购计划要求到货日期须晚于当前日期'; ok=false; }
-        if(row.receive_mode==='代收发收货' && row._wh_req_date && row._req_date && row._wh_req_date <= row._req_date){ poRegEditErr.adjustReason += '；代收发收货时需求仓库要求到货日期须晚于要求到货日期'; ok=false; }
       }
       if(!ok){ msg('请修正表单中的错误项','error'); return; }
-      if(poRegEditTarget.value){ Object.assign(poRegEditTarget.value, { adjust_qty:row.adjust_qty, adjust_reason:row.adjust_reason, required_arrival_date:row._req_date, wh_required_arrival_date:row._wh_req_date, modifier:'当前用户', update_time:new Date().toISOString().slice(0,16).replace('T',' ') }); }
+      if(poRegEditTarget.value){ Object.assign(poRegEditTarget.value, { adjust_qty:row.adjust_qty, adjust_reason:row.adjust_reason, required_arrival_date:row._req_date, modifier:'当前用户', update_time:new Date().toISOString().slice(0,16).replace('T',' ') }); }
       poRegEditOpen.value=false; msg('调整已保存','success');
     }
     // 详情
@@ -5670,6 +5845,189 @@ const app = createApp({
       const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='JLRS_'+stoTitle.value+'_'+new Date().toISOString().slice(0,10)+'.csv'; a.click(); URL.revokeObjectURL(a.href);
       msg('导出成功，共 '+rows.length+' 条（CSV 已下载）','success');
       stoExportOpen.value = false;
+    }
+
+    /* ===== 给供应商的滚动计划（PRD 4.4.3.2 支持供应商协同）=====
+       字段口径：数据日期 / 计划批次 / 计划行 / 配件号 / 配件名称 / 车型 / 计划数量（调整计划数量＝最终下单数量）/
+       采购LT / 月份列 M1~M6（增加采购LT之后的 6 个自然月，值＝预测值扣减管道库存后的净需求量）
+       协同：滚动计划同步到 SAP，同步状态 未同步 / 已同步SAP */
+    const rollDataDate = '2026-10-25';
+    /* 基准月：数据月（2026-10）次月起 6 个自然月（PRD：增加采购LT之后的未来 6 个月） */
+    const rollMonthLabels = (function(){
+      const out = []; let y = 2026, m = 11;
+      for(let i=0;i<6;i++){ out.push(y + '-' + pad2(m)); m++; if(m>12){ m = 1; y++; } }
+      return out;
+    })();
+    const rollBaseMonth = rollMonthLabels[0];
+    const rollSyncStatuses = ['未同步','已同步SAP'];
+    const rollMonthCols = Array.from({length:6}, function(_, i){
+      const k = 'm' + (i+1);
+      return { title:'M' + (i+1), key:k, dataIndex:k, width:74, align:'right',
+               sorter:function(a,b){ return (a[k]||0) - (b[k]||0); } };
+    });
+    const rollColumns = [
+      { title:'数据日期', key:'data_date', dataIndex:'data_date', width:104 },
+      { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:92 },
+      { title:'计划行', key:'plan_line', dataIndex:'plan_line', width:84 },
+      { title:'供应商编码', key:'supplier_code', dataIndex:'supplier_code', width:110 },
+      { title:'供应商名称', key:'supplier_name', dataIndex:'supplier_name', width:190, ellipsis:true },
+      { title:'配件号', key:'part_code', dataIndex:'part_code', width:120 },
+      { title:'配件名称', key:'part_name', dataIndex:'part_name', width:170, ellipsis:true },
+      { title:'车型', key:'vehicle_code', dataIndex:'vehicle_code', width:96 },
+      { title:'计划数量', key:'plan_qty', dataIndex:'plan_qty', width:92, sorter:(a,b)=>a.plan_qty-b.plan_qty },
+      { title:'采购LT(月)', key:'purchase_lt', dataIndex:'purchase_lt', width:104, sorter:(a,b)=>a.purchase_lt-b.purchase_lt },
+      { title:'预测起始月份', key:'start_month', dataIndex:'start_month', width:136 },
+    ].concat(rollMonthCols).concat([
+      { title:'未来6个月合计', key:'month_total', dataIndex:'month_total', width:126, sorter:(a,b)=>a.month_total-b.month_total },
+      { title:'同步状态', key:'sync_status', dataIndex:'sync_status', width:112 },
+      { title:'同步时间', key:'sync_time', dataIndex:'sync_time', width:146 },
+      { title:'操作', key:'action', width:118, fixed:'right' },
+    ]);
+    const rollScrollX = computed(()=> rollColumns.reduce((s,c)=> s + (c.width || 90), 0));
+
+    const rollPlanData = Vue.reactive([]);
+    (function buildRollPlan(){
+      const lineSeq = {};
+      for(let i=0;i<22;i++){
+        const m = matData[(i*5 + 3) % matData.length];
+        const s = supplierData[i % 8];
+        const lt = [2,3,4,6][i % 4];                       // 采购LT（月）
+        const batch = (i % 7 === 0) ? 'M2610' : 'W2643';   // 计划批次：与采购计划一致
+        lineSeq[batch] = (lineSeq[batch] || 0) + 1;
+        const months = [];
+        let total = 0;
+        const shape = 40 + ((i * 7) % 120);                // 该配件的月均需求基数
+        /* 预测起始月份 ＝ 数据月（2026-10）+ 采购LT；M1~M6 自该月起滚动 6 个自然月 */
+        let cursor = 2026 * 12 + 10 + lt;                  // 以「年*12+月」做游标，避免跨年判断
+        let sy = Math.floor((cursor - 1) / 12), sm = ((cursor - 1) % 12) + 1;
+        const startMonth = sy + '.' + pad2(sm);
+        let my = sy, mm2 = sm;
+        for(let k=0;k<6;k++){
+          const fct = Math.max(0, Math.round(shape * (0.82 + rnd()*0.45) * (1 + k*0.03)));
+          const pipe = Math.round(fct * rnd() * 0.42);     // 管道库存：open PO 未交付 + 在途 − BO
+          const net = Math.max(0, fct - pipe);
+          total += net;
+          months.push({
+            short: my + '-' + pad2(mm2),
+            label: my + '年' + mm2 + '月1日',
+            fct: fct, pipe: pipe, net: net,
+          });
+          mm2++; if(mm2 > 12){ mm2 = 1; my++; }
+          cursor++;
+        }
+        const row = {
+          id: 'ROLL' + (i+1), data_date: rollDataDate, plan_batch: batch,
+          plan_line: String(lineSeq[batch]).padStart(6,'0'),
+          supplier_code: s.supplier_code, supplier_name: s.supplier_name,
+          part_code: m.material_code, part_name: m.material_name,
+          vehicle_code: poRegVehicleCodes[i % poRegVehicleCodes.length],
+          plan_qty: Math.max(1, Math.round(60 + rnd()*900)),
+          purchase_lt: lt, start_month: startMonth, month_total: total,
+          sync_status: rollSyncStatuses[i % 2],
+          sync_time: (i % 2 === 0) ? '—' : ('2026-10-' + pad2(20 + (i % 5)) + ' 09:' + pad2(10 + (i % 40))),
+          sync_by: (i % 2 === 0) ? '—' : '计划员 王磊',
+          remark: '', months: months,
+        };
+        months.forEach(function(mm, k){ row['m' + (k+1)] = mm.net; });
+        rollPlanData.push(row);
+      }
+    })();
+
+    const rollFilters = reactive({ supplier_code:'', supplier_name:'', part_code:'', part_name:'', plan_batch:'', sync_status:undefined, vehicle_code:undefined, purchase_lt:undefined });
+    const rollApplied = reactive({ supplier_code:'', supplier_name:'', part_code:'', part_name:'', plan_batch:'', sync_status:undefined, vehicle_code:undefined, purchase_lt:undefined });
+    const rollFilterExpanded = ref(false);
+    const rollFav = ref(false);
+    const rollPage = reactive({ current:1, size:15 });
+    const rollTab = ref('all');
+    const rollTabs = [
+      { key:'all', label:'全部' },
+      { key:'未同步', label:'未同步' },
+      { key:'已同步SAP', label:'已同步SAP' },
+    ];
+    const rollSelKeys = ref([]);
+    function rollResetFilters(){
+      Object.keys(rollFilters).forEach(k=>{ rollFilters[k] = (typeof rollFilters[k]==='string') ? '' : undefined; });
+      Object.assign(rollApplied, rollFilters); rollPage.current = 1; msg('筛选条件已重置');
+    }
+    function rollDoSearch(){ Object.assign(rollApplied, rollFilters); rollPage.current = 1; msg('查询完成，共命中 ' + rollFiltered.value.length + ' 条记录','success'); }
+    const rollFiltered = computed(()=> rollPlanData.filter(function(r){
+      const f = rollApplied;
+      if(f.supplier_code && !r.supplier_code.toLowerCase().includes(f.supplier_code.toLowerCase())) return false;
+      if(f.supplier_name && !r.supplier_name.includes(f.supplier_name)) return false;
+      if(f.part_code && !String(r.part_code).toLowerCase().includes(f.part_code.toLowerCase())) return false;
+      if(f.part_name && !String(r.part_name).includes(f.part_name)) return false;
+      if(f.plan_batch && !r.plan_batch.toLowerCase().includes(f.plan_batch.toLowerCase())) return false;
+      if(f.sync_status && r.sync_status !== f.sync_status) return false;
+      if(f.vehicle_code && r.vehicle_code !== f.vehicle_code) return false;
+      if(f.purchase_lt && r.purchase_lt !== f.purchase_lt) return false;
+      return true;
+    }));
+    const rollRows = computed(()=> rollTab.value==='all' ? rollFiltered.value : rollFiltered.value.filter(r=> r.sync_status === rollTab.value));
+    const rollPaged = computed(()=>{ const s = (rollPage.current - 1) * rollPage.size; return rollRows.value.slice(s, s + rollPage.size); });
+    function rollTabCount(k){ return rollFiltered.value.filter(r=> r.sync_status === k).length; }
+    watch(rollTab, ()=>{ rollSelKeys.value = []; rollPage.current = 1; });
+    watch(activeMenu, ()=>{ rollTab.value = 'all'; rollSelKeys.value = []; rollPage.current = 1; });
+    function rollSyncColor(s){ return s === '已同步SAP' ? 'green' : 'default'; }
+
+    const rollRowSelection = computed(()=> ({ selectedRowKeys: rollSelKeys.value, onChange:function(k){ rollSelKeys.value = k; } }));
+    const rollSelRows = computed(()=> rollRows.value.filter(r=> rollSelKeys.value.includes(r.id)));
+    const rollCanSync = computed(()=> rollSelRows.value.length > 0);
+
+    /* 6 个月滚动明细列（详情弹窗） */
+    const rollMonthDetailCols = [
+      { title:'月份', key:'label', dataIndex:'label', width:130 },
+      { title:'预测需求量', key:'fct', dataIndex:'fct', width:120, align:'right' },
+      { title:'管道库存', key:'pipe', dataIndex:'pipe', width:110, align:'right' },
+      { title:'净需求量（滚动计划量）', key:'net', dataIndex:'net', width:180, align:'right' },
+    ];
+
+    /* 详情 */
+    const rollDetailOpen = ref(false);
+    const rollDetailRow = ref(null);
+    function rollOpenDetail(r){ rollDetailRow.value = r; rollDetailOpen.value = true; }
+
+    /* 同步到 SAP */
+    const rollPublishOpen = ref(false);
+    const rollPublishNote = ref('');
+    const rollPublishRows = ref([]);
+    const rollPublishSupplierCount = computed(()=> new Set(rollPublishRows.value.map(r=> r.supplier_code)).size);
+    /* 同步弹窗里的「预测起始月份」示例（取所选首行，各行按自身采购LT） */
+    const rollPublishStartSample = computed(()=> (rollPublishRows.value[0] && rollPublishRows.value[0].start_month) || '2026.12');
+    function rollOpenPublish(){
+      const picks = rollSelRows.value;
+      if(!picks.length){ msg('请先勾选需要同步到 SAP 的行','warning'); return; }
+      rollPublishRows.value = picks; rollPublishNote.value = ''; rollPublishOpen.value = true;
+    }
+    function rollDoPublish(){
+      const now = '2026-10-25 19:' + pad2(10 + (rollPublishRows.value.length % 45));
+      let n = 0;
+      rollPublishRows.value.forEach(function(r){
+        r.sync_status = '已同步SAP'; r.sync_time = now; r.sync_by = '计划员 王磊'; n++;
+      });
+      rollPublishOpen.value = false; rollSelKeys.value = [];
+      msg('已同步 ' + n + ' 行滚动计划到 SAP（涉及 ' + rollPublishSupplierCount.value + ' 家供应商）','success');
+    }
+    function rollPublishOne(r){
+      if(!r) return;
+      if(r.sync_status === '已同步SAP'){ msg('该行已同步 SAP，无需重复同步','warning'); return; }
+      r.sync_status = '已同步SAP'; r.sync_time = '2026-10-25 19:30'; r.sync_by = '计划员 王磊';
+      msg('已同步到 SAP：' + r.supplier_name + '（' + r.part_code + '）','success');
+    }
+
+    /* 导出 */
+    const rollExportOpen = ref(false);
+    const rollExportFields = ref(rollColumns.filter(c=>c.key!=='action').map(c=>c.key));
+    function rollToggleExportField(k){ const i = rollExportFields.value.indexOf(k); if(i>=0) rollExportFields.value.splice(i,1); else rollExportFields.value.push(k); }
+    function rollDoExport(){
+      const rows = rollRows.value;
+      const cols = rollColumns.filter(c=> rollExportFields.value.includes(c.key));
+      const header = cols.map(c=> c.exportTitle || c.title);
+      const lines = [header.join(',')].concat(rows.map(r=> cols.map(c=>{ const v = r[c.dataIndex]; return (v===null||v===undefined) ? '' : String(v).replace(/,/g,'，'); }).join(',')));
+      const blob = new Blob(['\uFEFF' + lines.join('\n')], {type:'text/csv;charset=utf-8'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = 'JLRS_给供应商的滚动计划_' + rollDataDate + '.csv'; a.click(); URL.revokeObjectURL(a.href);
+      msg('导出成功，共 ' + rows.length + ' 条（CSV 已下载）','success');
+      rollExportOpen.value = false;
     }
 
     /* ---- 通用主数据页面引擎 ---- */
@@ -8626,6 +8984,12 @@ const app = createApp({
       stoDetailOpen, stoDetailRow, stoOpenDetail, stoDetailRemark, stoSaveRemark,
       stoExportOpen, stoExportFields, stoToggleExportField, stoDoExport,
       stoNetworks, stoPlanTypeOptions, stoRouteCodes, stoFromWhs, stoToWhs,
+      rollDataDate, rollBaseMonth, rollMonthLabels, rollSyncStatuses, rollColumns, rollScrollX, rollPlanData,
+      rollFilters, rollApplied, rollFilterExpanded, rollFav, rollPage, rollTab, rollTabs, rollSelKeys, rollRowSelection,
+      rollSelRows, rollCanSync, rollRows, rollPaged, rollFiltered, rollTabCount, rollSyncColor,
+      rollDetailOpen, rollDetailRow, rollOpenDetail, rollMonthDetailCols,
+      rollPublishOpen, rollPublishNote, rollPublishRows, rollPublishSupplierCount, rollPublishStartSample, rollOpenPublish, rollDoPublish, rollPublishOne,
+      rollExportOpen, rollExportFields, rollToggleExportField, rollDoExport, rollDoSearch, rollResetFilters, poRegVehicleCodes,
       isBaseMenu, baseMenuKeys, genericKeys, activeDef,
       genFilters, genApplied, genPage, genHiddenCols, genExpanded, genFav, genVisibleColumns, genPaged, genFiltered, genCustomRow,
       genDetailOpen, genDetailRow, openGenDetail, modalDetailKeys,
