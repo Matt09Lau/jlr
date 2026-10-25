@@ -1726,7 +1726,7 @@ mark {
               </div>
             </div>
 
-            <!-- 详情弹窗：字段详情 + 6 个月滚动明细（预测 / 管道库存 / 净需求） -->
+            <!-- 详情弹窗：字段详情 + 6 个月滚动明细（月份 + 预测需求量） -->
             <a-modal v-model:open="rollDetailOpen" title="详情 · 给供应商的滚动计划" :width="1000" :footer="null" :mask-closable="false">
               <template v-if="rollDetailRow">
                 <a-descriptions bordered size="small" :column="2" style="margin-bottom:14px;">
@@ -1750,7 +1750,7 @@ mark {
                 </a-descriptions>
 
                 <div class="bt-sec-t" style="margin:6px 0 10px;">6 个月滚动明细
-                  <span class="bt-sec-sub">净需求量＝当月预测值 − 当月管道库存（open PO 未交付＋在途−BO）；供应商按「净需求量」备货</span>
+                  <span class="bt-sec-sub">各月值＝该自然月的预测需求量；月份自「预测起始月份」（数据月+采购LT）起滚动</span>
                 </div>
                 <a-table :columns="rollMonthDetailCols" :data-source="rollDetailRow.months" row-key="short"
                   :pagination="false" size="small" bordered/>
@@ -1774,7 +1774,7 @@ mark {
                 <a-descriptions-item label="同步目标">SAP</a-descriptions-item>
               </a-descriptions>
               <div class="bt-sec-t" style="margin:10px 0 8px;">同步说明<span class="bt-sec-sub">选填</span></div>
-              <a-textarea v-model:value="rollPublishNote" :rows="3" :maxlength="200" show-count placeholder="例如：本月滚动计划已按最新需求更新，请按净需求量备货。"/>
+              <a-textarea v-model:value="rollPublishNote" :rows="3" :maxlength="200" show-count placeholder="例如：本月滚动计划已按最新预测需求更新，请按各月预测需求量备货。"/>
               <div class="jlrs-modal-footer">
                 <a-button @click="rollPublishOpen=false">取消</a-button>
                 <a-button type="primary" @click="rollDoPublish">确认同步</a-button>
@@ -5849,7 +5849,7 @@ const app = createApp({
 
     /* ===== 给供应商的滚动计划（PRD 4.4.3.2 支持供应商协同）=====
        字段口径：数据日期 / 计划批次 / 计划行 / 配件号 / 配件名称 / 车型 / 计划数量（调整计划数量＝最终下单数量）/
-       采购LT / 月份列 M1~M6（增加采购LT之后的 6 个自然月，值＝预测值扣减管道库存后的净需求量）
+       采购LT / 月份列 M1~M6（增加采购LT之后的 6 个自然月，值＝该自然月的预测需求量）
        协同：滚动计划同步到 SAP，同步状态 未同步 / 已同步SAP */
     const rollDataDate = '2026-10-25';
     /* 基准月：数据月（2026-10）次月起 6 个自然月（PRD：增加采购LT之后的未来 6 个月） */
@@ -5904,13 +5904,11 @@ const app = createApp({
         let my = sy, mm2 = sm;
         for(let k=0;k<6;k++){
           const fct = Math.max(0, Math.round(shape * (0.82 + rnd()*0.45) * (1 + k*0.03)));
-          const pipe = Math.round(fct * rnd() * 0.42);     // 管道库存：open PO 未交付 + 在途 − BO
-          const net = Math.max(0, fct - pipe);
-          total += net;
+          total += fct;
           months.push({
             short: my + '-' + pad2(mm2),
             label: my + '年' + mm2 + '月1日',
-            fct: fct, pipe: pipe, net: net,
+            fct: fct,
           });
           mm2++; if(mm2 > 12){ mm2 = 1; my++; }
           cursor++;
@@ -5928,7 +5926,7 @@ const app = createApp({
           sync_by: (i % 2 === 0) ? '—' : '计划员 王磊',
           remark: '', months: months,
         };
-        months.forEach(function(mm, k){ row['m' + (k+1)] = mm.net; });
+        months.forEach(function(mm, k){ row['m' + (k+1)] = mm.fct; });
         rollPlanData.push(row);
       }
     })();
@@ -5973,12 +5971,10 @@ const app = createApp({
     const rollSelRows = computed(()=> rollRows.value.filter(r=> rollSelKeys.value.includes(r.id)));
     const rollCanSync = computed(()=> rollSelRows.value.length > 0);
 
-    /* 6 个月滚动明细列（详情弹窗） */
+    /* 6 个月滚动明细列（详情弹窗）：仅月份 + 预测需求量 */
     const rollMonthDetailCols = [
-      { title:'月份', key:'label', dataIndex:'label', width:130 },
-      { title:'预测需求量', key:'fct', dataIndex:'fct', width:120, align:'right' },
-      { title:'管道库存', key:'pipe', dataIndex:'pipe', width:110, align:'right' },
-      { title:'净需求量（滚动计划量）', key:'net', dataIndex:'net', width:180, align:'right' },
+      { title:'月份', key:'label', dataIndex:'label', width:150 },
+      { title:'预测需求量', key:'fct', dataIndex:'fct', width:140, align:'right' },
     ];
 
     /* 详情 */
