@@ -30,10 +30,15 @@ PAGES = [
     ("fc-regular",   "常规预测",           "2026-10",        False),
     ("fc-best",      "最佳模型",           "最优模型",       False),
     ("part-group",      "配件组管理",        "分组类型",      False),
-    ("po-regular",      "常规采购计划",      "计划单号",      False),
+    ("po-regular",      "常规采购计划",      "数据生成日期",  False),
     ("po-eop",          "停产最后采购量",    "末采数量",      False),
     ("po-approval",     "采购计划审批",      "审批状态",      False),
     ("po-issue",        "采购订单下达",      "PO单号",        False),
+    ("sto-week",        "本周调拨计划",      "计划批次",      False),
+    ("sto-next",        "下周调拨计划",      "计划批次",      False),
+    ("po-atb",          "All Time Buy 计划", "全生命周期累计需求", False),
+    ("po-bridge",       "Bridge Buy 计划",   "属地预期库存",  False),
+    ("po-ref",          "参考零件采购计划",  "参考车型",      False),
 ]
 
 def file_url(path, fragment=""):
@@ -126,7 +131,7 @@ def check_one(page_key, title_kw, field_kw, is_ext):
 def check_po_pages():
     """采购计划 4 个页面：每个页面都能正常挂载、渲染表格、包含关键业务字段。"""
     checks = [
-        ("po-regular", "常规采购计划", "计划单号"),
+        ("po-regular", "常规采购计划", "数据生成日期"),
         ("po-eop", "停产最后采购量", "末采数量"),
         ("po-approval", "采购计划审批", "审批状态"),
         ("po-issue", "采购订单下达", "PO单号"),
@@ -152,7 +157,7 @@ def check_fc_buyout_btns():
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
         return {"key":"fc-buyout-按钮","ok":False,"msg":"渲染失败/错误页"}
     r = strip_scripts(rendered(data))
-    need = ["编 辑", "生成All time buy计划"]
+    need = ["编 辑", "生成All time buy计划", "批量调整"]
     miss = [k for k in need if k not in r]
     bad = [k for k in ["生成采购计划", "生成bridge buy计划", "系数调整", "保 存"] if k in r]
     ok = (not miss) and (not bad)
@@ -268,7 +273,7 @@ def check_svc_dash():
     return {"key":"svc-dash","ok":ok,"msg":detail}
 
 def check_fc_new():
-    """全新车型配件预测：左侧 7 步流程步骤条 + 右侧步骤1 参考车型库。"""
+    """参考零件需求预测：左侧 7 步流程步骤条 + 右侧步骤1 参考车型库。"""
     dump("fc-new")
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
@@ -280,7 +285,7 @@ def check_fc_new():
     rows = r.count("ant-table-row")
     kw = ["流程步骤", "步骤1: 维护参考车型库", "添加参考车型", "导入参考车型",
           "生成参考车型配件清单", "计算配件月度销量", "计算车型月保有量", "计算订购率",
-          "匹配参考订购率", "全新车型配件预测", "配件清单", "配件销量", "整车保有量",
+          "匹配参考订购率", "参考零件需求预测", "配件清单", "配件销量", "整车保有量",
           "订购率", "删除", "上市日期", "断点日期", "车型编号", "L460", "L663", "X761", "纯电"]
     miss = [k for k in kw if k not in r]
     ok = watermark > 0 and steps >= 7 and autos >= 5 and rows > 0 and not miss
@@ -288,7 +293,7 @@ def check_fc_new():
     return {"key":"fc-new","ok":ok,"msg":detail}
 
 def check_fc_new_draft():
-    """草稿副本：全新车型配件预测(草稿) 应正常渲染、且与原始一致（不应含新增的匹配状态/更新预测结果等控件）。"""
+    """草稿副本：参考零件需求预测(草稿) 应正常渲染、且与原始一致（不应含新增的匹配状态/更新预测结果等控件）。"""
     dump("fc-new-draft")
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
@@ -305,7 +310,7 @@ def check_fc_new_draft():
     return {"key":"fc-new-draft","ok":ok,"msg":detail}
 
 def check_fc_new_pred():
-    """原始全新车型配件预测：预测结果弹窗含匹配状态筛选、批量维护参考配件号（逐行独立下拉 + 受约束模板导入并校验）；更新预测结果按钮已移除。"""
+    """原始参考零件需求预测：预测结果弹窗含匹配状态筛选、批量维护参考配件号（逐行独立下拉 + 受约束模板导入并校验）；更新预测结果按钮已移除。"""
     inject = ("<script>"
               "setTimeout(function(){"
               "var steps=[].slice.call(document.querySelectorAll('.fc-step'));"
@@ -345,7 +350,7 @@ def check_fc_new_pred():
     no_upc = "UPC/FN号" not in full
     ok = (has_filter and not has_update and has_batch and has_tpl and has_import
           and has_valid_col and has_note and has_invalid and has_import_msg and has_jlr
-          and has_base and no_lr and no_upc)
+          and (not has_base) and no_lr and no_upc)
     detail = (f"匹配状态={has_filter} 更新按钮已移除={not has_update} 批量按钮={has_batch} 下载模板={has_tpl} "
               f"导入按钮={has_import} 校验列={has_valid_col} 说明={has_note} 越界标红={has_invalid} "
               f"导入提示={has_import_msg} JLR料号={has_jlr} "
@@ -353,7 +358,7 @@ def check_fc_new_pred():
     return {"key":"fc-new-pred","ok":ok,"msg":detail}
 
 def check_fc_new_6m():
-    """全新车型配件预测：计划生产量应为未来 1~6 个月（列表列），预测结果应为 1~6 个月预测列。"""
+    """参考零件需求预测：计划生产量应为未来 1~6 个月（列表列），预测结果应为 1~6 个月预测列。"""
     # 探针：进入步骤7 → 统计列表里「未来N个月计划生产量」表头；再打开「预测结果」弹窗统计「N个月预测」列
     inject = ("<script>"
               "var zprod=0, zmax=0, zfc=0;"
@@ -384,7 +389,7 @@ def check_fc_new_6m():
     return {"key": "fc-new-6个月", "ok": ok, "msg": detail}
 
 def check_fc_new_coef():
-    """全新车型预测：页面步骤7「系数调整」按钮 → 弹窗内维护 1~6 月系数。"""
+    """参考零件需求预测：页面步骤7「系数调整」按钮 → 弹窗内维护 1~6 月系数。"""
     # 探针：进入步骤7 → 点击「系数调整」按钮后，统计弹窗内真实渲染的月份系数输入框
     inject = ("<script>"
               "setTimeout(function(){var steps=[].slice.call(document.querySelectorAll('.fc-step'));if(steps[6]){steps[6].click();}}, 900);"
@@ -733,7 +738,7 @@ def check_fc_adjust_reason():
     return {"key":"fc-调整原因","ok":ok,"msg":detail}
 
 def check_fc_new_pred_reason():
-    """全新车型预测 · 预测结果弹窗：含「调整原因」列（每行、调整后必填）。"""
+    """参考零件需求预测 · 预测结果弹窗：含「调整原因」列（每行、调整后必填）。"""
     inject = ("<script>setTimeout(function(){"
               "var steps=[].slice.call(document.querySelectorAll('.fc-step'));if(steps[6]){steps[6].click();}}, 900);"
               "setTimeout(function(){"
@@ -1117,7 +1122,7 @@ def check_gp_list():
     r = rendered(data)
     kw = ["全局参数", "参数代码", "参数描述", "默认值", "备注", "修改人名称", "更新时间",
           "搜 索", "编辑",
-          "WAREHOUSE_WARNING_COEFFICIENT", "共 11 条"]
+          "PARM01", "共 29 条"]
     miss = [k for k in kw if k not in r]
     rows = r.count("ant-table-row")
     ok = rows > 0 and not miss
@@ -1160,11 +1165,13 @@ def check_part_group():
         "按钮-批量启用": "批量启用" in r,
         "按钮-批量停用": "批量停用" in r,
         "按钮-批量删除": "批量删除" in r,
-        "按钮-批量导入配件": "批量导入配件" in r,
     }
+    not_want = ["批量导入配件"]
+    extra = [k for k in not_want if k in r]
     missing = [k for k, v in must.items() if not v]
-    ok = rows > 0 and not missing
-    detail = f"rows={rows} " + ("缺失=" + ",".join(missing) if missing else "缺失=无")
+    ok = rows > 0 and not missing and not extra
+    detail = f"rows={rows} " + ("缺失=" + ",".join(missing) if missing else "缺失=无") + \
+             (" 残留=" + ",".join(extra) if extra else "")
     return {"key":"part-group","ok":ok,"msg":detail}
 
 def check_menu():
@@ -1175,19 +1182,150 @@ def check_menu():
         return {"key":"menu","ok":False,"msg":"渲染失败/错误页"}
     r = rendered(data)
     # 期望出现
-    must_have = ["需求预测", "预测模拟", "全新车型配件预测", "长周期预测报表", "一次买断预测结果", "常规预测", "仓库级常规预测", "最佳模型",
+    must_have = ["需求预测", "预测模拟", "参考零件需求预测", "长周期预测报表", "一次买断预测结果", "常规预测", "仓库级常规预测", "最佳模型",
                  "草稿", "计划层级管理", "计划层级管理2", "服务水平dashboard", "基础数据管理",
                  "库存策略参数", "采购LT", "目标满足率", "备货规则", "库间LT", "增储天数", "计划周期", "配件风控线", "配件多分类风控线", "建储水位线计算结果",
                  "配件组管理",
-                 "采购计划", "常规采购计划", "停产最后采购量", "采购计划审批", "采购订单下达"]
+                 "采购计划", "常规采购计划", "本周调拨计划", "下周调拨计划",
+                 "All Time Buy 计划", "Bridge Buy 计划", "参考零件采购计划",
+                 "停产最后采购量", "采购计划审批", "采购订单下达"]
     miss = [k for k in must_have if k not in r]
-    # 不应出现（已移除的纯占位菜单）
+    # 不应出现（已移除的纯占位菜单 / 已更名的旧称）
     must_not = ["历史需求处理", "准确率报表", "预测回测配置",
-                "售后订单管理", "【本地测试页面】", "计划层级管理3"]
+                "售后订单管理", "【本地测试页面】", "计划层级管理3",
+                "全新车型配件预测", "参考零件采购计划（首储）"]
     bad = [k for k in must_not if k in r]
+    # 菜单归属顺序：停产最后采购量/采购计划审批/采购订单下达 应位于「草稿」组（常规预测(草稿) 之后），
+    # 且采购计划组内 参考零件采购计划 之后直接是「报表」组
+    ipo = r.find("参考零件采购计划")
+    irep = r.find("服务水平dashboard")
+    idr = r.find("常规预测(草稿)")
+    ieop = r.find("停产最后采购量")
+    iapr = r.find("采购计划审批")
+    iiss = r.find("采购订单下达")
+    if not (0 <= idr < ieop < iapr < iiss):
+        bad.append("草稿组顺序(三页应位于草稿组内)")
+    if not (0 <= ipo < irep):
+        bad.append("采购计划组顺序(po-ref 后应为报表组)")
     ok = (not miss) and (not bad)
     detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
     return {"key":"menu","ok":ok,"msg":detail}
+
+# 「库存策略参数」8 页：由 inventory-strategy.js / inventory-results.js 外部组件渲染，
+# 页面分发块一旦被误删，整组页面会静默空白（无任何报错），故单列一桶强校验。
+STRATEGY_PAGES = [
+    ("strategy-purchase", "采购LT"),
+    ("strategy-service",  "目标满足率"),
+    ("strategy-transfer", "库间LT"),
+    ("strategy-increase", "增储天数"),
+    ("strategy-cycle",    "计划周期"),
+    ("strategy-risk",     "配件风控线"),
+    ("strategy-riskRule", "配件多分类风控线"),
+    ("strategy-result",   "建储水位线计算结果"),
+]
+
+def check_strategy():
+    """库存策略参数：每页必须渲染出表格行且命中页面标题，防止分发块缺失导致整模块空白。"""
+    bad = []
+    for key, title in STRATEGY_PAGES:
+        r = rendered(dump(key))
+        rows = r.count("ant-table-row")
+        if rows <= 0:
+            bad.append(f"{key}(rows=0)")
+        elif not has_col(r, title):
+            bad.append(f"{key}(缺标题:{title})")
+    if bad:
+        return {"ok": False, "msg": "异常: " + ", ".join(bad)}
+    return {"ok": True, "msg": f"{len(STRATEGY_PAGES)} 页全部渲染正常"}
+
+STO_PAGES = [("sto-week", "本周调拨计划"), ("sto-next", "下周调拨计划")]
+# 字段口径＝PRD 5.4.4.1 计划结果表 29 字段（最新；无缺口/STO单号/执行状态/所需车次/缺口结转标记/运输线路）
+STO_COLS = ["数据生成日期", "计划类型", "配件号", "配件名称", "发货仓", "收货仓",
+            "收货仓最低风控线", "收货仓目标库存", "是否出计划日", "ABC分类", "车型代码",
+            "计划员", "计划批次", "计划行", "预期库存", "可用库存数量", "欠交数量",
+            "库间在途数量", "缺货数量", "库间LT", "近3个月月均销量", "当前可用天数",
+            "要求到货日期", "推荐计划数量(取整前)", "推荐计划数量(分配后)", "体积", "体积单位", "预计调拨体积", "备注"]
+STO_FORBIDDEN = ["缺口", "STO单号", "执行状态", "所需车次", "建议调拨数量", "缺口结转标记"]
+
+def check_sto():
+    """调拨计划（STO）：2 页必须渲染表格行且命中 PRD 5.4.4.1 输出表字段；不得残留缺口/STO单号等已删字段；
+    本周（执行，W2643）与下周（预排，W2644）计划批次体现时点差异。"""
+    bad = []
+    for key, title in STO_PAGES:
+        r = rendered(dump(key))
+        if r.count("ant-table-row") <= 0:
+            bad.append(key + "(rows=0)")
+        miss = [c for c in STO_COLS if c not in r]
+        if miss:
+            bad.append(key + "(缺列:" + ",".join(miss) + ")")
+        res = [c for c in STO_FORBIDDEN if c in r]
+        if res:
+            bad.append(key + "(残留:" + ",".join(res) + ")")
+    rw = rendered(dump("sto-week"))
+    rn = rendered(dump("sto-next"))
+    if "W2643" not in rw:
+        bad.append("sto-week(缺计划批次W2643)")
+    if "W2644" not in rn:
+        bad.append("sto-next(缺计划批次W2644)")
+    if "W2644" in rw or "W2643" in rn:
+        bad.append("sto(批次时点串页)")
+    if "紧急调拨计划" not in rw or "常规调拨计划" not in rw:
+        bad.append("sto-week(缺计划类型枚举)")
+    if "下周预计调拨计划" not in rn:
+        bad.append("sto-next(缺下周预计调拨计划)")
+    if "紧急调拨计划" in rn or "常规调拨计划" in rn:
+        bad.append("sto-next(不应出现紧急/常规调拨计划)")
+    if bad:
+        return {"ok": False, "msg": "异常: " + ", ".join(bad)}
+    return {"ok": True, "msg": "2 页渲染正常，字段口径对齐 PRD 5.4.4.1 输出表"}
+
+def check_po_plan():
+    """采购计划扩展 3 页：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划。
+    断言列集对齐 PRD 第 6/7 章，且各页专属能力齐备。"""
+    pages = [
+        ("po-atb", "All Time Buy 计划",
+         ["配件号", "配件名称", "全国预期库存", "全生命周期累计需求", "净需求", "MOQ", "MPQ",
+          "采购计划数量", "调整计划数量", "停产标记", "单据状态", "审批人", "审批时间"]),
+        ("po-bridge", "Bridge Buy 计划",
+         ["配件号", "配件名称", "收货仓库", "买断区间", "区间预测需求量", "属地预期库存", "净需求", "MOQ", "MPQ",
+          "采购计划数量", "调整计划数量", "单据状态", "审批人"]),
+        ("po-ref", "参考零件采购计划",
+         ["新件配件号", "配件名称", "参考车型", "参考配件号", "预测需求量", "全国预期库存", "净需求", "MOQ", "MPQ",
+          "采购计划数量", "调整计划数量", "单据状态", "审批人"]),
+    ]
+    bad = []
+    for key, title, cols in pages:
+        r = rendered(dump(key))
+        if r.count("ant-table-row") <= 0:
+            bad.append(key + "(rows=0)")
+        miss = [c for c in cols if c not in r]
+        if miss:
+            bad.append(key + "(缺列:" + ",".join(miss) + ")")
+    ra = rendered(dump("po-atb"))
+    rb = rendered(dump("po-bridge"))
+    rr = rendered(dump("po-ref"))
+    if "批量下计划" not in ra:
+        bad.append("po-atb(缺批量下计划)")
+    if "买断区间" not in rb:
+        bad.append("po-bridge(缺买断区间)")
+    if "展开年份" in rb or "折叠年份" in rb:
+        bad.append("po-bridge(不应有展开/折叠年份)")
+    if "年份" in rb and "买断区间" not in rb:
+        bad.append("po-bridge(不应保留按年展开的年份列)")
+    if "导入" in rr:
+        bad.append("po-ref(不应有导入)")
+    # 审批状态页签（与常规采购计划一致）：全部 / 待提交 / 待审批 / 已驳回 / 审批通过
+    for key, r in [("po-atb", ra), ("po-bridge", rb), ("po-ref", rr)]:
+        for t in ["待提交", "待审批", "已驳回", "审批通过"]:
+            if t not in r:
+                bad.append(key + "(缺审批页签:" + t + ")")
+    if "是否疑难件" in rb:
+        bad.append("po-bridge(不应有是否疑难件)")
+    if "bridge buy 标签" in rb:
+        bad.append("po-bridge(不应有bridge buy标签)")
+    if bad:
+        return {"ok": False, "msg": "异常: " + ", ".join(bad)}
+    return {"ok": True, "msg": "3 页渲染正常，列集对齐 PRD 第 6/7 章"}
 
 def main():
     only = sys.argv[1] if len(sys.argv) > 1 else None
@@ -1360,6 +1498,18 @@ def main():
         r = check_menu()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] menu          {r['msg']}")
+    if only in (None, 'strategy'):
+        r = check_strategy()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] strategy      {r['msg']}")
+    if only in (None, 'sto', 'sto-week', 'sto-next'):
+        r = check_sto()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] sto-2pages    {r['msg']}")
+    if only in (None, 'po-plan', 'po-atb', 'po-bridge', 'po-ref'):
+        r = check_po_plan()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-plan-3pages {r['msg']}")
     print("==== 汇总:", "全部通过" if all_ok else "存在失败", "====")
 
 if __name__ == "__main__":
