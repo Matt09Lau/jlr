@@ -394,6 +394,7 @@
             <!-- 表格卡片 -->
             <div class="card" style="margin-bottom:0;">
               <div class="toolbar-row">
+                <a-button type="primary" @click="openBlkCreate">新增</a-button>
                 <a-button type="primary" @click="exportCsv(false)">⬇ 导出</a-button>
                 <a-button type="link" style="padding:0;" @click="exportCsv(true)">全量导出</a-button>
                 <a-button type="default" @click="whImportOpen=true">⬆ 导入</a-button>
@@ -2274,6 +2275,17 @@
       </div>
     </div>
 
+    <a-modal v-model:open="blkCreateOpen" title="新增备货规则" :width="600" :footer="null" :mask-closable="false">
+      <a-form layout="vertical">
+        <a-form-item label="配件" required><a-select v-model:value="blkCreate.parts" mode="multiple" show-search option-filter-prop="label" :options="blkPartOptions" placeholder="请选择一个或多个配件" style="width:100%"/><a-button type="link" @click="blkCreate.parts=blkPartOptions.map(p=>p.value)">选择全部配件</a-button><a-button type="link" @click="blkCreate.parts=[]">清空</a-button></a-form-item>
+        <a-form-item label="仓库" required><a-select v-model:value="blkCreate.wh" show-search option-filter-prop="label" :options="whOptions" placeholder="请选择一个仓库" style="width:100%"/></a-form-item>
+        <a-form-item label="备货标识" required><a-select v-model:value="blkCreate.flag" :options="[{value:'允许',label:'允许'},{value:'禁止',label:'禁止'}]"/></a-form-item>
+        <a-form-item label="备注（允许或禁止备货的原因）"><a-textarea v-model:value="blkCreate.remark" :rows="3" :maxlength="500" show-count/></a-form-item>
+      </a-form>
+      <p>将按配件＋仓库生成 {{blkCreate.parts.length}} 条规则；已有组合不允许重复新增。</p>
+      <div class="blk-footer"><a-button @click="blkCreateOpen=false">取消</a-button><a-button type="primary" @click="saveBlkCreate">保存</a-button></div>
+    </a-modal>
+
     <!-- ===== 编辑备货标识（单个） ===== -->
     <a-modal v-model:open="blkEditOpen" :width="520" title="编辑备货规则" :footer="null" :mask-closable="false">
       <div v-if="blkEditRow">
@@ -2594,6 +2606,7 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 </script>
 <script>__VENDOR_VUE__</script>
 <script>__VENDOR_ANTD__</script>
+<script src="stocking-rules.js?v=20261026-create"></script>
 <script src="global-parameters.js?v=20261023-service-factor"></script>
 <script src="inventory-results.js?v=20261023-target-direction"></script>
 <script src="inventory-strategy.js?v=20261023-increase-periods"></script>
@@ -2677,8 +2690,8 @@ warehouses.forEach(wh => {
   });
 });
 
-function persistWhRules(){const state={};records.forEach(r=>state[r.whCode+'|'+r.code]={stock_flag:r.stock_flag,remark:r.remark||'',updateTime:r.updateTime});localStorage.setItem('cspp-stock-rules-v1',JSON.stringify(state));}
-try{const saved=JSON.parse(localStorage.getItem('cspp-stock-rules-v1')||'{}');records.forEach(r=>{const v=saved[r.whCode+'|'+r.code];if(v)Object.assign(r,v);else r.remark=r.stock_flag==='允许'?'常规需求，允许备货':'低频需求，暂不备货';});}catch{records.forEach(r=>r.remark='');}
+function persistWhRules(){const state={};records.forEach(r=>state[r.whCode+'|'+r.code]={stock_flag:r.stock_flag,remark:r.remark||'',updateTime:r.updateTime,...(r._manualRule?{_manualRule:true,id:r.id,code:r.code,name:r.name,whCode:r.whCode,whName:r.whName,sync_data_time:r.sync_data_time}:{})});localStorage.setItem('cspp-stock-rules-v1',JSON.stringify(state));}
+try{const saved=JSON.parse(localStorage.getItem('cspp-stock-rules-v1')||'{}');Object.values(saved).filter(v=>v._manualRule&&!records.some(r=>r.code===v.code&&r.whCode===v.whCode)).forEach(v=>records.unshift(v));records.forEach(r=>{const v=saved[r.whCode+'|'+r.code];if(v)Object.assign(r,v);else r.remark=r.stock_flag==='允许'?'常规需求，允许备货':'低频需求，暂不备货';});}catch{records.forEach(r=>r.remark='');}
 
 /* ================= 经销商主数据（ods_dealer）模拟 ================= */
 const dealerCities = [
@@ -3724,6 +3737,20 @@ const app = createApp({
     function toggleFav(){ fav.value = !fav.value; msg(fav.value ? '已收藏本页' : '已取消收藏', 'success'); }
 
     /* ---- 收发管控：单个编辑 ---- */
+    const blkCreateOpen=ref(false);
+    const blkCreate=reactive({parts:[],wh:undefined,flag:'允许',remark:''});
+    const blkPartOptions=computed(()=>matData.map(m=>({value:m.material_code,label:m.material_code+' '+m.material_name})));
+    function openBlkCreate(){Object.assign(blkCreate,{parts:[],wh:undefined,flag:'允许',remark:''});blkCreateOpen.value=true;}
+    function saveBlkCreate(){
+      const plan=window.CSPPStockingRules.expand(blkCreate,matData,warehouses,records);
+      if(plan.error){antd.message.error(plan.error);return;}
+      const now=new Date().toLocaleString('sv-SE');
+      const rows=plan.rows.map((r,i)=>({...r,id:'stock-'+Date.now()+'-'+i,_manualRule:true,updateTime:now,sync_data_time:now}));
+      records.unshift(...rows);
+      try{persistWhRules();}catch(e){records.splice(0,rows.length);antd.message.error('保存失败，请检查浏览器存储空间');return;}
+      resetFilters();page.current=1;selectedKeys.value=[];blkCreateOpen.value=false;antd.message.success('已新增'+rows.length+'条备货规则');
+    }
+
     const blkEditOpen = ref(false);
     const blkEditRow = ref(null);
     function openBlkEdit(r){
@@ -6431,6 +6458,7 @@ const app = createApp({
       xyzColor:{ X:'green', Y:'orange', Z:'red' },
       filters, filterExpanded, fav, toggleFav, whOptions, abcOptions, xyzOptions, vehicleOptions, doSearch, resetFilters,
       filteredRecords, tableSize, allColumns, hiddenCols, visibleColumns, toggleCol,
+      blkCreateOpen, blkCreate, blkPartOptions, openBlkCreate, saveBlkCreate,
       blkEditOpen, blkEditRow, openBlkEdit, saveBlkEdit,
       whImportOpen, doWhImport,
       selectedKeys, selectedCount, onSelectChange, clearSelection, selectAllFiltered,

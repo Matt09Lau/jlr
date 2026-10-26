@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');
+const {expand}=require('../前端设计稿/stocking-rules.js');
+const materials=[{material_code:'A',material_name:'甲'},{material_code:'B',material_name:'乙'}];
+const warehouses=[{code:'W',name:'仓库'}];
+const form={parts:['A','B','A'],wh:'W',flag:'禁止',remark:'  低频需求  '};
+const result=expand(form,materials,warehouses,[]);
+assert.deepEqual(result.rows.map(r=>[r.code,r.whCode,r.stock_flag,r.remark]),[['A','W','禁止','低频需求'],['B','W','禁止','低频需求']]);
+assert.equal(expand({...form,parts:['A']},materials,warehouses,[]).rows.length,1);
+assert.ok(expand(form,materials,warehouses,[{code:'A',whCode:'W'}]).error);
+assert.equal(expand(form,materials,warehouses,[{code:'A',whCode:'OTHER'}]).rows.length,2);
+for(const patch of [{parts:[]},{parts:['INVALID']},{wh:'INVALID'},{flag:''},{remark:'x'.repeat(501)}])assert.ok(expand({...form,...patch},materials,warehouses,[]).error);
+console.log('PASS 单选/多选展开、重复组合整批拒绝、主数据和必填校验');
