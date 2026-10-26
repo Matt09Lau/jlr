@@ -3,7 +3,8 @@
 'use strict';
 const F=(key,label,type='text',options)=>({key,label,type,options});
 const part=F('part','配件号','select',['LR000001','LR000002','LR000003','LR000004','LR000005','LR000006','LR000007','LR000008']);
-const wh=F('wh','仓库编码','select',['SH01','BJ01','GZ01','CD01']);
+const network=root.CSPPWarehouseNetwork||(typeof module!=='undefined'?require('./warehouse-network.js'):null);
+const wh=F('wh','仓库编码','select',network.warehouses.map(w=>w.code));
 const abc=F('abc','ABC分类','select',['A','B','C','D','E']);
 const n=(k,l)=>F(k,l,'number'), sel=(k,l,o)=>F(k,l,'select',o);
 const meta=[F('modifier','修改人名称'),F('updated','更新时间')];
@@ -34,7 +35,7 @@ const buildTypes=['PO 建储','STO 建储'];
 const buildTypePages=['service','increase','risk','riskRule','cycle'];
 for(const k of buildTypePages){schemas[k].cols.unshift(sel('buildType','建储类型',buildTypes));schemas[k].edit.unshift('buildType');schemas[k].filters.unshift('buildType');schemas[k].unique.unshift('buildType');}
 const names=['机油滤清器','空气滤清器','前制动片','燃油泵','冷却液管','点火线圈','车门锁','转向机'];
-const whNames={SH01:'上海中心仓',BJ01:'北京区域仓',GZ01:'广州区域仓',CD01:'成都区域仓'};
+const whNames=network.names;
 const today=()=>shanghaiDate();
 const stamp=()=>new Date().toLocaleString('sv-SE');
 // 周版本按ISO周历：周一开周，周四所属年份为周历年；日期用上海时区。
@@ -50,13 +51,13 @@ function effective(r,date=today()){
  return{days:0,start:'',end:'',status:!latest?'未生效':date<latest.start?'待生效':'已失效'};
 }
 function effectiveFields(r,date=today()){const snap=effective(r,date);return{effectiveDays:snap.days,effectiveStart:snap.start,effectiveEnd:snap.end};}
-function seed(key){return Array.from({length:key==='increase'?12:16},(_,i)=>{
- let r={...(buildTypePages.includes(key)?{buildType:buildTypes[Math.floor(i/6)%2]}:{}),id:key+'-'+i,part:part.options[i%8],wh:wh.options[Math.floor(i/8)%4],abc:['A','B','C','D','E'][i%5],modifier:'演示用户',updated:stamp()};
+function seed(key){return Array.from({length:key==='increase'?12:key==='transfer'?network.routes.length:20},(_,i)=>{
+ let r={...(buildTypePages.includes(key)?{buildType:buildTypes[Math.floor(i/6)%2]}:{}),id:key+'-'+i,part:part.options[i%8],wh:wh.options[i%wh.options.length],abc:['A','B','C','D','E'][i%5],modifier:'演示用户',updated:stamp()};
  if(key==='purchase')Object.assign(r,{part:part.options[i%8],planner:['张计划','李计划'][i%2],method:['手工维护','50分位数'][i%2],lt:25+i,samples:32+i*3,q25:18+i,q50:24+i,q75:30+i,q95:40+i,calcDate:today()});
- if(key==='service'){r.type=types[i%2];r.rate=95+i%5;r.service='';r.partAbc='A';if(i%2)r.part='';else r.abc='';r.wh=wh.options[Math.floor(i/4)%4];}
+ if(key==='service'){r.type=types[i%2];r.rate=95+i%5;r.service='';r.partAbc='A';if(i%2)r.part='';else r.abc='';r.wh=wh.options[i%wh.options.length];}
  if(key==='stocking')Object.assign(r,{ruleNo:'STK'+String(i+1).padStart(4,'0'),allowed:i%3?'允许':'禁止',start:today(),enabled:i%4?'启用':'停用',remark:'演示备货配置'});
- if(key==='transfer'){r.shipWh=wh.options[Math.floor(i/3)%4];r.receiveWh=wh.options[(Math.floor(i/3)+1+i%3)%4];r.lt=2+i%6;}
- if(key==='increase'){r.part=part.options[i%8];r.wh=wh.options[Math.floor(i/8)];Object.assign(r,{applicant:i>=6?'王经理（计划经理）':'张计划（计划员）',days:3+i,start:'2026-01-01',end:'2030-01-01',status:statusList[i%6],reason:'旺季备货需求',history:[]});if(i>=6&&r.status==='待计划经理确认')r.status='待库存控制高级经理确认';if(i>=6)r.start=today();if(i>=6&&i%6!==3)r.approved={days:2,start:'2026-01-01',end:'2027-01-01'};if(i%6===4)r.history.push({at:stamp(),action:'驳回',reason:'请补充增储依据'});}
+ if(key==='transfer'){r.shipWh=network.routes[i%network.routes.length].from;r.receiveWh=network.routes[i%network.routes.length].to;r.lt=2+i%6;}
+ if(key==='increase'){r.part=part.options[i%8];r.wh=wh.options[i%wh.options.length];Object.assign(r,{applicant:i>=6?'王经理（计划经理）':'张计划（计划员）',days:3+i,start:'2026-01-01',end:'2030-01-01',status:statusList[i%6],reason:'旺季备货需求',history:[]});if(i>=6&&r.status==='待计划经理确认')r.status='待库存控制高级经理确认';if(i>=6)r.start=today();if(i>=6&&i%6!==3)r.approved={days:2,start:'2026-01-01',end:'2027-01-01'};if(i%6===4)r.history.push({at:stamp(),action:'驳回',reason:'请补充增储依据'});}
  if(key==='cycle'){r.type=i%2?'ABC分类计划周期':'配件计划周期';r.cycle=r.buildType==='PO 建储'?cycleOptions[i%cycleOptions.length]:7+i%4*7;if(i%2)r.part='';else r.abc='';}
  if(key==='risk'||key==='riskRule')Object.assign(r,{minCoef:0.8,minDays:-2,maxCoef:1.2,maxDays:3,xyz:['X','Y','Z'][i%3],volume:['大','中','小'][i%3]});
  if(key==='result')Object.assign(r,{buildType:i%2?'STO 建储':'PO 建储',shipWh:i%2?wh.options[(Math.floor(i/8)+1)%4]:'',target:120+i*8,min:80+i*4,max:180+i*8,riskTarget:120+i*8,riskReorder:i%2?'':85+i*4,floor:i%2?'':100,floorTarget:i%2?'':Math.max(120+i*8,100),floorReorder:i%2?'':85+i*4,adjustTarget:'',adjustReorder:'',adjustReason:'',weekly:i%2?35+i:'',weeklyDate:i%2?today():'',weeklySales:i%2?31+i:'',monthly:i%2?'':145+i,monthlyDate:i%2?'':today(),monthlySales:i%2?'':137+i,volatility:4.2,purchaseDays:i%2?'':30,transferDays:i%2?3:'',cycle:7,days:5,start:'2026-01-01',end:'2030-01-01',rate:98,service:'',planner:'张计划'});
@@ -106,10 +107,10 @@ if(!root.Vue)return;
 const {ref,reactive,computed,watch}=root.Vue;
 root.JlrInventoryStrategy={props:{pageKey:String},setup(props){
  const key=computed(()=>props.pageKey.replace('strategy-',''));const schema=computed(()=>schemas[key.value]);
- const store=reactive({});for(const k of Object.keys(schemas)){try{const saved=JSON.parse(localStorage.getItem('jlr-strategy-v1-'+k));store[k]=Array.isArray(saved)?migrate(k,saved):seed(k);}catch{store[k]=seed(k);}}
- const persist=()=>{for(const k in store)localStorage.setItem('jlr-strategy-v1-'+k,JSON.stringify(store[k]));};
+ const store=reactive({});for(const k of Object.keys(schemas)){try{const saved=JSON.parse(localStorage.getItem('jlr-strategy-network-v1-'+k));store[k]=Array.isArray(saved)?migrate(k,saved):seed(k);}catch{store[k]=seed(k);}}
+ const persist=()=>{for(const k in store)localStorage.setItem('jlr-strategy-network-v1-'+k,JSON.stringify(store[k]));};
  // 保存首次补齐的版本与使用日期，后续刷新继续使用同一结果快照。
- localStorage.setItem('jlr-strategy-v1-result',JSON.stringify(store.result));
+ localStorage.setItem('jlr-strategy-network-v1-result',JSON.stringify(store.result));
  const query=reactive({}),applied=ref({}),expanded=ref(false),selected=ref([]),hidden=ref([]);
  const modal=ref(false),mode=ref('new'),form=reactive({}),errors=ref([]),batch=ref(false),parts=ref([]),warehouses=ref([]),preview=ref([]),previewed=ref(false);
  const importOpen=ref(false),importText=ref(''),importRows=ref([]),importErrors=ref([]),importChecked=ref(false),actionOpen=ref(false),actionName=ref(''),actionIds=ref([]),actionReason=ref('');

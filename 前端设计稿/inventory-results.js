@@ -855,7 +855,8 @@ const definitions={
   ]
 };
 definitions.STO.splice(definitions.STO.findIndex(f=>f.key==='adjustTarget')+1,0,{key:'adjustReorder',label:'调整后再订购点',sourceOrder:null,sourceLabel:'用户确认新增',logic:'STO支持人工维护再订购点；未维护时为空，不代表新增系统计算公式。',type:'text'});
-const warehouses={SH01:'上海中心仓',BJ01:'北京区域仓',GZ01:'广州区域仓',CD01:'成都区域仓'};
+const network=root.CSPPWarehouseNetwork||(typeof module!=='undefined'?require('./warehouse-network.js'):null);
+const warehouses=network.names;
 const partNames=['机油滤清器','空气滤清器','前制动片','燃油泵','冷却液管','点火线圈','车门锁','转向机'];
 for(const [key,after] of [['reorder','targetBreak'],['reorderBreak','reorder'],['riskReorder','riskTarget']]){const f=definitions.PO.find(f=>f.key===key);definitions.STO.splice(definitions.STO.findIndex(f=>f.key===after)+1,0,{...f,sourceOrder:null,logic:'STO结果展示字段；当前使用演示快照，生产计算口径待确认。'});}
 definitions.STO=definitions.STO.filter(f=>f.key!=='weeklyRiskSales');
@@ -894,12 +895,13 @@ function finalize(input){
  return r;
 }
 function seed(kind,reference=dateNow()){
- return Array.from({length:16},(_,i)=>{
+ return Array.from({length:(kind==='PO'?network.centers.length:network.routes.length)*8},(_,i)=>{
+ const route=network.routes[Math.floor(i/8)%network.routes.length],warehouse=kind==='PO'?network.centers[Math.floor(i/8)]:route.to;
  const po=kind==='PO',fallback=po&&i%4===0,direct=po&&i%7===6,forbidden=!po&&i%7===6;
  const low=100,high=450,target=i%3===0?500:i%3===1?80:300,reorder=i%5===0?500:i%5===4?80:200;
  const riskReorder=Math.max(low,Math.min(high,reorder)),riskTarget=po?Math.min(riskReorder+150,high):Math.max(low,Math.min(high,target));
  const floor=po?(fallback?550:50):null,apply=fallback&&riskTarget<floor;
- const r={id:'result-v5-'+kind+'-'+i,buildType:po?'PO 建储':'STO 建储',...period(kind,i,reference),part:'LR'+String(i%8+1).padStart(6,'0'),partName:partNames[i%8],wh:Object.keys(warehouses)[Math.floor(i/8)],whName:warehouses[Object.keys(warehouses)[Math.floor(i/8)]],shipWh:po?'':'GZ01',shipName:po?'':'广州区域仓',target,reorder,min:low,max:high,riskTarget,riskReorder,floor,floorReason:apply?'低频配件兜底规则':'',floorTarget:po?(apply?floor:riskTarget):null,floorReorder:po?(apply?Math.ceil(.75*floor):riskReorder):null,floorMin:po?(apply?Math.ceil(.5*floor):low):null,floorMax:po?(apply?floor:high):null,noStockReason:direct?'直供供应商，无需建储':forbidden?'备货规则禁止备货':'',abc:['A','B','C','D'][i%4],xyz:['X','Y','Z'][i%3],volume:['大','中','小'][i%3],planner:['张计划','李计划'][i%2],monthly:po?80+i*10:null,monthlyDate:po?reference+' 08:00:00':null,monthlySales:po?75+i*5:null,weekly:po?null:35+i,weeklyDate:po?null:reference+' 08:00:00',weeklySales:po?null:30+i,weeklyRiskSales:po?null:28+i,volatility:po?45+i:7+i*.2,purchaseDays:po?45:null,transferDays:po?null:3,cycle:po?7:null,transferCycle:po?null:7,days:i%3?5:0,start:i%3?'2026-01-01':'',end:i%3?'2030-01-01':'',rate:98,service:2.05,maxCoef:1.2,maxDays:3,minCoef:.8,minDays:-2,manualTarget:null,manualReorder:null,manualMin:null,manualMax:null,manualReason:'',updated:stamp(),history:[],calcStatus:'成功',formulaVersion:'待生产定版'};
+ const r={id:'result-v5-'+kind+'-'+i,buildType:po?'PO 建储':'STO 建储',...period(kind,i,reference),part:'LR'+String(i%8+1).padStart(6,'0'),partName:partNames[i%8],wh:warehouse,whName:warehouses[warehouse],shipWh:po?'':route.from,shipName:po?'':warehouses[route.from],target,reorder,min:low,max:high,riskTarget,riskReorder,floor,floorReason:apply?'低频配件兜底规则':'',floorTarget:po?(apply?floor:riskTarget):null,floorReorder:po?(apply?Math.ceil(.75*floor):riskReorder):null,floorMin:po?(apply?Math.ceil(.5*floor):low):null,floorMax:po?(apply?floor:high):null,noStockReason:direct?'直供供应商，无需建储':forbidden?'备货规则禁止备货':'',abc:['A','B','C','D'][i%4],xyz:['X','Y','Z'][i%3],volume:['大','中','小'][i%3],planner:['张计划','李计划'][i%2],monthly:po?80+i*10:null,monthlyDate:po?reference+' 08:00:00':null,monthlySales:po?75+i*5:null,weekly:po?null:35+i,weeklyDate:po?null:reference+' 08:00:00',weeklySales:po?null:30+i,weeklyRiskSales:po?null:28+i,volatility:po?45+i:7+i*.2,purchaseDays:po?45:null,transferDays:po?null:3,cycle:po?7:null,transferCycle:po?null:7,days:i%3?5:0,start:i%3?'2026-01-01':'',end:i%3?'2030-01-01':'',rate:98,service:2.05,maxCoef:1.2,maxDays:3,minCoef:.8,minDays:-2,manualTarget:null,manualReorder:null,manualMin:null,manualMax:null,manualReason:'',updated:stamp(),history:[],calcStatus:'成功',formulaVersion:'待生产定版'};
  for(const k of Object.keys(sourcePairs))if(present(r[k]))r[sourcePairs[k]]=i%3===0||k==='transferCycle'?'全局参数':'配置表';
  if(i===2){r.manualTarget=po?350:320;r.manualReason='季节活动备货';}
  return finalize(r);
@@ -935,9 +937,9 @@ const {ref,reactive,computed,watch}=root.Vue;
 root.CsppStorageResultsComponent={setup(){
  const columnFilters=ref({});
  const kind=ref('PO'),expanded=ref(false),q=reactive({}),applied=ref({}),page=ref(1),message=ref(''),error=ref(''),modal=ref(false),mode=ref('detail'),current=ref(null),manual=reactive({}),saveErrors=ref([]);
- let initial;try{initial=JSON.parse(localStorage.getItem('cspp-storage-results-v5'));}catch{}
+ let initial;try{initial=JSON.parse(localStorage.getItem('cspp-storage-results-network-v1'));}catch{}
  const records=ref(Array.isArray(initial)&&initial.length?initial.map(r=>finalize(r)):[...seed('PO'),...seed('STO')]);
- const persist=()=>localStorage.setItem('cspp-storage-results-v5',JSON.stringify(records.value));persist();
+ const persist=()=>localStorage.setItem('cspp-storage-results-network-v1',JSON.stringify(records.value));persist();
  const fields=computed(()=>definitions[kind.value]);const allRows=computed(()=>sortResults(records.value.filter(r=>r.buildType===kind.value+' 建储'),kind.value));
  const rows=computed(()=>filterRows(allRows.value,{...applied.value,columnFilters:columnFilters.value}));
  const sourceFields=computed(()=>fields.value.filter(f=>f.type==='source'));

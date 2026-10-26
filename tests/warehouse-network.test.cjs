@@ -1,0 +1,5 @@
+const assert=require('node:assert/strict');const n=require('../前端设计稿/warehouse-network.js');const results=require('../前端设计稿/inventory-results.js');const strategy=require('../前端设计稿/inventory-strategy.js');
+assert.equal(n.warehouses.length,10);assert.equal(new Set(n.warehouses.map(w=>w.code)).size,10);assert.deepEqual(n.warehouses.find(w=>w.code==='CN00').roles,['中心仓','区域仓']);
+assert.equal(n.routes.length,11);assert(n.routes.every(r=>r.from!==r.to&&n.names[r.from]&&n.names[r.to]));
+assert.deepEqual(n.routes.filter(r=>r.from==='CJDC').map(r=>r.to),['CJV0','CJV1','CJV2','CJV3']);assert.deepEqual(n.routes.filter(r=>r.from==='JB09').map(r=>r.to),['CN00','CN01','CN02','CN03']);assert.deepEqual(n.routes.filter(r=>r.from==='CN00').map(r=>r.to),['CN01','CN02','CN03']);
+const po=results.seed('PO'),sto=results.seed('STO');assert.equal(new Set(po.map(r=>r.wh)).size,3);assert(sto.every(r=>n.routes.some(p=>p.from===r.shipWh&&p.to===r.wh)));assert.equal(new Set(sto.map(r=>r.shipWh+'|'+r.wh)).size,11);assert(strategy.seed('transfer').every(r=>n.routes.some(p=>p.from===r.shipWh&&p.to===r.receiveWh)));console.log('PASS 10个唯一仓库、CN00双角色、11条有效链路及各页面造数一致');

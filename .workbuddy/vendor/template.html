@@ -3551,10 +3551,11 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 </script>
 <script>__VENDOR_VUE__</script>
 <script>__VENDOR_ANTD__</script>
+<script src="warehouse-network.js?v=20261026-real-network"></script>
 <script src="stocking-rules.js?v=20261026-create"></script>
 <script src="global-parameters.js?v=20261023-service-factor"></script>
-<script src="inventory-results.js?v=20261023-target-direction"></script>
-<script src="inventory-strategy.js?v=20261023-increase-periods"></script>
+<script src="inventory-results.js?v=20261026-real-network"></script>
+<script src="inventory-strategy.js?v=20261026-real-network"></script>
 <script>
 /* ================= 模拟数据（确定性随机，每次打开一致） ================= */
 let _seed = 20260918;
@@ -3562,14 +3563,7 @@ function rnd(){ _seed = (_seed*9301+49297)%233280; return _seed/233280; }
 function pick(a){ return a[Math.floor(rnd()*a.length)]; }
 function rint(a,b){ return Math.floor(a+rnd()*(b-a+1)); }
 
-const warehouses = [
-  { code:'CJDC', name:'昆山中心库', type:2 },
-  { code:'SH01', name:'上海区域库', type:1 },
-  { code:'BJ01', name:'北京区域库', type:1 },
-  { code:'GZ01', name:'广州区域库', type:1 },
-  { code:'CD01', name:'成都区域库', type:1 },
-  { code:'CJPK', name:'昆山收货仓', type:3 },
-];
+const warehouses = window.CSPPWarehouseNetwork.warehouses;
 const vehicles = [
   ['L462','揽胜 Range Rover'],['L405','揽胜运动版'],['L494','揽胜运动版'],
   ['X760','XF 轿车'],['X761','F-PACE'],['L551','揽胜极光'],['L663','卫士 Defender'],['L538','XJ 轿车'],
@@ -3635,8 +3629,8 @@ warehouses.forEach(wh => {
   });
 });
 
-function persistWhRules(){const state={};records.forEach(r=>state[r.whCode+'|'+r.code]={stock_flag:r.stock_flag,remark:r.remark||'',updateTime:r.updateTime,...(r._manualRule?{_manualRule:true,id:r.id,code:r.code,name:r.name,whCode:r.whCode,whName:r.whName,sync_data_time:r.sync_data_time}:{})});localStorage.setItem('cspp-stock-rules-v1',JSON.stringify(state));}
-try{const saved=JSON.parse(localStorage.getItem('cspp-stock-rules-v1')||'{}');Object.values(saved).filter(v=>v._manualRule&&!records.some(r=>r.code===v.code&&r.whCode===v.whCode)).forEach(v=>records.unshift(v));records.forEach(r=>{const v=saved[r.whCode+'|'+r.code];if(v)Object.assign(r,v);else r.remark=r.stock_flag==='允许'?'常规需求，允许备货':'低频需求，暂不备货';});}catch{records.forEach(r=>r.remark='');}
+function persistWhRules(){const state={};records.forEach(r=>state[r.whCode+'|'+r.code]={stock_flag:r.stock_flag,remark:r.remark||'',updateTime:r.updateTime,...(r._manualRule?{_manualRule:true,id:r.id,code:r.code,name:r.name,whCode:r.whCode,whName:r.whName,sync_data_time:r.sync_data_time}:{})});localStorage.setItem('cspp-stock-rules-network-v1',JSON.stringify(state));}
+try{const saved=JSON.parse(localStorage.getItem('cspp-stock-rules-network-v1')||'{}');Object.values(saved).filter(v=>v._manualRule&&!records.some(r=>r.code===v.code&&r.whCode===v.whCode)).forEach(v=>records.unshift(v));records.forEach(r=>{const v=saved[r.whCode+'|'+r.code];if(v)Object.assign(r,v);else r.remark=r.stock_flag==='允许'?'常规需求，允许备货':'低频需求，暂不备货';});}catch{records.forEach(r=>r.remark='');}
 
 /* ================= 经销商主数据（ods_dealer）模拟 ================= */
 const dealerCities = [
@@ -3764,7 +3758,8 @@ const whData = Vue.reactive(warehouses.map((w, i)=>({
   warehouse_code: w.code,
   warehouse_name: w.name,
   warehouse_type: w.type,
-  warehouse_type_text: whTypeTextMap[w.type],
+  warehouse_roles: w.roles.map(r=>r==='中心仓'?2:1),
+  warehouse_type_text: w.roles.length>1?'中心库 / 区域库':whTypeTextMap[w.type],
   sync_data_time: '2026-09-' + pad2(rint(10,18)) + ' 0' + rint(1,3) + ':' + pad2(rint(10,59)),
 })));
 
@@ -4343,8 +4338,8 @@ for(let i=0;i<64;i++){
 const stoNetworks = ['CJLR','JLR','JLRC'];
 const stoRouteCodes = ['RT-CJ-SH','RT-CJ-BJ','RT-CJ-GZ','RT-CJ-CD','RT-JL-SH','RT-JL-BJ','RT-JL-GZ','RT-JL-CD'];
 const stoVehicleCodes = ['X260','F-PACE','E-PACE','XEL','XFL','DEFENDER','DISCOVERY'];
-const stoToWhs = ['SH01 上海','BJ01 北京','GZ01 广州','CD01 成都'];
-const stoFromWhs = ['CJDC 昆山中心库','SH01 上海','BJ01 北京','GZ01 广州','CD01 成都'];
+const stoToWhs = window.CSPPWarehouseNetwork.regions.map(c=>c+' '+window.CSPPWarehouseNetwork.names[c]);
+const stoFromWhs = window.CSPPWarehouseNetwork.centers.map(c=>c+' '+window.CSPPWarehouseNetwork.names[c]);
 /* 字段口径＝PRD 5.4.4.1 计划结果表 29 字段（最新）：
    数据生成日期 / 计划批次 / 计划行 / 计划类型 / 配件号 / 配件名称 / 发货仓 / 收货仓 /
    收货仓最低风控线 / 收货仓目标库存 / 是否出计划日 / ABC分类 / 车型代码 / 计划员 /
@@ -4364,8 +4359,9 @@ const stoPlanData = Vue.reactive([]);
       id++;
       const m = matData[(id*3) % matData.length];
       const network = stoNetworks[id % 3];
-      const toWh = stoToWhs[id % stoToWhs.length];
-      const fromWh = (id % 7 === 0) ? stoFromWhs[1 + (id % 4)] : stoFromWhs[0]; // 多数由中心仓调出，少数区域仓互调
+      const route = window.CSPPWarehouseNetwork.routes[id % window.CSPPWarehouseNetwork.routes.length];
+      const toWh = route.to+' '+window.CSPPWarehouseNetwork.names[route.to];
+      const fromWh = route.from+' '+window.CSPPWarehouseNetwork.names[route.from];
       const routeCode = stoRouteCodes[id % stoRouteCodes.length];
       const mpq = [10,20,25,50,100][id % 5];
       const unitVolume = [0.012,0.02,0.035,0.05,0.08][id % 5];   // 体积（m³）
@@ -4488,7 +4484,7 @@ const poAtbData = Vue.reactive([]);
 // Bridge Buy 计划：每个配件一行，买断区间内（第 1 年 ~ 买断年）多年预测需求一次性出单，扣减属地预期库存
 const poBridgeData = Vue.reactive([]);
 (function buildPoBridge(){
-  const whs = [['CJDC','昆山中心库'],['SH01','上海'],['BJ01','北京'],['GZ01','广州'],['CD01','成都']];
+  const whs = warehouses.map(w=>[w.code,w.name]);
   // 每个配件的买断区间长度（年）：1~10 年区间一次性下计划
   const buyoutYears = [3,6,2,8,4,5,7,2,9,5];
   for(let i=0;i<10;i++){
@@ -5766,6 +5762,7 @@ const app = createApp({
         for(const f of def.filters){
           const v = ap[f.key];
           if(v===undefined || v==='') continue;
+          if(activeMenu.value==='wh-master'&&f.field==='warehouse_type'){if(!r.warehouse_roles.includes(Number(v)))return false;continue;}
           const fv = r[f.field || f.key];
           if(f.type==='select'){ if(String(fv)!==String(v)) return false; }
           else { if(!String(fv).toLowerCase().includes(String(v).toLowerCase())) return false; }
@@ -5954,7 +5951,7 @@ const app = createApp({
         filters:[
           { key:'part_code', label:'配件号', type:'input', w:140 },
           { key:'part_name', label:'配件名称', type:'input', w:170 },
-          { key:'wh_code', label:'收货仓库', type:'select', w:130, options:['CJDC','SH01','BJ01','GZ01','CD01'] },
+          { key:'wh_code', label:'收货仓库', type:'select', w:130, options:warehouses.map(w=>w.code) },
           { key:'bill_status', label:'单据状态', type:'select', w:120, options:poRegStatuses },
           { key:'planner', label:'计划员', type:'select', w:110, options:fcPlanners },
         ],
@@ -6969,12 +6966,7 @@ const app = createApp({
       GLR:[93.5,94.2,94.8,95.6,95.1,96.3,96.8,97.2,97.6,97.9,98.2,98.0],
       JRC:[88.4,90.2,89.5,92.1,91.4,93.8,92.6,85.3,90.0,93.0,94.5,96.0],
     };
-    const svcWhTop = [
-      { name:'CJDC', v:99.6 }, { name:'CN00', v:99.3 }, { name:'CN01', v:99.0 },
-      { name:'CN02', v:98.7 }, { name:'CN03', v:98.4 }, { name:'CN04', v:98.0 },
-      { name:'CJV0', v:97.6 }, { name:'CJV1', v:97.2 }, { name:'CJV2', v:96.8 },
-      { name:'CJV3', v:96.3 }, { name:'CJCO', v:95.8 }, { name:'CJPK', v:95.2 },
-    ];
+    const svcWhTop = warehouses.map((w,i)=>({name:w.code,v:99.6-i*.4}));
     const svcVehTop = [
       { name:'揽胜 Range Rover', v:99.4 }, { name:'卫士 Defender', v:98.9 },
       { name:'揽胜运动版', v:98.5 }, { name:'F-PACE', v:98.2 },
