@@ -204,7 +204,7 @@
   .p3-imp-line{font-size:13px;color:#1f1f1f;line-height:1.8;}
   .p3-imp-err{margin-top:8px;padding-top:8px;border-top:1px dashed #e6e6e6;font-size:12px;color:#ff4d4f;line-height:1.7;}
   .mini-tag{display:inline-block;background:#f0f5ff;color:#2f54eb;border-radius:4px;padding:0 6px;font-size:11px;margin-left:6px;}
-  /* ===== 需求预测 / 全新车型配件预测 ===== */
+  /* ===== 需求预测 / 参考零件需求预测 ===== */
   .fc-new-card{padding:16px 18px;}
   .fc-new-body{display:flex;gap:22px;min-height:560px;}
   .fc-steps{flex:0 0 240px;border-right:1px solid #f0f0f0;padding-right:18px;}
@@ -237,6 +237,7 @@
   .fc-trend-legend .ln.fct{border-top:2px dashed #fa8c16;}
   .fc-trend-legend .ln.split{border-top:2px dashed #8c8c8c;}
   .fc-trend-legend .ln.adj{border-top:2px solid #52c41a;}
+  .fc-trend-legend .ln.buyout{border-top:2px solid #f5222d;}
   /* 需求预测 / 预测模拟（Backtest） */
   .bt-card{padding:16px 18px;}
   .bt-hd{border-bottom:1px solid #f0f0f0;padding-bottom:10px;margin-bottom:14px;}
@@ -257,6 +258,16 @@
   .bt-form .ant-form-item{margin-bottom:10px;}
   .bt-split{border:1px solid #f0f0f0;border-radius:6px;padding:12px 14px;margin:6px 0 12px;background:#fafafa;}
   .bt-split-lab{font-size:12px;color:#595959;font-weight:600;margin-bottom:8px;}
+  /* ===== 统一弹窗风格（对齐「库存策略参数」：居中弹窗 + 双列表单网格 + 右对齐操作栏） ===== */
+  .jlrs-modal-footer{display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #edf0f5;margin-top:24px;padding-top:16px;}
+  .jlrs-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px;}
+  .jlrs-form-grid>label{display:flex;flex-direction:column;gap:8px;color:#45536a;font-size:13px;}
+  .jlrs-form-grid .ant-select,.jlrs-form-grid .ant-input-number,.jlrs-form-grid .ant-picker{width:100%;}
+  .jlrs-form-grid-3{grid-template-columns:repeat(3,minmax(0,1fr));}
+  .jlrs-req{color:#ff4d4f;margin-right:2px;}
+  .jlrs-sec{font-size:13px;font-weight:600;color:#1f1f1f;margin:4px 0 12px;}
+  .fc-bridge-total-row>td{background:#fafafa !important;font-weight:600;border-top:1px solid #d9d9d9;}
+  .fc-bridge-cur-th{background:#e6f4ff !important;color:#1677ff !important;}
   .bt-split-bar{display:flex;height:26px;border-radius:4px;overflow:hidden;border:1px solid #e6e6e6;}
   .bt-seg{font-size:12px;color:#fff;display:flex;align-items:center;justify-content:center;white-space:nowrap;overflow:hidden;}
   .bt-seg.train{background:#1677ff;} .bt-seg.valid{background:#fa8c16;} .bt-seg.test{background:#8c8c8c;}
@@ -738,6 +749,802 @@
           <template v-else-if="activeMenu==='strategy-result'"><inventory-results/></template>
           <template v-else-if="activeMenu.startsWith('strategy-')"><inventory-strategy :page-key="activeMenu" :key="activeMenu"/></template>
 
+          <!-- 常规采购计划 -->
+          <template v-else-if="activeMenu==='po-regular'">
+
+            <!-- 页签 -->
+            <a-tabs v-model:activeKey="poRegTab" type="card" style="margin-bottom:12px;">
+              <a-tab-pane v-for="t in poRegTabs" :key="t.key" :tab="t.label + (t.key==='全部' ? '' : '（'+poRegTabCount(t.key)+'）')"/>
+            </a-tabs>
+
+            <!-- 筛选卡片 -->
+            <div class="card">
+              <div class="filter-row">
+                <div class="filter-items">
+                  <div class="f-item"><span class="f-label">配件号</span>
+                    <a-input v-model:value="poRegFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">配件名称</span>
+                    <a-input v-model:value="poRegFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">当前采购件号</span>
+                    <a-input v-model:value="poRegFilters.cur_purchase_code" placeholder="当前采购件号" style="width:150px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">建储仓库编码</span>
+                    <a-input v-model:value="poRegFilters.wh_code" placeholder="建储仓库编码" style="width:130px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">建储仓库名称</span>
+                    <a-input v-model:value="poRegFilters.wh_name" placeholder="建储仓库名称" style="width:150px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">计划类型</span>
+                    <a-select v-model:value="poRegFilters.plan_type" placeholder="计划类型" style="width:140px" allow-clear
+                      :options="poRegPlanTypes.map(v=>({value:v,label:v}))"/></div>
+                  <div class="f-item"><span class="f-label">车型代码</span>
+                    <a-input v-model:value="poRegFilters.vehicle_code" placeholder="车型代码" style="width:130px" allow-clear/></div>
+                  <template v-if="poRegFilterExpanded">
+                    <div class="f-item"><span class="f-label">ABC分类</span>
+                      <a-select v-model:value="poRegFilters.abc_class" placeholder="ABC分类" style="width:110px" allow-clear
+                        :options="[{value:'A',label:'A'},{value:'B',label:'B'},{value:'C',label:'C'}]"/></div>
+                    <div class="f-item"><span class="f-label">采购类别</span>
+                      <a-select v-model:value="poRegFilters.purchase_type" placeholder="采购类别" style="width:120px" allow-clear
+                        :options="poRegPurchaseTypes.map(v=>({value:v,label:v}))"/></div>
+                    <div class="f-item"><span class="f-label">计划员</span>
+                      <a-select v-model:value="poRegFilters.planner" placeholder="计划员" style="width:110px" allow-clear
+                        :options="fcPlanners.map(v=>({value:v,label:v}))"/></div>
+                    <div class="f-item"><span class="f-label">单据状态</span>
+                      <a-select v-model:value="poRegFilters.bill_status" placeholder="单据状态" style="width:120px" allow-clear
+                        :options="poRegStatuses.map(v=>({value:v,label:v}))"/></div>
+                    <div class="f-item"><span class="f-label">计划批次</span>
+                      <a-input v-model:value="poRegFilters.plan_batch" placeholder="计划批次" style="width:130px" allow-clear/></div>
+                    <div class="f-item"><span class="f-label">当前可用天数</span>
+                      <a-input v-model:value="poRegFilters.cover_days" placeholder="当前可用天数" style="width:120px" allow-clear/></div>
+                  </template>
+                </div>
+                <div class="filter-actions">
+                  <a-button type="primary" @click="poRegDoSearch">搜索</a-button>
+                  <a-button @click="poRegResetFilters">重置</a-button>
+                  <span class="act" :style="{color:poRegFav?'#faad14':''}" @click="poRegToggleFav">{{ poRegFav ? '★' : '☆' }}</span>
+                  <span class="act" @click="msg('分享链接已复制（设计稿示意）')">⤴</span>
+                  <span class="act" @click="poRegFilterExpanded=!poRegFilterExpanded">
+                    <span class="txt">{{ poRegFilterExpanded ? '收起' : '展开' }}</span><span style="font-size:10px;">▾</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 表格卡片 -->
+            <div class="card" style="margin-bottom:0;">
+              <div class="toolbar-row">
+                <a-button type="primary" :disabled="!poRegCanSubmit" @click="poRegSubmit">提交</a-button>
+                <a-button :disabled="!poRegCanWithdraw" @click="poRegWithdraw">撤回</a-button>
+                <a-button :disabled="!poRegCanApprove" @click="poRegApproveOpen=true">审批通过</a-button>
+                <a-button danger :disabled="!poRegCanReject" @click="poRegRejectOpen=true">驳回</a-button>
+                <a-button @click="poRegImportOpen=true">⬆ 导入</a-button>
+                <a-dropdown>
+                  <a-button>更多 <span style="font-size:10px;">▾</span></a-button>
+                  <template #overlay>
+                    <a-menu @click="poRegMoreMenu">
+                      <a-menu-item key="exp">导出</a-menu-item>
+                      <a-menu-item key="expAll">全量导出</a-menu-item>
+                      <a-menu-item key="push">推送</a-menu-item>
+                    </a-menu>
+                  </template>
+                </a-dropdown>
+                <span style="margin-left:8px;color:#888;font-size:12px;" v-if="poRegSelected.length">已选 {{ poRegSelected.length }} 行</span>
+                <div class="toolbar-icons">
+                  <a-dropdown>
+                    <span title="密度" @click.stop="() => {}">↕</span>
+                    <template #overlay>
+                      <a-menu @click="({key})=>tableSize=key">
+                        <a-menu-item key="large">默认</a-menu-item>
+                        <a-menu-item key="middle">中等</a-menu-item>
+                        <a-menu-item key="small">紧凑</a-menu-item>
+                      </a-menu>
+                    </template>
+                  </a-dropdown>
+                  <a-dropdown :trigger="['click']">
+                    <span title="列设置" @click.stop="() => {}">⚙</span>
+                    <template #overlay>
+                      <a-card style="width:220px;max-height:460px;overflow:auto;" :body-style="{padding:'8px 12px'}">
+                        <div style="font-weight:600;margin-bottom:6px;">列展示设置</div>
+                        <div class="col-set-item" v-for="c in poRegColumns.filter(x=>x.key!=='action')" :key="c.key">
+                          <a-checkbox :checked="!poRegHiddenCols.includes(c.key)" @change="poRegToggleCol(c.key)"/>{{ c.title }}
+                        </div>
+                      </a-card>
+                    </template>
+                  </a-dropdown>
+                  <span title="全屏" @click="toggleFull">⛶</span>
+                </div>
+              </div>
+
+              <a-table
+                :columns="poRegVisibleColumns"
+                :data-source="poRegPaged"
+                :pagination="false"
+                :size="tableSize"
+                row-key="id"
+                :row-selection="poRegRowSelection"
+                :scroll="{x: poRegScrollX}"
+                :custom-row="poRegCustomRow"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key==='part_code'">
+                    <a @click.stop="poRegOpenDetail(record)">{{ record.part_code }}</a>
+                  </template>
+                  <template v-else-if="column.key==='cur_purchase_code'">
+                    <a @click.stop="poRegOpenDetail(record)">{{ record.cur_purchase_code }}</a>
+                  </template>
+                  <template v-else-if="column.key==='bill_status'">
+                    <a-tag :color="poRegBillColor(record.bill_status)" style="margin:0;">{{ record.bill_status }}</a-tag>
+                  </template>
+                  <template v-else-if="column.key==='is_blocked'">
+                    <a-tag :color="record.is_blocked==='是'?'red':'green'" style="margin:0;">{{ record.is_blocked }}</a-tag>
+                  </template>
+                  <template v-else-if="column.key==='is_joint_moq' || column.key==='is_plan_day'">
+                    <a-tag :color="record[column.dataIndex]==='是'?'blue':'default'" style="margin:0;">{{ record[column.dataIndex] }}</a-tag>
+                  </template>
+                  <template v-else-if="column.key==='action'">
+                    <span class="link-btn" v-if="record.bill_status==='待提交' || record.bill_status==='已驳回'" @click.stop="poRegOpenEdit(record)">编辑</span>
+                    <span class="link-btn" @click.stop="poRegOpenDetail(record)">详情</span>
+                  </template>
+                  <template v-else>{{ record[column.dataIndex] }}</template>
+                </template>
+                <template #emptyText><a-empty description="暂无数据"/></template>
+              </a-table>
+
+              <div class="pager-row">
+                <span class="total">共 {{ poRegFiltered.length }} 条</span>
+                <a-pagination
+                  v-model:current="poRegPage.current"
+                  v-model:pageSize="poRegPage.size"
+                  :total="poRegFiltered.length"
+                  :page-size-options="['15','30','50']"
+                  show-size-changer
+                  :show-quick-jumper="true"
+                />
+              </div>
+            </div>
+
+            <!-- 编辑 / 调整弹窗（统一居中弹窗，风格对齐「库存策略参数」） -->
+            <a-modal v-model:open="poRegEditOpen" title="调整 · 常规采购计划" :width="920" :footer="null" :mask-closable="false">
+              <template v-if="poRegEditRow">
+                <a-alert v-if="poRegEditErrList.length" type="error" :message="poRegEditErrList.join('；')" show-icon style="margin-bottom:16px;"/>
+                <a-descriptions bordered size="small" :column="2" style="margin-bottom:20px;">
+                  <a-descriptions-item label="计划类型">{{ poRegEditRow.plan_type }}</a-descriptions-item>
+                  <a-descriptions-item label="配件号">{{ poRegEditRow.part_code }}</a-descriptions-item>
+                  <a-descriptions-item label="配件名称">{{ poRegEditRow.part_name }}</a-descriptions-item>
+                  <a-descriptions-item label="建储仓库">{{ poRegEditRow.wh_code + ' ' + poRegEditRow.wh_name }}</a-descriptions-item>
+                  <a-descriptions-item label="推荐计划数量">{{ poRegEditRow.suggest_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="当前可用天数">{{ poRegEditRow.cover_days }}</a-descriptions-item>
+                </a-descriptions>
+                <div class="jlrs-form-grid">
+                  <label><span><b class="jlrs-req">*</b>调整计划数量</span>
+                    <a-input-number v-model:value="poRegEditRow.adjust_qty" :min="0" :precision="0" placeholder="请输入调整计划数量"/></label>
+                  <label><span><b class="jlrs-req">*</b>调整原因</span>
+                    <a-input v-model:value="poRegEditRow.adjust_reason" placeholder="调整数量时必填，100 字以内" :maxlength="100" allow-clear/></label>
+                  <label><span>要求到货日期</span>
+                    <a-date-picker v-model:value="poRegEditRow._req_date" :disabled="poRegEditRow.plan_type!=='紧急采购计划'" value-format="YYYY-MM-DD" placeholder="紧急采购计划可维护"/></label>
+                </div>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="poRegEditOpen=false">取消</a-button>
+                  <a-button type="primary" @click="poRegSaveEdit">确定</a-button>
+                </div>
+              </template>
+            </a-modal>
+
+            <!-- 审批通过弹窗 -->
+            <a-modal v-model:open="poRegApproveOpen" title="审批通过 · 常规采购计划" :width="560" :footer="null" :mask-closable="false">
+              <a-alert v-if="poRegApproveErr" type="error" :message="poRegApproveErr" show-icon style="margin-bottom:16px;"/>
+              <div class="jlrs-form-grid">
+                <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>审批意见</span>
+                  <a-textarea v-model:value="poRegApproveRemark" :rows="3" placeholder="请输入审批意见，100 字以内" :maxlength="100"/></label>
+              </div>
+              <div class="jlrs-modal-footer">
+                <a-button @click="poRegApproveOpen=false">取消</a-button>
+                <a-button type="primary" @click="poRegApproveConfirm">确认通过</a-button>
+              </div>
+            </a-modal>
+
+            <!-- 驳回弹窗 -->
+            <a-modal v-model:open="poRegRejectOpen" title="驳回 · 常规采购计划" :width="560" :footer="null" :mask-closable="false">
+              <a-alert v-if="poRegRejectErr" type="error" :message="poRegRejectErr" show-icon style="margin-bottom:16px;"/>
+              <div class="jlrs-form-grid">
+                <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>驳回意见</span>
+                  <a-textarea v-model:value="poRegRejectRemark" :rows="3" placeholder="请填写驳回原因，100 字以内" :maxlength="100"/></label>
+              </div>
+              <div class="jlrs-modal-footer">
+                <a-button @click="poRegRejectOpen=false">取消</a-button>
+                <a-button danger @click="poRegRejectConfirm">确认驳回</a-button>
+              </div>
+            </a-modal>
+
+            <!-- 导出弹窗 -->
+            <a-modal v-model:open="poRegExportOpen" title="导出 · 常规采购计划" :width="600" :footer="null" :mask-closable="false">
+              <a-radio-group v-model:value="poRegExportMode" style="margin-bottom:14px;">
+                <a-radio value="template">按模板导出</a-radio>
+                <a-radio value="custom">按自选字段导出</a-radio>
+              </a-radio-group>
+              <div v-if="poRegExportMode==='custom'" style="max-height:320px;overflow:auto;border:1px solid #edf0f5;padding:8px 12px;border-radius:6px;">
+                <a-checkbox v-for="c in poRegColumns.filter(x=>x.key!=='action')" :key="c.key"
+                  :checked="poRegExportFields.includes(c.key)" @change="poRegToggleExportField(c.key)" style="display:block;margin:4px 0;">
+                  {{ c.title }}
+                </a-checkbox>
+              </div>
+              <div class="jlrs-modal-footer">
+                <a-button @click="poRegExportOpen=false">取消</a-button>
+                <a-button type="primary" @click="poRegDoExport">导出</a-button>
+              </div>
+            </a-modal>
+
+            <!-- 详情弹窗（统一居中弹窗，只读） -->
+            <a-modal v-model:open="poRegDetailOpen" title="详情 · 常规采购计划" :width="920" :footer="null" :mask-closable="false">
+              <template v-if="poRegDetailRow">
+                <a-descriptions bordered :column="2" size="small">
+                  <a-descriptions-item v-for="c in poRegColumns.filter(x=>x.key!=='action')" :key="c.key" :label="c.title">{{ poRegDetailRow[c.dataIndex] }}</a-descriptions-item>
+                </a-descriptions>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="poRegDetailOpen=false">关闭</a-button>
+                </div>
+              </template>
+            </a-modal>
+
+            <!-- 导入弹窗（设计稿示意） -->
+            <a-modal v-model:open="poRegImportOpen" title="导入 · 常规采购计划" :width="850" :footer="null" :mask-closable="false">
+              <a-upload-dragger :multiple="true" :show-upload-list="false" @change="()=>{}">
+                <p class="ant-upload-drag-icon">⬆</p>
+                <p class="ant-upload-text">点击或拖拽 Excel / CSV 文件到此处</p>
+              </a-upload-dragger>
+              <div class="jlrs-modal-footer">
+                <a-button @click="poRegImportOpen=false">取消</a-button>
+                <a-button type="primary" @click="poRegDoImport">提交导入</a-button>
+              </div>
+            </a-modal>
+          </template>
+
+          <!-- ============ 6. 采购计划扩展：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划 ============ -->
+          <template v-else-if="poPlanKeys.includes(activeMenu)">
+
+            <!-- 审批状态页签（顶部，与常规采购计划一致） -->
+            <a-tabs v-model:activeKey="poPlanTab" type="card" style="margin-bottom:12px;">
+              <a-tab-pane v-for="t in poPlanTabs" :key="t.key" :tab="t.label + (t.key==='全部' ? '' : '（'+poPlanTabCount(t.key)+'）')"/>
+            </a-tabs>
+
+            <!-- 筛选卡片 -->
+            <div class="card">
+              <div class="filter-row">
+                <div class="filter-items">
+                  <div class="f-item" v-for="f in poPlanPage.filters" :key="f.key">
+                    <span class="f-label">{{ f.label }}</span>
+                    <a-select v-if="f.type==='select'" v-model:value="poPlanFiltersCur[f.key]" :placeholder="f.label"
+                      :style="{width:(f.w||120)+'px'}" allow-clear :options="f.options.map(v=>({value:v,label:v}))"/>
+                    <a-input v-else v-model:value="poPlanFiltersCur[f.key]" :placeholder="f.label"
+                      :style="{width:(f.w||140)+'px'}" allow-clear/>
+                  </div>
+                </div>
+                <div class="filter-actions">
+                  <a-button type="primary" @click="poPlanSearch">搜索</a-button>
+                  <a-button @click="poPlanReset">重置</a-button>
+                  <span class="act" :style="{color:poPlanFav?'#faad14':''}" @click="poPlanFav=!poPlanFav">{{ poPlanFav ? '★' : '☆' }}</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 表格卡片 -->
+            <div class="card" style="margin-bottom:0;">
+              <div class="toolbar-row">
+                <a-button v-if="poPlanPage.batch" type="primary" @click="poAtbBatchOpen=true">批量下计划</a-button>
+                <a-button type="primary" :disabled="!poPlanCanSubmit" @click="poPlanSubmit">提交</a-button>
+                <a-button :disabled="!poPlanCanWithdraw" @click="poPlanWithdraw">撤回</a-button>
+                <a-button :disabled="!poPlanCanApprove" @click="poPlanApproveOpen=true">审批通过</a-button>
+                <a-button danger :disabled="!poPlanCanReject" @click="poPlanRejectOpen=true">驳回</a-button>
+                <a-button @click="poPlanExport">导出</a-button>
+                <span style="margin-left:8px;color:#888;font-size:12px;" v-if="poPlanSelKeys.length">已选 {{ poPlanSelKeys.length }} 行</span>
+                <div class="toolbar-icons">
+                  <span title="全屏" @click="toggleFull">⛶</span>
+                </div>
+              </div>
+
+              <a-table
+                :columns="poPlanPage.columns"
+                :data-source="poPlanPaged"
+                :pagination="false"
+                :size="tableSize"
+                row-key="id"
+                :row-selection="poPlanRowSelection"
+                :scroll="{x: poPlanScrollX}"
+                :custom-row="poPlanCustomRow"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key==='part_code'">
+                    <a v-if="poPlanPage.trend" @click.stop="openTrendModal(record)">{{ record.part_code }}</a>
+                    <span v-else>{{ record.part_code }}</span>
+                  </template>
+                  <template v-else-if="column.key==='bill_status'">
+                    <a-tag :color="poPlanStatusColor(record.bill_status)" style="margin:0;">{{ record.bill_status }}</a-tag>
+                  </template>
+                  <template v-else-if="column.key==='eop_flag'">
+                    <a-tag :color="record[column.dataIndex]==='是' ? 'orange' : 'default'" style="margin:0;">{{ record[column.dataIndex] }}</a-tag>
+                  </template>
+                  <template v-else-if="column.key==='action'">
+                    <span class="link-btn" v-if="poPlanCanEdit(record)" @click.stop="poPlanOpenEdit(record)">编辑</span>
+                    <span class="link-btn" @click.stop="poPlanOpenDetail(record)">详情</span>
+                    <span class="link-btn" v-if="poPlanPage.trend" @click.stop="openTrendModal(record)">趋势图</span>
+                  </template>
+                  <template v-else>{{ record[column.dataIndex] }}</template>
+                </template>
+                <template #emptyText><a-empty description="暂无数据"/></template>
+              </a-table>
+
+              <div class="pager-row">
+                <span class="total">共 {{ poPlanRows.length }} 条</span>
+                <a-pagination
+                  v-model:current="poPlanPageCur.current"
+                  v-model:pageSize="poPlanPageCur.size"
+                  :total="poPlanRows.length"
+                  :page-size-options="['15','30','50']"
+                  show-size-changer
+                  :show-quick-jumper="true"
+                />
+              </div>
+            </div>
+
+            <!-- 调整弹窗 -->
+            <a-modal v-model:open="poPlanEditOpen" :title="'调整 · ' + poPlanPage.title" :width="640" :footer="null" :mask-closable="false">
+              <template v-if="poPlanEditRow">
+                <a-alert v-if="poPlanEditErr" type="error" :message="poPlanEditErr" show-icon style="margin-bottom:12px;"/>
+                <a-descriptions bordered :column="2" size="small" style="margin-bottom:16px;">
+                  <a-descriptions-item label="配件号">{{ poPlanEditRow.part_code }}</a-descriptions-item>
+                  <a-descriptions-item label="配件名称">{{ poPlanEditRow.part_name }}</a-descriptions-item>
+                  <a-descriptions-item label="需求口径">{{ poPlanPage.title==='All Time Buy 计划' ? '全生命周期累计需求' : (poPlanPage.title==='Bridge Buy 计划' ? '区间预测需求' : '参考件预测需求量') }}</a-descriptions-item>
+                  <a-descriptions-item label="需求数量">{{ poPlanPage.title==='All Time Buy 计划' ? poPlanEditRow.life_demand : (poPlanPage.title==='Bridge Buy 计划' ? poPlanEditRow.forecast_qty : poPlanEditRow.forecast_qty) }}</a-descriptions-item>
+                  <a-descriptions-item label="预期库存">{{ poPlanEditRow.expected_stock }}</a-descriptions-item>
+                  <a-descriptions-item label="净需求">{{ poPlanEditRow.net_demand }}</a-descriptions-item>
+                  <a-descriptions-item label="MOQ / MPQ">{{ poPlanEditRow.moq + ' / ' + poPlanEditRow.mpq }}</a-descriptions-item>
+                  <a-descriptions-item label="采购计划数量">{{ poPlanEditRow.plan_qty }}</a-descriptions-item>
+                </a-descriptions>
+                <div class="jlrs-form-grid">
+                  <label><span><span class="jlrs-req">*</span>调整计划数量</span>
+                    <a-input-number v-model:value="poPlanEditRow.adjust_qty" :min="0" :precision="0" style="width:100%" placeholder="非负整数"/></label>
+                  <label><span>调整原因</span>
+                    <a-input v-model:value="poPlanEditRow.adjust_reason" :maxlength="100" allow-clear
+                      placeholder="调整数量与采购计划数量不一致时必填"/></label>
+                </div>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="poPlanEditOpen=false">取消</a-button>
+                  <a-button type="primary" @click="poPlanSaveEdit">保存</a-button>
+                </div>
+              </template>
+            </a-modal>
+
+            <!-- 详情弹窗（只读） -->
+            <a-modal v-model:open="poPlanDetailOpen" :title="'详情 · ' + poPlanPage.title" :width="920" :footer="null" :mask-closable="false">
+              <template v-if="poPlanDetailRow">
+                <div v-if="poPlanPage.trend" style="margin-bottom:14px;display:flex;align-items:center;gap:10px;">
+                  <a @click.stop="openTrendModal(poPlanDetailRow)" style="color:#1677ff;cursor:pointer;font-weight:600;">📈 查看历史销量与预期趋势图</a>
+                  <span style="color:#8c8c8c;font-size:12px;">（供审批前再评估需求合理性）</span>
+                </div>
+                <a-descriptions bordered :column="2" size="small">
+                  <a-descriptions-item v-for="c in poPlanPage.columns.filter(x=>x.key!=='action')" :key="c.key" :label="c.title">
+                    {{ poPlanDetailRow[c.dataIndex] }}
+                  </a-descriptions-item>
+                </a-descriptions>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="poPlanDetailOpen=false">关闭</a-button>
+                </div>
+              </template>
+            </a-modal>
+
+            <!-- 审批通过 / 驳回 -->
+            <a-modal v-model:open="poPlanApproveOpen" :title="'审批通过 · ' + poPlanPage.title" :width="560" :footer="null" :mask-closable="false">
+              <a-alert v-if="poPlanApproveErr" type="error" :message="poPlanApproveErr" show-icon style="margin-bottom:16px;"/>
+              <label style="display:flex;flex-direction:column;gap:8px;">
+                <span><span class="jlrs-req">*</span>审批意见</span>
+                <a-textarea v-model:value="poPlanApproveRemark" :rows="3" placeholder="请输入审批意见，100 字以内" :maxlength="100"/>
+              </label>
+              <div class="jlrs-modal-footer">
+                <a-button @click="poPlanApproveOpen=false">取消</a-button>
+                <a-button type="primary" @click="poPlanApproveConfirm">确认通过</a-button>
+              </div>
+            </a-modal>
+            <a-modal v-model:open="poPlanRejectOpen" :title="'驳回 · ' + poPlanPage.title" :width="560" :footer="null" :mask-closable="false">
+              <a-alert v-if="poPlanRejectErr" type="error" :message="poPlanRejectErr" show-icon style="margin-bottom:16px;"/>
+              <label style="display:flex;flex-direction:column;gap:8px;">
+                <span><span class="jlrs-req">*</span>驳回意见</span>
+                <a-textarea v-model:value="poPlanRejectRemark" :rows="3" placeholder="请输入驳回意见，100 字以内" :maxlength="100"/>
+              </label>
+              <div class="jlrs-modal-footer">
+                <a-button @click="poPlanRejectOpen=false">取消</a-button>
+                <a-button danger type="primary" @click="poPlanRejectConfirm">确认驳回</a-button>
+              </div>
+            </a-modal>
+
+            <!-- 批量下计划（仅 All Time Buy 计划）：从一次买断预测结果勾选配件生成计划 -->
+            <a-modal v-model:open="poAtbBatchOpen" title="批量下计划 · All Time Buy 计划" :width="1000" :footer="null" :mask-closable="false">
+              <a-alert type="info" :show-icon="true" style="margin-bottom:12px;">
+                <template #message>从一次买断预测结果中选择配件，系统按「十年累计需求 − 全国预期库存 → MPQ/MOQ 取整」生成 All Time Buy 计划（待提交）。</template>
+              </a-alert>
+              <a-table :columns="poAtbBatchCols" :data-source="poAtbBatchRows" row-key="id" size="small" bordered
+                :row-selection="poAtbBatchRowSelection" :pagination="{pageSize:8}" :scroll="{x:900}"/>
+              <div class="jlrs-modal-footer">
+                <a-button @click="poAtbBatchOpen=false">取消</a-button>
+                <a-button type="primary" :disabled="!poAtbBatchSel.length" @click="poAtbBatchGen">生成计划（{{ poAtbBatchSel.length }}）</a-button>
+              </div>
+            </a-modal>
+
+            <!-- 采购计划页：预测趋势图弹窗（历史实际销量 + 预测销量；Bridge 高亮买断区间） -->
+            <a-modal v-model:open="trendModal.open" :width="1020" :footer="null" destroy-on-close @after-close="closeTrendModal">
+              <template #title>
+                预测趋势 · {{ trendModal.row ? trendModal.row.part_code + ' ' + trendModal.row.part_name : '' }}
+              </template>
+              <div v-if="trendModal.row" class="fc-trend-hd">
+                <span>配件号：<b>{{ trendModal.row.part_code }}</b></span>
+                <span>配件名称：<b>{{ trendModal.row.part_name }}</b></span>
+                <span v-if="trendModal.row.planner">计划员：<b>{{ trendModal.row.planner }}</b></span>
+                <span v-if="trendModal.row.wh_code">仓库：<b>{{ trendModal.row.wh_code }} {{ trendModal.row.wh_name }}</b></span>
+                <span v-if="trendModal.row.data_date">数据日期：<b>{{ trendModal.row.data_date }}</b></span>
+              </div>
+              <div v-if="trendModal.row" class="fc-trend-legend">
+                <span><i class="ln hist"></i>{{ trendHistLabel }}</span>
+                <span><i class="ln fct"></i>{{ trendFctLabel }}</span>
+                <span v-if="trendAdjusted"><i class="ln adj"></i>人工调整预测结果（{{ trendAdjDesc }}）</span>
+                <span><i class="ln split"></i>{{ trendModal.row.trendSplit }} 为历史 / 预测分界（虚线右侧为预测）</span>
+                <span v-if="trendModal.row.trendBuyoutTo"><i class="ln buyout"></i>红色区间为买断覆盖年份</span>
+              </div>
+              <a-alert v-if="trendAdjusted" type="warning" show-icon banner style="margin-bottom:6px;"
+                message="该配件预测值存在人工调整：绿线为调整后的预测结果，橙虚线为系统原始预测值，可对照查看各期调整幅度。"/>
+              <div id="fcTrendChart" style="width:100%;height:390px;"></div>
+            </a-modal>
+          </template>
+
+          <!-- ============ 5. 调拨计划（STO）：本周调拨计划（执行） / 下周调拨计划（预排） ============ -->
+          <template v-else-if="activeMenu==='sto-week' || activeMenu==='sto-next'">
+
+            <!-- 筛选卡片 -->
+            <div class="card">
+              <div class="filter-row">
+                <div class="filter-items">
+                  <div class="f-item"><span class="f-label">配件号</span>
+                    <a-input v-model:value="stoFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">配件名称</span>
+                    <a-input v-model:value="stoFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">发货仓</span>
+                    <a-select v-model:value="stoFilters.from_wh" placeholder="发货仓" style="width:150px" allow-clear
+                      :options="stoFromWhs.map(v=>({value:v,label:v}))"/></div>
+                  <div class="f-item"><span class="f-label">收货仓</span>
+                    <a-select v-model:value="stoFilters.to_wh" placeholder="收货仓" style="width:150px" allow-clear
+                      :options="stoToWhs.map(v=>({value:v,label:v}))"/></div>
+                  <div class="f-item"><span class="f-label">仓网</span>
+                    <a-select v-model:value="stoFilters.network_id" placeholder="仓网" style="width:110px" allow-clear
+                      :options="stoNetworks.map(v=>({value:v,label:v}))"/></div>
+                  <div class="f-item"><span class="f-label">计划类型</span>
+                    <a-select v-model:value="stoFilters.plan_type" placeholder="计划类型" style="width:130px" allow-clear
+                      :options="stoPlanTypeOptions.map(v=>({value:v,label:v}))"/></div>
+                  <div class="f-item"><span class="f-label">计划批次</span>
+                    <a-input v-model:value="stoFilters.plan_batch" placeholder="计划批次" style="width:130px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">ABC分类</span>
+                    <a-select v-model:value="stoFilters.abc_class" placeholder="ABC分类" style="width:110px" allow-clear
+                      :options="[{value:'A',label:'A'},{value:'B',label:'B'},{value:'C',label:'C'}]"/></div>
+                  <template v-if="stoFilterExpanded">
+                    <div class="f-item"><span class="f-label">计划员</span>
+                      <a-select v-model:value="stoFilters.planner" placeholder="计划员" style="width:110px" allow-clear
+                        :options="fcPlanners.map(v=>({value:v,label:v}))"/></div>
+                    <div class="f-item"><span class="f-label">运输线路</span>
+                      <a-select v-model:value="stoFilters.route_code" placeholder="运输线路" style="width:140px" allow-clear
+                        :options="stoRouteCodes.map(v=>({value:v,label:v}))"/></div>
+                  </template>
+                </div>
+                <div class="filter-actions">
+                  <a-button type="primary" @click="stoDoSearch">搜索</a-button>
+                  <a-button @click="stoResetFilters">重置</a-button>
+                  <span class="act" :style="{color:stoFav?'#faad14':''}" @click="stoToggleFav">{{ stoFav ? '★' : '☆' }}</span>
+                  <span class="act" @click="msg('分享链接已复制（设计稿示意）')">⤴</span>
+                  <span class="act" @click="stoFilterExpanded=!stoFilterExpanded">
+                    <span class="txt">{{ stoFilterExpanded ? '收起' : '展开' }}</span><span style="font-size:10px;">▾</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 表格卡片 -->
+            <div class="card" style="margin-bottom:0;">
+              <div class="toolbar-row">
+                <a-button type="primary" @click="stoExportOpen=true">导出</a-button>
+                <div class="toolbar-icons">
+                  <a-dropdown>
+                    <span title="密度" @click.stop="() => {}">↕</span>
+                    <template #overlay>
+                      <a-menu @click="({key})=>tableSize=key">
+                        <a-menu-item key="large">默认</a-menu-item>
+                        <a-menu-item key="middle">中等</a-menu-item>
+                        <a-menu-item key="small">紧凑</a-menu-item>
+                      </a-menu>
+                    </template>
+                  </a-dropdown>
+                  <a-dropdown :trigger="['click']">
+                    <span title="列设置" @click.stop="() => {}">⚙</span>
+                    <template #overlay>
+                      <a-card style="width:220px;max-height:460px;overflow:auto;" :body-style="{padding:'8px 12px'}">
+                        <div style="font-weight:600;margin-bottom:6px;">列展示设置</div>
+                        <div class="col-set-item" v-for="c in stoColumns.filter(x=>x.key!=='action')" :key="c.key">
+                          <a-checkbox :checked="!stoHiddenCols.includes(c.key)" @change="stoToggleCol(c.key)"/>{{ c.title }}
+                        </div>
+                      </a-card>
+                    </template>
+                  </a-dropdown>
+                  <span title="全屏" @click="toggleFull">⛶</span>
+                </div>
+              </div>
+
+              <a-table
+                :columns="stoVisibleColumns"
+                :data-source="stoPaged"
+                :pagination="false"
+                :size="tableSize"
+                row-key="id"
+                :scroll="{x: stoScrollX}"
+                :custom-row="stoCustomRow"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key==='part_code'">
+                    <a @click.stop="stoOpenDetail(record)">{{ record.part_code }}</a>
+                  </template>
+                  <template v-else-if="column.key==='plan_type'">
+                    <a-tag :color="record.plan_type==='紧急调拨计划'?'orange':'blue'" style="margin:0;">{{ record.plan_type }}</a-tag>
+                  </template>
+                  <template v-else-if="column.key==='action'">
+                    <span class="link-btn" @click.stop="stoOpenDetail(record)">详情</span>
+                  </template>
+                  <template v-else>{{ record[column.dataIndex] }}</template>
+                </template>
+              </a-table>
+
+              <div class="pager-row">
+                <span class="total">共 {{ stoFiltered.length }} 条</span>
+                <a-pagination
+                  v-model:current="stoPage.current"
+                  v-model:pageSize="stoPage.size"
+                  :total="stoFiltered.length"
+                  :page-size-options="['15','30','50']"
+                  show-size-changer
+                  :show-quick-jumper="true"
+                />
+              </div>
+            </div>
+
+            <!-- 详情弹窗：仅字段详情 + 备注编辑 -->
+            <a-modal v-model:open="stoDetailOpen" :width="920" :footer="null" :mask-closable="false"
+              :title="'详情 · ' + (stoIsWeek ? '本周调拨计划' : '下周调拨计划')">
+              <template v-if="stoDetailRow">
+                <a-descriptions bordered size="small" :column="2">
+                  <a-descriptions-item label="数据生成日期">{{ stoDetailRow.data_gen_date }}</a-descriptions-item>
+                  <a-descriptions-item label="计划类型">{{ stoDetailRow.plan_type }}</a-descriptions-item>
+                  <a-descriptions-item label="计划批次">{{ stoDetailRow.plan_batch }}</a-descriptions-item>
+                  <a-descriptions-item label="计划行">{{ stoDetailRow.plan_line }}</a-descriptions-item>
+                  <a-descriptions-item label="配件号">{{ stoDetailRow.part_code }}</a-descriptions-item>
+                  <a-descriptions-item label="配件名称">{{ stoDetailRow.part_name }}</a-descriptions-item>
+                  <a-descriptions-item label="发货仓">{{ stoDetailRow.from_wh }}</a-descriptions-item>
+                  <a-descriptions-item label="收货仓">{{ stoDetailRow.to_wh }}</a-descriptions-item>
+                  <a-descriptions-item label="收货仓最低风控线">{{ stoDetailRow.safety_stock }}</a-descriptions-item>
+                  <a-descriptions-item label="收货仓目标库存">{{ stoDetailRow.target_stock }}</a-descriptions-item>
+                  <a-descriptions-item label="是否出计划日">{{ stoDetailRow.is_plan_day }}</a-descriptions-item>
+                  <a-descriptions-item label="ABC分类">{{ stoDetailRow.abc_class }}</a-descriptions-item>
+                  <a-descriptions-item label="车型代码">{{ stoDetailRow.vehicle_code }}</a-descriptions-item>
+                  <a-descriptions-item label="计划员">{{ stoDetailRow.planner }}</a-descriptions-item>
+                  <a-descriptions-item label="预期库存">{{ stoDetailRow.expected_stock }}</a-descriptions-item>
+                  <a-descriptions-item label="可用库存数量">{{ stoDetailRow.avail_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="欠交数量">{{ stoDetailRow.owed_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="库间在途数量">{{ stoDetailRow.transit_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="缺货数量">{{ stoDetailRow.shortage_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="近3个月月均销量">{{ stoDetailRow.avg3m_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="当前可用天数">{{ stoDetailRow.avail_days }}</a-descriptions-item>
+                  <a-descriptions-item label="库间LT（天）">{{ stoDetailRow.transfer_lt }}</a-descriptions-item>
+                  <a-descriptions-item label="要求到货日期">{{ stoDetailRow.required_arrival_date }}</a-descriptions-item>
+                  <a-descriptions-item label="推荐计划数量（取整前）">{{ stoDetailRow.raw_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="推荐计划数量（分配后）">{{ stoDetailRow.alloc_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="体积">{{ stoDetailRow.unit_volume }}</a-descriptions-item>
+                  <a-descriptions-item label="体积单位">{{ stoDetailRow.volume_unit }}</a-descriptions-item>
+                  <a-descriptions-item label="预计调拨体积">{{ stoDetailRow.est_volume }}</a-descriptions-item>
+                </a-descriptions>
+
+                <div class="bt-sec-t" style="margin:18px 0 10px;">备注<span class="bt-sec-sub">可在本弹窗内编辑并保存，保存后同步至列表</span></div>
+                <a-textarea v-model:value="stoDetailRemark" :rows="3" :maxlength="200" show-count placeholder="请输入备注（选填）"/>
+
+                <div class="jlrs-modal-footer">
+                  <a-button @click="stoDetailOpen=false">关闭</a-button>
+                  <a-button type="primary" @click="stoSaveRemark">保存备注</a-button>
+                </div>
+              </template>
+            </a-modal>
+
+            <!-- 导出调拨计划弹窗 -->
+            <a-modal v-model:open="stoExportOpen" title="导出调拨计划" :width="600" :footer="null" :mask-closable="false">
+              <div style="font-weight:600;margin-bottom:8px;">选择导出字段</div>
+              <div style="max-height:320px;overflow:auto;border:1px solid #eee;padding:8px 12px;border-radius:6px;">
+                <a-checkbox v-for="c in stoColumns.filter(x=>x.key!=='action')" :key="c.key"
+                  :checked="stoExportFields.includes(c.key)" @change="stoToggleExportField(c.key)" style="display:block;margin:4px 0;">
+                  {{ c.title }}
+                </a-checkbox>
+              </div>
+              <div class="jlrs-modal-footer">
+                <a-button @click="stoExportOpen=false">取消</a-button>
+                <a-button type="primary" @click="stoDoExport">导出</a-button>
+              </div>
+            </a-modal>
+          </template>
+
+          <!-- ============ 7. 给供应商的滚动计划（PRD 4.4.3.2 支持供应商协同，未来 6 个月） ============ -->
+          <template v-else-if="activeMenu==='po-roll'">
+
+            <!-- 同步状态页签 -->
+            <a-tabs v-model:activeKey="rollTab" type="card" style="margin-bottom:12px;">
+              <a-tab-pane v-for="t in rollTabs" :key="t.key" :tab="t.label + (t.key==='all' ? '' : '（'+rollTabCount(t.key)+'）')"/>
+            </a-tabs>
+
+            <!-- 筛选卡片 -->
+            <div class="card">
+              <div class="filter-row">
+                <div class="filter-items">
+                  <div class="f-item"><span class="f-label">供应商编码</span>
+                    <a-input v-model:value="rollFilters.supplier_code" placeholder="供应商编码" style="width:130px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">供应商名称</span>
+                    <a-input v-model:value="rollFilters.supplier_name" placeholder="供应商名称" style="width:190px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">配件号</span>
+                    <a-input v-model:value="rollFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">配件名称</span>
+                    <a-input v-model:value="rollFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">计划批次</span>
+                    <a-input v-model:value="rollFilters.plan_batch" placeholder="计划批次" style="width:130px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">同步状态</span>
+                    <a-select v-model:value="rollFilters.sync_status" placeholder="同步状态" style="width:140px" allow-clear
+                      :options="rollSyncStatuses.map(v=>({value:v,label:v}))"/></div>
+                  <template v-if="rollFilterExpanded">
+                    <div class="f-item"><span class="f-label">车型</span>
+                      <a-select v-model:value="rollFilters.vehicle_code" placeholder="车型" style="width:120px" allow-clear
+                        :options="poRegVehicleCodes.map(v=>({value:v,label:v}))"/></div>
+                    <div class="f-item"><span class="f-label">采购LT(月)</span>
+                      <a-select v-model:value="rollFilters.purchase_lt" placeholder="采购LT" style="width:110px" allow-clear
+                        :options="[2,3,4,6].map(v=>({value:v,label:v+' 个月'}))"/></div>
+                  </template>
+                </div>
+                <div class="filter-actions">
+                  <a-button type="primary" @click="rollDoSearch">搜索</a-button>
+                  <a-button @click="rollResetFilters">重置</a-button>
+                  <span class="act" :style="{color:rollFav?'#faad14':''}" @click="rollFav=!rollFav">{{ rollFav ? '★' : '☆' }}</span>
+                  <span class="act" @click="msg('分享链接已复制（设计稿示意）')">⤴</span>
+                  <span class="act" @click="rollFilterExpanded=!rollFilterExpanded">
+                    <span class="txt">{{ rollFilterExpanded ? '收起' : '展开' }}</span><span style="font-size:10px;">▾</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 表格卡片 -->
+            <div class="card" style="margin-bottom:0;">
+              <div class="toolbar-row">
+                <a-button type="primary" :disabled="!rollCanSync" @click="rollOpenPublish">同步到 SAP</a-button>
+                <a-button @click="rollExportOpen=true">导出</a-button>
+                <span style="margin-left:8px;color:#888;font-size:12px;" v-if="rollSelKeys.length">已选 {{ rollSelKeys.length }} 行</span>
+                <div class="toolbar-icons">
+                  <a-dropdown>
+                    <span title="密度" @click.stop="() => {}">↕</span>
+                    <template #overlay>
+                      <a-menu @click="({key})=>tableSize=key">
+                        <a-menu-item key="large">默认</a-menu-item>
+                        <a-menu-item key="middle">中等</a-menu-item>
+                        <a-menu-item key="small">紧凑</a-menu-item>
+                      </a-menu>
+                    </template>
+                  </a-dropdown>
+                  <span title="全屏" @click="toggleFull">⛶</span>
+                </div>
+              </div>
+
+              <a-table
+                :columns="rollColumns"
+                :data-source="rollPaged"
+                :pagination="false"
+                :size="tableSize"
+                row-key="id"
+                :scroll="{x: rollScrollX }"
+                :row-selection="rollRowSelection"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key==='part_code'">
+                    <a @click.stop="rollOpenDetail(record)">{{ record.part_code }}</a>
+                  </template>
+                  <template v-else-if="column.key==='sync_status'">
+                    <a-tag :color="rollSyncColor(record.sync_status)" style="margin:0;">{{ record.sync_status }}</a-tag>
+                  </template>
+                  <template v-else-if="column.key==='month_total'">
+                    <b>{{ record.month_total }}</b>
+                  </template>
+                  <template v-else-if="column.key==='action'">
+                    <span class="link-btn" @click.stop="rollOpenDetail(record)">详情</span>
+                    <span class="link-btn" v-if="record.sync_status!=='已同步SAP'" @click.stop="rollPublishOne(record)">同步</span>
+                  </template>
+                  <template v-else>{{ record[column.dataIndex] }}</template>
+                </template>
+              </a-table>
+
+              <div class="pager-row">
+                <span class="total">共 {{ rollRows.length }} 条<span style="color:#8c8c8c;">（M1~M6 自「预测起始月份」起滚动 6 个自然月）</span></span>
+                <a-pagination
+                  v-model:current="rollPage.current"
+                  v-model:pageSize="rollPage.size"
+                  :total="rollRows.length"
+                  :page-size-options="['15','30','50']"
+                  show-size-changer
+                  :show-quick-jumper="true"
+                />
+              </div>
+            </div>
+
+            <!-- 详情弹窗：字段详情 + 6 个月滚动明细（月份 + 预测需求量） -->
+            <a-modal v-model:open="rollDetailOpen" title="详情 · 给供应商的滚动计划" :width="1000" :footer="null" :mask-closable="false">
+              <template v-if="rollDetailRow">
+                <a-descriptions bordered size="small" :column="2" style="margin-bottom:14px;">
+                  <a-descriptions-item label="数据日期">{{ rollDetailRow.data_date }}</a-descriptions-item>
+                  <a-descriptions-item label="计划批次">{{ rollDetailRow.plan_batch }}</a-descriptions-item>
+                  <a-descriptions-item label="计划行">{{ rollDetailRow.plan_line }}</a-descriptions-item>
+                  <a-descriptions-item label="采购LT（月）">{{ rollDetailRow.purchase_lt }}</a-descriptions-item>
+                  <a-descriptions-item label="供应商编码">{{ rollDetailRow.supplier_code }}</a-descriptions-item>
+                  <a-descriptions-item label="供应商名称">{{ rollDetailRow.supplier_name }}</a-descriptions-item>
+                  <a-descriptions-item label="配件号">{{ rollDetailRow.part_code }}</a-descriptions-item>
+                  <a-descriptions-item label="配件名称">{{ rollDetailRow.part_name }}</a-descriptions-item>
+                  <a-descriptions-item label="车型">{{ rollDetailRow.vehicle_code }}</a-descriptions-item>
+                  <a-descriptions-item label="计划数量（最终下单数量）">{{ rollDetailRow.plan_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="未来 6 个月合计">{{ rollDetailRow.month_total }}</a-descriptions-item>
+                  <a-descriptions-item label="同步状态">
+                    <a-tag :color="rollSyncColor(rollDetailRow.sync_status)" style="margin:0;">{{ rollDetailRow.sync_status }}</a-tag>
+                  </a-descriptions-item>
+                  <a-descriptions-item label="同步时间">{{ rollDetailRow.sync_time }}</a-descriptions-item>
+                  <a-descriptions-item label="同步人">{{ rollDetailRow.sync_by }}</a-descriptions-item>
+                  <a-descriptions-item label="预测起始月份">{{ rollDetailRow.start_month }}（M1，数据月+采购LT）</a-descriptions-item>
+                </a-descriptions>
+
+                <div class="bt-sec-t" style="margin:6px 0 10px;">6 个月滚动明细
+                  <span class="bt-sec-sub">各月值＝该自然月的预测需求量；月份自「预测起始月份」（数据月+采购LT）起滚动</span>
+                </div>
+                <a-table :columns="rollMonthDetailCols" :data-source="rollDetailRow.months" row-key="short"
+                  :pagination="false" size="small" bordered/>
+
+                <div class="jlrs-modal-footer">
+                  <a-button @click="rollDetailOpen=false">关闭</a-button>
+                  <a-button type="primary" v-if="rollDetailRow.sync_status!=='已同步SAP'" @click="rollPublishOne(rollDetailRow)">同步到 SAP</a-button>
+                </div>
+              </template>
+            </a-modal>
+
+            <!-- 同步到 SAP 确认弹窗 -->
+            <a-modal v-model:open="rollPublishOpen" title="同步滚动计划到 SAP" :width="620" :footer="null" :mask-closable="false">
+              <a-alert type="warning" :show-icon="true" style="margin-bottom:14px;">
+                <template #message>将把 <b>{{ rollPublishRows.length }}</b> 行计划、<b>{{ rollPublishSupplierCount }}</b> 家供应商的未来 6 个月滚动计划同步到 SAP；同步成功后回写「已同步SAP」与同步时间，供应商在 SAP 内查看。</template>
+              </a-alert>
+              <a-descriptions bordered size="small" :column="2" style="margin-bottom:14px;">
+                <a-descriptions-item label="数据日期">{{ rollDataDate }}</a-descriptions-item>
+                <a-descriptions-item label="预测起始月份">按各行采购LT（如 {{ rollPublishStartSample }}）</a-descriptions-item>
+                <a-descriptions-item label="覆盖月份">M1~M6（6 个自然月）</a-descriptions-item>
+                <a-descriptions-item label="同步目标">SAP</a-descriptions-item>
+              </a-descriptions>
+              <div class="bt-sec-t" style="margin:10px 0 8px;">同步说明<span class="bt-sec-sub">选填</span></div>
+              <a-textarea v-model:value="rollPublishNote" :rows="3" :maxlength="200" show-count placeholder="例如：本月滚动计划已按最新预测需求更新，请按各月预测需求量备货。"/>
+              <div class="jlrs-modal-footer">
+                <a-button @click="rollPublishOpen=false">取消</a-button>
+                <a-button type="primary" @click="rollDoPublish">确认同步</a-button>
+              </div>
+            </a-modal>
+
+            <!-- 导出滚动计划弹窗 -->
+            <a-modal v-model:open="rollExportOpen" title="导出滚动计划" :width="600" :footer="null" :mask-closable="false">
+              <div style="font-weight:600;margin-bottom:8px;">选择导出字段</div>
+              <div style="max-height:320px;overflow:auto;border:1px solid #eee;padding:8px 12px;border-radius:6px;">
+                <a-checkbox v-for="c in rollColumns.filter(x=>x.key!=='action')" :key="c.key"
+                  :checked="rollExportFields.includes(c.key)" @change="rollToggleExportField(c.key)" style="display:block;margin:4px 0;">
+                  {{ c.exportTitle || c.title }}
+                </a-checkbox>
+              </div>
+              <div class="jlrs-modal-footer">
+                <a-button @click="rollExportOpen=false">取消</a-button>
+                <a-button type="primary" @click="rollDoExport">导出</a-button>
+              </div>
+            </a-modal>
+          </template>
+
           <!-- ============ 通用主数据页面（配件 / 仓库 / 经销商扩展 / 供应商 / 替代链） ============ -->
           <template v-else-if="genericKeys.includes(activeMenu)">
 
@@ -780,16 +1587,15 @@
                 <a-button v-if="isFcLongBuyout && !fcEditMode" @click="fcEditMode=true">编辑</a-button>
                 <a-button v-if="isFcLongBuyout && fcEditMode" type="primary" @click="fcSaveForecast">保存</a-button>
                 <a-button v-if="activeMenu==='fc-wh-regular'" @click="fcSaveForecast">保存</a-button>
-                <a-button v-if="activeMenu==='fc-buyout' || activeMenu==='fc-buyout-draft'" @click="fcGenAllTimeBuy">生成All time buy计划</a-button>
-                <a-button v-if="activeMenu==='fc-long' || activeMenu==='fc-long-draft'" @click="fcGenBridgeBuy">生成bridge buy计划</a-button>
-                <a-button v-if="isFcLong" :disabled="!fcLongSel.length" @click="fcLongBatchM.open=true">批量调整（{{ fcLongSel.length }}）</a-button>
+                <a-button v-if="activeMenu==='fc-buyout' || activeMenu==='fc-buyout-draft'" @click="fcAllTimeOpen=true">生成All time buy计划</a-button>
+                <a-button v-if="activeMenu==='fc-long' || activeMenu==='fc-long-draft'" @click="fcBridgeOpen=true">生成bridge buy计划</a-button>
+                <a-button v-if="fcBatchable" :disabled="!fcBatchSelIds.length" @click="fcLongBatchM.open=true">批量调整（{{ fcBatchSelIds.length }}）</a-button>
                 <a-button v-if="activeMenu==='fc-regular' || activeMenu==='fc-wh-regular'" @click="fcGenRegularPo">生成常规采购计划</a-button>
                 <a-button v-if="activeDef.isExtension" type="default" @click="genImportOpen=true">⬆ 导入</a-button>
                 <a-button v-if="activeMenu==='part-group'" type="primary" @click="openPgModal('add')">＋ 新建分组</a-button>
                 <a-button v-if="activeMenu==='part-group'" :disabled="!pgSel.length" @click="pgBatchStatus('启用')">批量启用（{{ pgSel.length }}）</a-button>
                 <a-button v-if="activeMenu==='part-group'" :disabled="!pgSel.length" @click="pgBatchStatus('停用')">批量停用（{{ pgSel.length }}）</a-button>
                 <a-button v-if="activeMenu==='part-group'" danger :disabled="!pgSel.length" @click="pgBatchDelete">批量删除（{{ pgSel.length }}）</a-button>
-                <a-button v-if="activeMenu==='part-group'" @click="pgOpenImport">⬆ 批量导入配件</a-button>
                 <div class="toolbar-icons">
                   <a-dropdown>
                     <span title="密度" @click.stop="() => {}">↕</span>
@@ -886,8 +1692,16 @@
                     <a @click.stop="fcOpenRegMdl(record)">查看预测结果</a>
                   </template>
                   <template v-else-if="column.key==='action'">
-                    <span class="link-btn" @click.stop="openGenDetail(record)">详情</span>
-                    <span v-if="activeDef.isExtension || activeDef.editable" class="link-btn" @click.stop="openGenEdit(record)">编辑</span>
+                    <!-- 配件组管理：详情 / 编辑 / 删除（其余页面维持原逻辑） -->
+                    <template v-if="activeMenu==='part-group'">
+                      <span class="link-btn" @click.stop="openGenDetail(record)">详情</span>
+                      <span class="link-btn" @click.stop="openPgModal('edit', record)">编辑</span>
+                      <span class="link-btn" style="color:#ff4d4f;" @click.stop="pgOpenDelete(record)">删除</span>
+                    </template>
+                    <template v-else>
+                      <span class="link-btn" @click.stop="openGenDetail(record)">详情</span>
+                      <span v-if="activeDef.isExtension || activeDef.editable" class="link-btn" @click.stop="openGenEdit(record)">编辑</span>
+                    </template>
                   </template>
                   <template v-else>{{ record[column.dataIndex] }}</template>
                 </template>
@@ -993,7 +1807,7 @@
               <a-form layout="vertical">
                 <a-form-item label="调整范围">
                   <a-radio-group v-model:value="fcLongBatchM.source">
-                    <a-radio value="selected">已勾选行（{{ fcLongSel.length }}）</a-radio>
+                    <a-radio value="selected">已勾选行（{{ fcBatchSelIds.length }}）</a-radio>
                     <a-radio value="codes">导入配件号</a-radio>
                   </a-radio-group>
                 </a-form-item>
@@ -1034,20 +1848,84 @@
                   <a-input-number v-model:value="lcCoeffs[n-1]" :min="0" :step="0.01" :precision="4" style="width:100%" placeholder="正数，可含小数"/>
                 </div>
               </div>
-              <div style="margin-top:18px;text-align:right;">
+                <div style="margin-top:18px;text-align:right;">
                 <a-button @click="lcCoefOpen=false">取 消</a-button>
                 <a-button type="primary" style="margin-left:8px;" @click="lcSaveCoeffs">保 存</a-button>
               </div>
             </a-modal>
 
+            <!-- 生成 bridge buy 计划：勾选配件 → 选年份 → 配件 × 各年份需求宽表 → 生成计划 -->
+            <a-modal v-model:open="fcBridgeOpen" title="生成 bridge buy 计划" :width="1200" :footer="null" :mask-closable="false">
+              <template v-if="!fcBridgeDone">
+                <a-alert type="info" :show-icon="true" style="margin-bottom:14px;">
+                  <template #message>已选择 <b>{{ fcLongSel.length }}</b> 个配件（来自长周期预测报表勾选行）。请选择 bridge buy 年份，下方按配件维度展示该年份及以前各年的预测需求与合计。</template>
+                </a-alert>
+                <a-form layout="vertical">
+                  <a-form-item label="bridge buy 年份" required>
+                    <a-select v-model:value="fcBridgeYear" style="width:260px"
+                      :options="fcLongFctYears.map(v=>({value:v,label:v+' 年（第 '+(fcLongFctYears.indexOf(v)+1)+' 年预测）'}))"/>
+                  </a-form-item>
+                </a-form>
+
+                <div class="bt-sec-t" style="margin:6px 0 10px;">所选配件明细<span class="bt-sec-sub">仅展示所选年份及以前年份；末列与末行为区间合计，所选年份列头高亮</span></div>
+                <a-table :columns="fcBridgeDetailCols" :data-source="fcBridgeDetailRows" row-key="id"
+                  :pagination="false" size="small" bordered :row-class-name="fcBridgeDetailRowClass"
+                  :scroll="{ x: fcBridgeScrollX }" :locale="{emptyText:'请先在长周期预测报表中勾选配件'}"/>
+
+                <div class="jlrs-modal-footer">
+                  <a-button @click="fcBridgeOpen=false">取 消</a-button>
+                  <a-button type="primary" :disabled="!fcLongSel.length" @click="fcBridgeGenerate">生成bridge buy 计划</a-button>
+                </div>
+              </template>
+              <template v-else>
+                <a-alert type="success" :show-icon="true" style="margin-bottom:14px;">
+                  <template #message>已生成 <b>{{ fcBridgeData.length }}</b> 条 bridge buy 计划（年份 {{ fcBridgeYear }}，合计数量 <b>{{ fcBridgeGenSum }}</b>）。</template>
+                </a-alert>
+                <a-table :columns="fcBridgeCols" :data-source="fcBridgeData" row-key="id"
+                  :pagination="{pageSize:8}" size="small" bordered/>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="fcBridgeDone=false">重新生成</a-button>
+                  <a-button type="primary" @click="fcBridgeOpen=false">完 成</a-button>
+                </div>
+              </template>
+            </a-modal>
+
+            <!-- 生成 All Time Buy 计划：勾选配件 → 首年~末年全部需求 → 生成计划 -->
+            <a-modal v-model:open="fcAllTimeOpen" title="生成 All Time Buy 计划" :width="1200" :footer="null" :mask-closable="false">
+              <template v-if="!fcAllTimeDone">
+                <a-alert type="info" :show-icon="true" style="margin-bottom:14px;">
+                  <template #message>已选择 <b>{{ fcBatchSelIds.length }}</b> 个配件（来自一次买断预测结果勾选行）。All Time Buy 为一次性买断剩余生命周期（{{ fcLongFctYears[0] }}~{{ fcLongFctYears[fcLongFctYears.length-1] }}）的全部预测需求。</template>
+                </a-alert>
+                <div class="bt-sec-t" style="margin:6px 0 10px;">所选配件明细<span class="bt-sec-sub">各年预测需求按配件维度按列展示，末列为全周期合计</span></div>
+                <a-table :columns="fcAllTimeCols" :data-source="fcAllTimeRows" row-key="id"
+                  :pagination="false" size="small" bordered :row-class-name="fcAllTimeRowClass"
+                  :scroll="{ x: 1250 }" :locale="{emptyText:'请先在一次买断预测结果中勾选配件'}"/>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="fcAllTimeOpen=false">取 消</a-button>
+                  <a-button type="primary" :disabled="!fcBatchSelIds.length" @click="fcAllTimeGenerate">生成 All Time Buy 计划</a-button>
+                </div>
+              </template>
+              <template v-else>
+                <a-alert type="success" :show-icon="true" style="margin-bottom:14px;">
+                  <template #message>已生成 <b>{{ fcAllTimeData.length }}</b> 条 All Time Buy 计划（覆盖周期 {{ fcLongFctYears[0] }}~{{ fcLongFctYears[fcLongFctYears.length-1] }}，合计数量 <b>{{ fcAllTimeGenSum }}</b>）。</template>
+                </a-alert>
+                <a-table :columns="fcAllTimeResultCols" :data-source="fcAllTimeData" row-key="id"
+                  :pagination="{pageSize:8}" size="small" bordered/>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="fcAllTimeDone=false">重新生成</a-button>
+                  <a-button type="primary" @click="fcAllTimeOpen=false">完 成</a-button>
+                </div>
+              </template>
+            </a-modal>
+
             <!-- 新增/编辑 配件组（仅配件组管理）：联合 MOQ 类型需设阈值，成套采购组无额外参数 -->
-            <a-modal v-model:open="pgModal.open" :title="pgModal.mode==='add' ? '新增配件组' : '编辑配件组'" :width="860" :footer="null" :mask-closable="false">
+            <a-modal v-model:open="pgModal.open" :title="(pgModal.mode==='add' ? '新增' : '修改') + ' · 配件组'" :width="920" :footer="null" :mask-closable="false">
               <a-form layout="vertical">
-                <div class="bt-sec-t" style="margin-bottom:12px;">基本信息<span class="bt-sec-sub">分组编码唯一；分组参数变更后自下一计算周期生效</span></div>
+                <a-alert v-if="pgModal.err" type="error" :message="pgModal.err" show-icon style="margin-bottom:16px;"/>
+                <div class="bt-sec-t" style="margin-bottom:12px;">基本信息<span class="bt-sec-sub">分组参数变更后自下一计算周期生效</span></div>
                 <a-row :gutter="12">
-                  <a-col :span="8"><a-form-item label="分组编码"><a-input v-model:value="pgModal.form.group_code" :disabled="pgModal.mode==='edit'"/></a-form-item></a-col>
-                  <a-col :span="8"><a-form-item label="分组名称"><a-input v-model:value="pgModal.form.group_name" placeholder="如：前照灯左右件组"/></a-form-item></a-col>
-                  <a-col :span="8"><a-form-item label="分组类型"><a-select v-model:value="pgModal.form.group_type" :options="pgTypeOptions.map(v=>({value:v,label:v}))"/></a-form-item></a-col>
+                  <a-col :span="12"><a-form-item label="分组名称"><a-input v-model:value="pgModal.form.group_name" placeholder="如：前照灯左右件组"/></a-form-item></a-col>
+                  <a-col :span="12"><a-form-item label="分组类型"><a-select v-model:value="pgModal.form.group_type" :options="pgTypeOptions.map(v=>({value:v,label:v}))"/></a-form-item></a-col>
                 </a-row>
 
                 <!-- 联合 MOQ：按组内合计凑单后分摊 -->
@@ -1058,11 +1936,16 @@
                   </a-row>
                 </template>
 
-                <!-- 组内配件清单：支持单个添加与批量粘贴 -->
-                <div class="bt-sec-t" style="margin:6px 0 12px;">组内配件清单（{{ (pgModal.form.parts||[]).length }}）<span class="bt-sec-sub">统一取每个配件的最新件；支持单个添加或批量粘贴</span></div>
+                <!-- 组内配件清单：单个添加 + 批量添加（按钮触发弹窗） -->
+                <div class="bt-sec-t" style="margin:6px 0 12px;display:flex;align-items:center;">
+                  <span>组内配件清单（{{ (pgModal.form.parts||[]).length }}）</span>
+                  <span class="bt-sec-sub">统一取每个配件的最新件</span>
+                  <a-button size="small" style="margin-left:auto;" @click="pgOpenPaste">⬆ 批量添加配件</a-button>
+                </div>
                 <a-table :columns="pgPartCols" :data-source="pgModal.form.parts" row-key="part_code" :pagination="false" size="small" bordered>
                   <template #bodyCell="{ column, record }">
                     <template v-if="column.dataIndex==='supplier_code'"><a-input v-model:value="record.supplier_code" size="small" style="width:96px"/></template>
+                    <template v-else-if="column.dataIndex==='max_stock_months'"><a-input-number v-model:value="record.max_stock_months" :min="0" :step="0.01" :precision="2" size="small" style="width:110px"/></template>
                     <template v-else-if="column.dataIndex==='_op'"><a @click="pgRemovePart(record)" style="color:#ff4d4f;">删除</a></template>
                   </template>
                 </a-table>
@@ -1070,27 +1953,34 @@
                   <a-input v-model:value="pgNewPartCode" placeholder="输入配件号后按回车或点击添加" style="width:280px" @press-enter="pgAddPart"/>
                   <a-button @click="pgAddPart">添加配件</a-button>
                 </div>
-                <div style="margin-top:12px;">
-                  <div style="font-size:12px;color:#8c8c8c;margin-bottom:6px;">批量粘贴配件号（每行一个，自动去重，主数据未匹配时仍可保存）</div>
-                  <a-textarea v-model:value="pgPasteText" :rows="3" placeholder="每行一个配件号"/>
-                  <div style="margin-top:8px;text-align:right;"><a-button @click="pgPasteAddParts">批量添加</a-button></div>
-                </div>
-                <div style="margin-top:18px;text-align:right;">
-                  <a-button @click="pgModal.open=false">取 消</a-button>
-                  <a-button type="primary" style="margin-left:8px;" @click="pgSave">保 存</a-button>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="pgModal.open=false">取消</a-button>
+                  <a-button type="primary" @click="pgSave">保存</a-button>
                 </div>
               </a-form>
             </a-modal>
 
-            <!-- 批量导入配件到分组 -->
-            <a-modal v-model:open="pgImportOpen" title="批量导入配件" :width="640" :footer="null">
+            <!-- 批量添加配件（新增 / 编辑分组内触发） -->
+            <a-modal v-model:open="pgPasteOpen" title="批量添加配件 · 配件组" :width="850" :footer="null" :mask-closable="false">
               <a-form layout="vertical">
-                <a-form-item label="目标分组"><a-select v-model:value="pgImportTarget" :options="pgGroupOptions" show-search placeholder="请选择要导入的配件组"/></a-form-item>
-                <a-form-item label="配件号清单（每行一个，自动去重）"><a-textarea v-model:value="pgImportText" :rows="8" placeholder="每行一个配件号"/></a-form-item>
+                <a-form-item label="配件号清单（每行一个，自动去重，主数据未匹配时仍可保存）">
+                  <a-textarea v-model:value="pgPasteText" :rows="10" placeholder="每行一个配件号"/>
+                </a-form-item>
               </a-form>
-              <div style="text-align:right;">
-                <a-button @click="pgImportOpen=false">取 消</a-button>
-                <a-button type="primary" style="margin-left:8px;" @click="pgConfirmImport">确认导入</a-button>
+              <div class="jlrs-modal-footer">
+                <a-button @click="pgPasteOpen=false">取消</a-button>
+                <a-button type="primary" @click="pgPasteAddParts">确认添加</a-button>
+              </div>
+            </a-modal>
+
+            <!-- 删除分组确认 -->
+            <a-modal v-model:open="pgDelOpen" title="删除 · 配件组" :width="480" :footer="null" :mask-closable="false">
+              <p v-if="pgDelRow" style="margin:0;line-height:1.9;">
+                确认删除分组 <b>{{ pgDelRow.group_name }}</b>（{{ pgDelRow.group_code }}）及其组内 {{ (pgDelRow.parts||[]).length }} 个配件？
+              </p>
+              <div class="jlrs-modal-footer">
+                <a-button @click="pgDelOpen=false">取消</a-button>
+                <a-button danger type="primary" @click="pgDoDelete">确认删除</a-button>
               </div>
             </a-modal>
           </template>
@@ -1594,7 +2484,7 @@
             </div>
           </template>
 
-          <!-- ============ 需求预测 / 全新车型配件预测（参考件预测流程） ============ -->
+          <!-- ============ 需求预测 / 参考零件需求预测（参考件预测流程） ============ -->
           <template v-else-if="activeMenu==='fc-new' || activeMenu==='fc-new-draft'">
             <div class="card fc-new-card">
               <div class="fc-new-body">
@@ -1653,7 +2543,7 @@
                     </div>
                   </template>
 
-                  <!-- 步骤7：全新车型配件预测（手动，预测新车型维护，UI 与步骤1 交互式表格一致） -->
+          <!-- 步骤7：参考零件需求预测（手动，预测新车型维护，UI 与步骤1 交互式表格一致） -->
                   <template v-else-if="fcStep===7">
                     <div class="toolbar-row">
                       <a-button type="primary" @click="fcOpenNewModal">添加预测新车型</a-button>
@@ -1831,7 +2721,7 @@
               <!-- 系数调整已移至页面工具栏的「系数调整」按钮弹窗 -->
             </a-modal>
 
-            <!-- 系数调整弹窗（仅全新车型：第 1 ~ 6 月） -->
+            <!-- 系数调整弹窗（仅参考零件需求预测草稿页：第 1 ~ 6 月） -->
             <a-modal v-model:open="fcCoefOpen" title="系数调整" :width="560" :footer="null">
               <div class="bt-sec-t" style="margin-bottom:14px;">预测系数调整（第 1 ~ 6 月）<span class="bt-sec-sub">按月应用调整系数（正数、支持小数）；应用后第 1~6 月预测值 = 原预测值 × 对应月系数</span></div>
               <div class="gp-coef-grid" style="grid-template-columns:repeat(3,1fr);">
@@ -1845,6 +2735,33 @@
                 <a-button style="margin-left:8px;" @click="fcCoefOpen=false">取 消</a-button>
                 <a-button type="primary" style="margin-left:8px;" @click="fcApplyCoeffs">应 用</a-button>
               </div>
+            </a-modal>
+
+            <!-- 生成采购计划预览弹窗（同长周期生成预览交互）：预览待生成明细 → 确认生成常规采购计划草稿 -->
+            <a-modal v-model:open="fcGenPoOpen" title="生成采购计划" :width="980" :footer="null" :mask-closable="false">
+              <template v-if="!fcGenPoDone">
+                <a-alert type="info" :show-icon="true" style="margin-bottom:14px;">
+                  <template #message>将把以下 <b>{{ fcGenPoPreview.length }}</b> 个配件的未来 6 个月预测结果生成常规采购计划草稿（未匹配参考配件且无预测值的行不参与生成）；确认无误后点击「生成采购计划」。</template>
+                </a-alert>
+                <a-table :columns="fcGenPoCols" :data-source="fcGenPoPreview" row-key="id"
+                  :pagination="false" size="small" bordered
+                  :locale="{emptyText:'暂无可生成的配件（均已生成或无预测值）'}"/>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="fcGenPoOpen=false">取 消</a-button>
+                  <a-button type="primary" :disabled="!fcGenPoPreview.length" @click="fcGenPoConfirm">生成采购计划</a-button>
+                </div>
+              </template>
+              <template v-else>
+                <a-alert type="success" :show-icon="true" style="margin-bottom:14px;">
+                  <template #message>已为 <b>{{ fcGenPoResult.length }}</b> 个配件生成常规采购计划草稿，合计数量 <b>{{ fcGenPoSum }}</b>。请前往「采购计划 → 常规采购计划」查看、编辑与审批。</template>
+                </a-alert>
+                <a-table :columns="fcGenPoResultCols" :data-source="fcGenPoResult" row-key="id"
+                  :pagination="{pageSize:8}" size="small" bordered/>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="fcGenPoOpen=false">完 成</a-button>
+                  <a-button type="primary" @click="fcGenPoGo">立即前往常规采购计划</a-button>
+                </div>
+              </template>
             </a-modal>
 
             <!-- 批量维护参考配件号弹窗：每个配件逐行独立选择参考配件号（下拉受限于参考车型配件清单）+ 受约束模板导入 -->
@@ -2517,8 +3434,36 @@
       </a-descriptions>
     </a-modal>
 
-    <!-- ===== 通用主数据详情抽屉 ===== -->
-    <a-drawer v-model:open="genDetailOpen" :width="520"
+    <!-- ===== 通用主数据详情：采购计划 / 配件组管理统一用居中弹窗（对齐「库存策略参数」）；其余模块暂维持抽屉 ===== -->
+    <a-modal v-if="modalDetailKeys.includes(activeMenu)" v-model:open="genDetailOpen"
+      :width="920" :footer="null" :mask-closable="false"
+      :title="'详情 · ' + activeDef.detailTitle">
+      <template v-if="genDetailRow">
+        <a-descriptions bordered size="small" :column="2">
+          <a-descriptions-item v-for="c in activeDef.columns.filter(x=>x.key!=='action')" :key="c.key" :label="c.title">
+            <a-tag v-if="c.render==='tag'" :color="genTagColor(c, genDetailRow)" style="margin:0;">{{ genDetailRow[c.dataIndex] }}</a-tag>
+            <span v-else-if="c.render==='block'">{{ genDetailRow[c.dataIndex]==='X' ? '已冻结' : '正常' }}</span>
+            <span v-else-if="c.render==='partlink'">{{ genDetailRow[c.csvField || c.dataIndex] }}<a v-if="hasTrend(genDetailRow)" style="margin-left:8px;" @click.stop="openTrendModal(genDetailRow)">查看趋势图</a></span>
+            <span v-else>{{ genDetailRow[c.csvField || c.dataIndex] }}</span>
+          </a-descriptions-item>
+        </a-descriptions>
+        <!-- 配件组管理：详情同时展示组内配件明细（只读，与新增/编辑同构） -->
+        <template v-if="activeMenu==='part-group'">
+          <div class="bt-sec-t" style="margin:18px 0 10px;">组内配件清单（{{ (genDetailRow.parts||[]).length }}）<span class="bt-sec-sub">统一取每个配件的最新件</span></div>
+          <a-table :columns="pgDetailCols" :data-source="genDetailRow.parts||[]" row-key="part_code" :pagination="false" size="small" bordered>
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.dataIndex==='max_stock_months'">{{ record.max_stock_months ?? 2 }}</template>
+              <template v-else>{{ record[column.dataIndex] }}</template>
+            </template>
+            <template #emptyText><a-empty description="暂无配件"/></template>
+          </a-table>
+        </template>
+        <div class="jlrs-modal-footer">
+          <a-button @click="genDetailOpen=false">关闭</a-button>
+        </div>
+      </template>
+    </a-modal>
+    <a-drawer v-else v-model:open="genDetailOpen" :width="520"
       :title="activeDef.detailTitle + '详情 · ' + (genDetailRow ? genDetailRow[activeDef.idField] : '')">
       <template v-if="genDetailRow">
         <a-descriptions title="基础信息" bordered size="small" :column="2">
@@ -3299,29 +4244,301 @@ const fcBestDef = {
 const xyzTypes = ['X','Y','Z'];
 const slLevels = ['全局','仓库','配件'];
 const poStatuses = ['草稿','待审批','已审批','已下达','已驳回'];
-const poSources = ['常规预测','仓库级常规预测','长周期预测','一次买断','全新车型预测','手工创建'];
+const poSources = ['常规预测','仓库级常规预测','长周期预测','一次买断','参考零件预测','手工创建'];
 const poIssueWays = ['IPOS离线文件','SAP接口'];
 
-// 常规采购计划
+// 常规采购计划（按 PRD 4.4.3.1「采购计划」计算输出表重建）
+const poRegStatuses = ['待提交','待审批','已驳回','审批通过'];
+const poRegPlanTypes = ['常规采购计划','紧急采购计划'];
+const poRegPurchaseTypes = ['自制','外购','直供'];
+const poRegReceiveModes = ['常规收货','代收发收货'];
+const poRegPlanCycles = [7,15,30,60,90,180];
+const poRegPushStatuses = ['待推送','已推送'];
+const poRegVehicleCodes = ['X260','F-PACE','E-PACE','XEL','XFL','DEFENDER','DISCOVERY','RANGE-EV','XJ','F-TYPE'];
+const poRegMoqGroups = ['MOQ-G01','MOQ-G02','MOQ-G03','—'];
+function poRegGenBatch(){
+  // 计划批次：周期 7 → W+年后两位+周序号；周期 30 → A+年后两位+月序号；紧急 → E+年后两位+周序号
+  const y = '26';
+  const wk = String(1 + Math.floor(rnd()*52)).padStart(2,'0');
+  const mo = String(1 + Math.floor(rnd()*12)).padStart(2,'0');
+  const batch = (cycle, isUrgent) => isUrgent ? ('E'+y+wk) : (cycle===7 ? ('W'+y+wk) : (cycle===30 ? ('A'+y+mo) : ('M'+y+mo)));
+  return { batch, wk, mo };
+}
 const poRegularData = Vue.reactive([]);
-for(let i=0;i<48;i++){
+for(let i=0;i<64;i++){
   const m = matData[i % matData.length];
-  const s = supplierData[i % supplierData.length];
   const w = whData[i % whData.length];
-  const qty = Math.max(10, Math.round(50 + rnd()*900));
-  const moq = Math.max(1, Math.round(qty*0.4/10)*10);
-  const finalQty = Math.ceil(qty/moq)*moq;
-  const st = poStatuses[i % 5];
+  const planType = (i % 5 === 0) ? '紧急采购计划' : '常规采购计划';
+  const isUrgent = planType === '紧急采购计划';
+  const cycle = poRegPlanCycles[i % poRegPlanCycles.length];
+  const billStatus = poRegStatuses[i % poRegStatuses.length];
+  const targetStock = Math.round(200 + rnd()*1800);
+  const safetyStock = Math.round(targetStock*0.3);
+  const expectedStock = Math.max(0, Math.round(targetStock - rnd()*targetStock*0.6));
+  const availableQty = Math.max(0, Math.round(rnd()*targetStock));
+  const openPoQty = Math.max(0, Math.round(rnd()*600));
+  const inTransitQty = Math.max(0, Math.round(rnd()*400));
+  const boQty = Math.max(0, Math.round(rnd()*120));
+  const avg3mSales = Math.max(1, Math.round(rnd()*220));
+  const coverDays = Math.max(0, Math.round(expectedStock*30/avg3mSales));
+  const moq = [10,20,50,100,200][i % 5];
+  const mpq = moq;
+  const suggestRawQty = Math.max(10, Math.round(50 + rnd()*1500));
+  const suggestMoqQty = Math.ceil(suggestRawQty/moq)*moq;
+  const jointMoqQty = [100,200,500,1000][i % 4];
+  const isJointMoq = (i % 3 === 0) ? '是' : '否';
+  const maxJointQty = Math.round(jointMoqQty*1.5);
+  const _rem = suggestMoqQty % jointMoqQty;
+  const jointFillQty = (isJointMoq==='是' && _rem!==0) ? (jointMoqQty - _rem) : 0;
+  const suggestJointQty = suggestMoqQty + jointFillQty;
+  const setGroup = (i % 4 === 0) ? ('SET-'+(i%5+1)) : '—';
+  const setFillQty = (setGroup!=='—') ? ((i%6)*2) : 0;
+  const suggestSetQty = suggestJointQty + setFillQty;
+  const suggestMpqQty = Math.ceil(suggestSetQty/mpq)*mpq;
+  const suggestQty = suggestMpqQty;
+  const isBlocked = (i % 11 === 0) ? '是' : '否';
+  const blockReason = isBlocked==='是' ? '最新可采购件缺失，待维护' : '—';
+  const adjustQty = suggestQty;
+  const purchaseLt = [7,15,30,45,60][i % 5];
+  const maxStockMonths = [1.5,2,2.5,3][i % 4];
+  const singleMaxLimit = Math.round(targetStock*1.2);
+  const etaBase = new Date(2026, 9, 10 + (i % 18));
+  const requiredArrivalDate = etaBase.toISOString().slice(0,10);
+  // 计划批次 / 计划行：审批通过且调整数量>0 时生成
+  let planBatch = '—', planLine = '—';
+  if(billStatus==='审批通过' && adjustQty > 0){
+    const g = poRegGenBatch();
+    planBatch = g.batch(cycle, isUrgent);
+    planLine = planBatch + String(1 + Math.floor(rnd()*99999)).padStart(5,'0');
+  }
+  const approveRemark = (billStatus==='审批通过') ? '审批通过' : (billStatus==='已驳回' ? '需求口径存疑，退回补充' : '');
+  const approver = (billStatus==='审批通过'||billStatus==='已驳回') ? pick(fcPlanners) : '—';
+  const approveTime = (billStatus==='审批通过'||billStatus==='已驳回') ? ('2026-10-'+(1+i%20)+' 14:'+(10+i%40)) : '—';
   poRegularData.push({
     id:'PR'+(i+1).toString().padStart(4,'0'), plan_no:'PLN-2026-'+(100001+i),
-    part_code:m.material_code, part_name:m.material_name, base:fcb(m.material_code),
-    supplier_code:s.supplier_code, supplier_name:s.supplier_name,
-    wh_code:w.warehouse_code, wh_name:w.warehouse_name,
-    qty:finalQty, raw_qty:qty, eta:'2026-10-'+(10+i%20), status:st,
-    source:poSources[i%poSources.length], create_time:'2026-09-30 08:'+(10+i%30),
-    planner:pick(fcPlanners)
+    data_date:'2026-10-24', plan_type:planType,
+    part_code:m.material_code, part_name:m.material_name,
+    cur_purchase_code:m.material_code, cur_purchase_name:m.material_name,
+    is_plan_day: isUrgent ? (i%2===0 ? '否' : '是') : '是',
+    wh_code:w.warehouse_code, wh_name:w.warehouse_name, abc_class:['A','B','C'][i%3],
+    vehicle_code:poRegVehicleCodes[i % poRegVehicleCodes.length], planner:pick(fcPlanners),
+    purchase_type:poRegPurchaseTypes[i % 3], plan_batch:planBatch, plan_line:planLine, plan_cycle:cycle,
+    target_stock:targetStock, safety_stock:safetyStock, expected_stock:expectedStock,
+    available_qty:availableQty, open_po_qty:openPoQty, in_transit_qty:inTransitQty, bo_qty:boQty,
+    avg_3m_sales:avg3mSales, cover_days:coverDays, suggest_raw_qty:suggestRawQty, moq,
+    suggest_moq_qty:suggestMoqQty, moq_group:poRegMoqGroups[i%poRegMoqGroups.length], joint_moq_qty:jointMoqQty,
+    purchase_lt:purchaseLt, max_stock_months:maxStockMonths, single_max_limit:singleMaxLimit,
+    is_joint_moq:isJointMoq, max_joint_qty:maxJointQty, joint_fill_qty:jointFillQty, suggest_joint_qty:suggestJointQty,
+    set_group:setGroup, set_fill_qty:setFillQty, suggest_set_qty:suggestSetQty, mpq,
+    suggest_mpq_qty:suggestMpqQty, suggest_qty:suggestQty, is_blocked:isBlocked, block_reason:blockReason,
+    adjust_qty:adjustQty, adjust_reason:'', required_arrival_date:requiredArrivalDate,
+    bill_status:billStatus, approve_remark:approveRemark,
+    update_time:'2026-10-'+(1+i%20)+' 09:'+(10+i%50), modifier:pick(fcPlanners),
+    approver, approve_time:approveTime, push_status:(billStatus==='审批通过')?(i%2?'已推送':'待推送'):'—',
+    receive_mode:poRegReceiveModes[i%2]
   });
 }
+
+/* ===== 5. 调拨计划（STO）：本周调拨计划 / 下周调拨计划（PRD 5.4 计算逻辑 + 5.5 页面与交互说明）===== */
+const stoNetworks = ['CJLR','JLR','JLRC'];
+const stoRouteCodes = ['RT-CJ-SH','RT-CJ-BJ','RT-CJ-GZ','RT-CJ-CD','RT-JL-SH','RT-JL-BJ','RT-JL-GZ','RT-JL-CD'];
+const stoVehicleCodes = ['X260','F-PACE','E-PACE','XEL','XFL','DEFENDER','DISCOVERY'];
+const stoToWhs = ['SH01 上海','BJ01 北京','GZ01 广州','CD01 成都'];
+const stoFromWhs = ['CJDC 昆山中心库','SH01 上海','BJ01 北京','GZ01 广州','CD01 成都'];
+/* 字段口径＝PRD 5.4.4.1 计划结果表 29 字段（最新）：
+   数据生成日期 / 计划批次 / 计划行 / 计划类型 / 配件号 / 配件名称 / 发货仓 / 收货仓 /
+   收货仓最低风控线 / 收货仓目标库存 / 是否出计划日 / ABC分类 / 车型代码 / 计划员 /
+   预期库存 / 可用库存数量 / 欠交数量 / 库间在途数量 / 缺货数量 / 近3个月月均销量 / 当前可用天数 /
+   库间LT / 要求到货日期 / 推荐计划数量(取整前) / 推荐计划数量(分配后) / 体积 / 体积单位 / 预计调拨体积 / 备注
+   计划类型：本周＝紧急调拨计划/常规调拨计划（批次 EW/W），下周＝下周预计调拨计划（批次 W）；
+   工具栏仅保留「导出」；备注支持在详情弹窗内编辑保存；详情弹窗仅展示字段详情。 */
+const stoPlanData = Vue.reactive([]);
+(function buildStoPlan(){
+  let id = 0;
+  const lineSeq = {};                                    // 计划行：同批次内 6 位流水号
+  // 本周 44 行（执行，计划日生成） + 下周 28 行（预排）
+  const plan = [[44,'week','2026-10-19','43'],[28,'next','2026-10-26','44']];
+  plan.forEach(function(pair){
+    const n = pair[0], period = pair[1], genDate = pair[2], wk = pair[3];
+    for(let i=0;i<n;i++){
+      id++;
+      const m = matData[(id*3) % matData.length];
+      const network = stoNetworks[id % 3];
+      const toWh = stoToWhs[id % stoToWhs.length];
+      const fromWh = (id % 7 === 0) ? stoFromWhs[1 + (id % 4)] : stoFromWhs[0]; // 多数由中心仓调出，少数区域仓互调
+      const routeCode = stoRouteCodes[id % stoRouteCodes.length];
+      const mpq = [10,20,25,50,100][id % 5];
+      const unitVolume = [0.012,0.02,0.035,0.05,0.08][id % 5];   // 体积（m³）
+      // 计划类型：本周＝紧急/常规调拨计划（批次 EW/W），下周＝下周预计调拨计划（批次 W）
+      const planType = period==='next' ? '下周预计调拨计划' : ((id % 6 === 0) ? '紧急调拨计划' : '常规调拨计划');
+      const planBatch = (planType==='紧急调拨计划' ? 'EW' : 'W') + '26' + wk;
+      lineSeq[planBatch] = (lineSeq[planBatch]||0) + 1;
+      const planLine = String(lineSeq[planBatch]).padStart(6,'0');
+      const isPlanDay = period==='week' ? '是' : '否';
+      // ---- 收货仓视角：预期库存四要素（预期＝可用＋库间在途＋openPO未交付－欠交）----
+      const availQty = Math.round(200 + rnd()*900);
+      const transitQty = Math.round(rnd()*260);
+      const owedQty = (id % 3 === 0) ? Math.round(rnd()*220) : 0;   // 欠交数量（BO）
+      const openPoQty = Math.round(rnd()*180);
+      const expectedStock = Math.max(0, availQty + transitQty + openPoQty - owedQty);
+      const shortageQty = (id % 4 === 0) ? Math.round(rnd()*80) : 0;
+      const avg3mQty = Math.round(30 + rnd()*170);
+      const availDays = avg3mQty>0 ? Math.round(expectedStock/(avg3mQty/30)*10)/10 : 0;
+      // ---- 补货目标与三层缺口（每层取 MAX(差值,0)，仅用于详情计算过程展示）----
+      const targetStock = Math.round(400 + rnd()*2600);
+      const safetyStock = Math.round(targetStock*0.3);
+      const boGapQty = owedQty;
+      const safetyGapQty = Math.max(0, safetyStock - expectedStock);
+      const gapQty = Math.max(0, targetStock - expectedStock);
+      const rawQty = boGapQty + safetyGapQty + gapQty;              // 推荐计划数量(取整前)
+      const mpqQty = Math.ceil(rawQty / mpq) * mpq;                 // 凑 MPQ 后
+      // ---- 供给侧：调出仓富余量 - 本期已分配量 ----
+      const surplusQty = Math.round(300 + rnd()*1800);
+      const allocatedQty = Math.round(rnd()*surplusQty*0.6);
+      let remain = Math.max(0, surplusQty - allocatedQty);
+      const l1 = Math.min(boGapQty, remain);      remain -= l1;
+      const l2 = Math.min(safetyGapQty, remain);  remain -= l2;
+      const l3 = Math.min(gapQty, remain);        remain -= l3;
+      const availOut = Math.max(0, surplusQty - allocatedQty);
+      const allocTotal = l1 + l2 + l3;
+      const allocRound = Math.min(Math.ceil(allocTotal / mpq) * mpq, Math.floor(availOut / mpq) * mpq);
+      const allocRatio = mpqQty > 0 ? allocRound / mpqQty : 0;
+      const cutQty = Math.max(0, mpqQty - allocRound);
+      const capQty = Math.round(200 + rnd()*1000);                  // 线路周运力上限
+      let allocQty = Math.min(allocRound, capQty);
+      allocQty = Math.floor(allocQty / mpq) * mpq;                  // 封顶后向下取 MPQ 整数倍
+      const unmetQty = Math.max(0, mpqQty - allocQty);
+      const estVolume = Math.round(allocQty * unitVolume * 100) / 100;
+      const transferLt = [1,2,3,5,7][id % 5];                                  // 库间LT（天）
+      const reqArrival = new Date(new Date(genDate).getTime() + transferLt*86400000).toISOString().slice(0,10); // 要求到货日期＝计划生成日＋库间LT
+      const remark = planType==='紧急调拨计划' ? '客户紧急订单，需优先发运' : (unmetQty>0 ? '线路运力不足，未满足部分结转下周' : '');
+      stoPlanData.push({
+        id:'STO'+(1000+id), period:period,
+        data_gen_date:genDate, plan_type:planType, plan_batch:planBatch, plan_line:planLine,
+        is_plan_day:isPlanDay, transfer_lt:transferLt, required_arrival_date:reqArrival,
+        part_code:m.material_code, part_name:m.material_name, abc_class:['A','B','C'][id % 3],
+        vehicle_code:stoVehicleCodes[id % stoVehicleCodes.length], planner:pick(fcPlanners),
+        from_wh:fromWh, to_wh:toWh, route_code:routeCode, network_id:network,
+        safety_stock:safetyStock, target_stock:targetStock,
+        expected_stock:expectedStock, avail_qty:availQty, owed_qty:owedQty,
+        transit_qty:transitQty, shortage_qty:shortageQty, avg3m_qty:avg3mQty, avail_days:availDays,
+        raw_qty:rawQty, mpq:mpq, mpq_qty:mpqQty,
+        bo_gap_qty:boGapQty, safety_gap_qty:safetyGapQty, gap_qty:gapQty,
+        surplus_qty:surplusQty, allocated_qty:allocatedQty,
+        alloc_l1:l1, alloc_l2:l2, alloc_l3:l3, alloc_round:allocRound,
+        alloc_ratio:Math.round(allocRatio*10000)/10000, cut_qty:cutQty, cap_qty:capQty,
+        alloc_qty:allocQty, unit_volume:unitVolume, volume_unit:'m³', est_volume:estVolume,
+        unmet_qty:unmetQty, remark:remark,
+      });
+    }
+  });
+})();
+
+/* ===== 采购计划扩展页：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划=====
+   口径依据 PRD 第 6/7 章：
+   净需求 = MAX(需求 − 预期库存, 0)
+   包装取整数量 = ROUNDUP(净需求 ÷ MPQ, 0) × MPQ
+   采购计划数量 = IF(包装取整数量 < MOQ, MOQ, 包装取整数量) */
+function polPackQty(net, mpq, moq){
+  const n = Math.max(0, Number(net) || 0);
+  const m = Number(mpq) || 1, o = Number(moq) || 1;
+  const pack = Math.ceil(n / m) * m;
+  return pack < o ? o : pack;
+}
+function polNow(){ return new Date().toISOString().slice(0,16).replace('T',' '); }
+function polHistSeries(seed){
+  const arr = []; let v = Math.max(30, Math.round(seed));
+  for(let k=0;k<10;k++){ v = Math.max(8, Math.round(v * (0.86 + rnd()*0.28))); arr.push(v); }
+  return arr;
+}
+function polTrend(src, buyoutIdx){
+  const t = {
+    hist: (src.hist && src.hist.length) ? src.hist : polHistSeries(240),
+    fct: fcLongKeys.map(k => Number(src[k]) || 0),
+    trendAxis: fcLongTrendYears, trendSplit: fcLongTrendSplit, trendUnit:'年',
+  };
+  if(buyoutIdx !== undefined && buyoutIdx !== null){
+    t.trendBuyoutTo = fcLongFctYears[Math.max(0, Math.min(9, buyoutIdx))];
+  }
+  return t;
+}
+// All Time Buy 计划：以一次买断预测（十年累计）为需求口径，扣减全国预期库存
+const poAtbData = Vue.reactive([]);
+(function buildPoAtb(){
+  for(let i=0;i<22;i++){
+    const src = fcBuyoutData[i % fcBuyoutData.length];
+    const life = Math.round(fcLongKeys.reduce((a,k)=> a + (Number(src[k])||0), 0));
+    const stock = Math.round(rnd() * Math.max(1, life) * 0.55);
+    const net = Math.max(0, life - stock);
+    const mpq = [10,20,25,50,100][i % 5];
+    const moq = [50,100,200,300][i % 4];
+    const plan = polPackQty(net, mpq, moq);
+    poAtbData.push(Object.assign({
+      id:'ATB'+(i+1), data_date:'2026-10-25',
+      part_code:src.part_code, part_name:src.part_name, base:src.base,
+      expected_stock:stock, life_demand:life, net_demand:net, mpq, moq,
+      plan_qty:plan, adjust_qty:plan, adjust_reason:'',
+      eop_flag:'是', bill_status:poRegStatuses[i % 4],
+      approve_remark:'', approver:'', approve_time:'—',
+      planner:src.planner, buy_period:'2027~2036',
+      update_time:'2026-10-25 09:' + String(10 + i % 45).padStart(2,'0'),
+    }, polTrend(src)));
+  }
+})();
+// Bridge Buy 计划：每个配件一行，买断区间内（第 1 年 ~ 买断年）多年预测需求一次性出单，扣减属地预期库存
+const poBridgeData = Vue.reactive([]);
+(function buildPoBridge(){
+  const whs = [['CJDC','昆山中心库'],['SH01','上海'],['BJ01','北京'],['GZ01','广州'],['CD01','成都']];
+  // 每个配件的买断区间长度（年）：1~10 年区间一次性下计划
+  const buyoutYears = [3,6,2,8,4,5,7,2,9,5];
+  for(let i=0;i<10;i++){
+    const src = fcLongData[i % fcLongData.length];
+    const yIdx = Math.max(0, Math.min(9, buyoutYears[i]-1));   // 0-based 买断年
+    let forecast = 0;
+    for(let k=0;k<=yIdx;k++) forecast += Number(src['y'+(k+1)]) || 0;
+    forecast = Math.round(forecast);
+    const stock = Math.round(rnd() * Math.max(1, forecast) * 0.5);
+    const net = Math.max(0, forecast - stock);
+    const mpq = [10,20,50][i % 3];
+    const moq = [100,200,300][i % 3];
+    const plan = polPackQty(net, mpq, moq);
+    const wh = whs[i % whs.length];
+    poBridgeData.push(Object.assign({
+      id:'BRP'+(i+1), part_code:src.part_code, part_name:src.part_name, base:src.base,
+      wh_code:wh[0], wh_name:wh[1],
+      buyout_interval:'2027~' + fcLongFctYears[yIdx], buyout_year:yIdx+1,
+      forecast_qty:forecast, expected_stock:stock, net_demand:net, mpq, moq,
+      plan_qty:plan, adjust_qty:plan, adjust_reason:'',
+      bill_status:poRegStatuses[i % 4], approver:'', approve_time:'—',
+      planner:src.planner, update_time:'2026-10-25 10:' + String(5 + i % 50).padStart(2,'0'),
+    }, polTrend(src, yIdx)));
+  }
+})();
+// 参考零件采购计划（参考零件首储）：参考件预测首年需求，扣减全国预期库存
+const poRefData = Vue.reactive([]);
+(function buildPoRef(){
+  const veh = ['L550','L460','L256','X260','E-PACE','DEFENDER'];
+  for(let i=0;i<16;i++){
+    const m = matData[(i * 7 + 3) % matData.length];
+    const refM = matData[(i * 5 + 1) % matData.length];
+    const forecast = Math.round(200 + rnd() * 1300);
+    const stock = Math.round(rnd() * forecast * 0.5);
+    const net = Math.max(0, forecast - stock);
+    const mpq = [20,50,100][i % 3];
+    const moq = [100,200,300][i % 3];
+    const plan = polPackQty(net, mpq, moq);
+    poRefData.push({
+      id:'PRP'+(i+1), data_date:'2026-10-25',
+      part_code:m.material_code, part_name:m.material_name, base:fcb(m.material_code),
+      ref_vehicle:veh[i % veh.length], ref_part_code:refM.material_code,
+      forecast_qty:forecast, expected_stock:stock, net_demand:net, mpq, moq,
+      plan_qty:plan, adjust_qty:plan, adjust_reason:'',
+      bill_status:poRegStatuses[i % 4], approver:'', approve_time:'—',
+      planner:pick(fcPlanners), project:veh[i % veh.length] + ' 新车型首储',
+      update_time:'2026-10-25 11:' + String(8 + i % 45).padStart(2,'0'),
+    });
+  }
+})();
 
 // 停产最后采购量
 const poEopData = Vue.reactive([]);
@@ -3514,7 +4731,7 @@ for(let i=0;i<14;i++){
 }
 
 const partGroupDef = {
-  detailTitle:'配件组', idField:'id', scrollX:1200, isExtension:false,
+  detailTitle:'配件组', idField:'id', scrollX:1300, isExtension:false,
   filters:[
     { key:'code', label:'分组编码', type:'input', field:'group_code', placeholder:'分组编码' },
     { key:'name', label:'分组名称', type:'input', field:'group_name', placeholder:'分组名称' },
@@ -3530,7 +4747,7 @@ const partGroupDef = {
     { title:'配件数', key:'part_count', dataIndex:'part_count', width:90, sorter:(a,b)=>a.part_count-b.part_count },
     { title:'最后更新人', key:'updater', dataIndex:'updater', width:100 },
     { title:'更新时间', key:'update_time', dataIndex:'update_time', width:150, sorter:(a,b)=>a.update_time.localeCompare(b.update_time) },
-    { title:'操作', key:'action', width:80, fixed:'right' },
+    { title:'操作', key:'action', width:150, fixed:'right' },
   ],
   data: partGroupData,
 };
@@ -3589,7 +4806,8 @@ const app = createApp({
     const openGroups = reactive({ base:true, strategy:true, draft:false, report:false });
     const VALID_KEYS = ['strategy-purchase','strategy-service','strategy-stocking','strategy-transfer','strategy-increase','strategy-cycle','strategy-risk','strategy-riskRule','strategy-result','mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier','plan-hier-2','plan-hier-3','gp-params','svc-dash',
       'fc-new','fc-new-draft','fc-long','fc-long-draft','fc-buyout','fc-buyout-draft','fc-regular','fc-regular-draft','fc-wh-regular','fc-best','fc-backtest','fc-backtest-draft',
-      'part-group','po-regular','po-eop','po-approval','po-issue'];
+      'part-group','po-regular','po-eop','po-approval','po-issue','sto-week','sto-next',
+      'po-atb','po-bridge','po-ref','po-roll'];
     function keyFromHash(){
       const h = (window.location.hash||'').replace(/^#/,'').trim();
       if(h==='strategy-stocking')return 'wh-abc';
@@ -3614,7 +4832,7 @@ const app = createApp({
       { type:'item', key:'plan-hier-3', parent:'base', title:'计划层级管理', icon:'🗂' },
       { type:'item', key:'gp-params', parent:'base', title:'全局参数', icon:'⚙' },
       { type:'group', key:'fc', title:'需求预测' },
-      { type:'item', key:'fc-new', parent:'fc', title:'全新车型配件预测', icon:'🚗' },
+      { type:'item', key:'fc-new', parent:'fc', title:'参考零件需求预测', icon:'🚗' },
       { type:'item', key:'fc-long', parent:'fc', title:'长周期预测报表', icon:'📈' },
       { type:'item', key:'fc-buyout', parent:'fc', title:'一次买断预测结果', icon:'🛒' },
       { type:'item', key:'fc-regular', parent:'fc', title:'常规预测', icon:'📊' },
@@ -3632,9 +4850,12 @@ const app = createApp({
       {type:'item',key:'strategy-result',parent:'strategy',title:'建储水位线计算结果',icon:'▦'},
       { type:'group', key:'po', title:'采购计划' },
       { type:'item', key:'po-regular', parent:'po', title:'常规采购计划', icon:'📋' },
-      { type:'item', key:'po-eop', parent:'po', title:'停产最后采购量', icon:'🔚' },
-      { type:'item', key:'po-approval', parent:'po', title:'采购计划审批', icon:'✅' },
-      { type:'item', key:'po-issue', parent:'po', title:'采购订单下达', icon:'📤' },
+      { type:'item', key:'sto-week', parent:'po', title:'本周调拨计划', icon:'🚚' },
+      { type:'item', key:'sto-next', parent:'po', title:'下周调拨计划', icon:'🗓' },
+      { type:'item', key:'po-atb', parent:'po', title:'All Time Buy 计划', icon:'🧾' },
+      { type:'item', key:'po-bridge', parent:'po', title:'Bridge Buy 计划', icon:'🌉' },
+      { type:'item', key:'po-ref', parent:'po', title:'参考零件采购计划', icon:'🆕' },
+      { type:'item', key:'po-roll', parent:'po', title:'给供应商的滚动计划', icon:'📨' },
       { type:'group', key:'report', title:'报表' },
       { type:'item', key:'svc-dash', parent:'report', title:'服务水平dashboard', icon:'📊' },
       { type:'group', key:'draft', title:'草稿' },
@@ -3642,9 +4863,12 @@ const app = createApp({
       { type:'item', key:'plan-hier-2', parent:'draft', title:'计划层级管理2', icon:'📋' },
       { type:'item', key:'fc-long-draft', parent:'draft', title:'长周期预测报表(草稿)', icon:'📈' },
       { type:'item', key:'fc-buyout-draft', parent:'draft', title:'一次买断预测结果(草稿)', icon:'🛒' },
-      { type:'item', key:'fc-new-draft', parent:'draft', title:'全新车型配件预测(草稿)', icon:'🚗' },
+      { type:'item', key:'fc-new-draft', parent:'draft', title:'参考零件需求预测(草稿)', icon:'🚗' },
       { type:'item', key:'fc-backtest-draft', parent:'draft', title:'预测模拟(草稿)', icon:'🧪' },
       { type:'item', key:'fc-regular-draft', parent:'draft', title:'常规预测(草稿)', icon:'📊' },
+      { type:'item', key:'po-eop', parent:'draft', title:'停产最后采购量', icon:'🔚' },
+      { type:'item', key:'po-approval', parent:'draft', title:'采购计划审批', icon:'✅' },
+      { type:'item', key:'po-issue', parent:'draft', title:'采购订单下达', icon:'📤' },
     ];
     /* 注意：genericKeys 每增一个 key，必须同步在 pageDefs 中提供定义，否则 setup 初始化 genFilters 时会抛错导致白屏 */
     const genericKeys = ['mat-master','mat-ext','wh-master','dealer-ext','supplier','supplier-ext','part-supplier','replace','fc-long','fc-long-draft','fc-buyout','fc-buyout-draft','fc-regular','fc-regular-draft','fc-wh-regular','fc-best',
@@ -4041,6 +5265,485 @@ const app = createApp({
     const dealerVisibleColumns = computed(()=> dealerColumns.filter(c=>!dealerHiddenCols.value.includes(c.key)));
     const dealerPaged = computed(()=>{ const s=(dealerPage.current-1)*dealerPage.size; return dealerFiltered.value.slice(s, s+dealerPage.size); });
 
+    /* ================= 常规采购计划（PRD 第 4 章，含页签 / 工具栏 / 审批驳回 / 导出） ================= */
+    const poRegTabs = [
+      { key:'全部', label:'全部' }, { key:'待提交', label:'待提交' }, { key:'待审批', label:'待审批' },
+      { key:'已驳回', label:'已驳回' }, { key:'审批通过', label:'审批通过' },
+    ];
+    const poRegTab = ref('待提交');
+    const poRegColumns = [
+      { title:'数据生成日期', key:'data_date', dataIndex:'data_date', width:100 },
+      { title:'计划类型', key:'plan_type', dataIndex:'plan_type', width:112, sorter:(a,b)=>a.plan_type.localeCompare(b.plan_type) },
+      { title:'配件号', key:'part_code', dataIndex:'part_code', width:108, sorter:(a,b)=>a.part_code.localeCompare(b.part_code) },
+      { title:'配件名称', key:'part_name', dataIndex:'part_name', width:132, ellipsis:true },
+      { title:'当前采购件号', key:'cur_purchase_code', dataIndex:'cur_purchase_code', width:112 },
+      { title:'当前采购配件名称', key:'cur_purchase_name', dataIndex:'cur_purchase_name', width:132, ellipsis:true },
+      { title:'是否出计划日', key:'is_plan_day', dataIndex:'is_plan_day', width:100 },
+      { title:'建储仓库编码', key:'wh_code', dataIndex:'wh_code', width:98 },
+      { title:'建储仓库名称', key:'wh_name', dataIndex:'wh_name', width:112, ellipsis:true },
+      { title:'ABC分类', key:'abc_class', dataIndex:'abc_class', width:70 },
+      { title:'车型代码', key:'vehicle_code', dataIndex:'vehicle_code', width:88 },
+      { title:'计划员', key:'planner', dataIndex:'planner', width:68 },
+      { title:'采购类别', key:'purchase_type', dataIndex:'purchase_type', width:76 },
+      { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:88 },
+      { title:'计划行', key:'plan_line', dataIndex:'plan_line', width:104 },
+      { title:'计划周期', key:'plan_cycle', dataIndex:'plan_cycle', width:74, sorter:(a,b)=>a.plan_cycle-b.plan_cycle },
+      { title:'目标库存', key:'target_stock', dataIndex:'target_stock', width:78, sorter:(a,b)=>a.target_stock-b.target_stock },
+      { title:'最低风控线', key:'safety_stock', dataIndex:'safety_stock', width:86, sorter:(a,b)=>a.safety_stock-b.safety_stock },
+      { title:'预期库存数量', key:'expected_stock', dataIndex:'expected_stock', width:92, sorter:(a,b)=>a.expected_stock-b.expected_stock },
+      { title:'可用库存数量', key:'available_qty', dataIndex:'available_qty', width:92 },
+      { title:'欠交数量', key:'open_po_qty', dataIndex:'open_po_qty', width:80 },
+      { title:'库间在途数量', key:'in_transit_qty', dataIndex:'in_transit_qty', width:94 },
+      { title:'缺货数量', key:'bo_qty', dataIndex:'bo_qty', width:78 },
+      { title:'近 3 个月月均销量', key:'avg_3m_sales', dataIndex:'avg_3m_sales', width:110, ellipsis:true },
+      { title:'当前可用天数', key:'cover_days', dataIndex:'cover_days', width:92, sorter:(a,b)=>a.cover_days-b.cover_days },
+      { title:'推荐计划数量(取整前)', key:'suggest_raw_qty', dataIndex:'suggest_raw_qty', width:118, ellipsis:true },
+      { title:'起订量', key:'moq', dataIndex:'moq', width:66 },
+      { title:'推荐计划数量(凑MOQ后)', key:'suggest_moq_qty', dataIndex:'suggest_moq_qty', width:122, ellipsis:true },
+      { title:'联合MOQ分组', key:'moq_group', dataIndex:'moq_group', width:100 },
+      { title:'联合MOQ数量', key:'joint_moq_qty', dataIndex:'joint_moq_qty', width:100 },
+      { title:'采购LT', key:'purchase_lt', dataIndex:'purchase_lt', width:66 },
+      { title:'最大备货月数', key:'max_stock_months', dataIndex:'max_stock_months', width:100 },
+      { title:'单品最大上限', key:'single_max_limit', dataIndex:'single_max_limit', width:88 },
+      { title:'是否凑MOQ', key:'is_joint_moq', dataIndex:'is_joint_moq', width:82 },
+      { title:'最大可凑量', key:'max_joint_qty', dataIndex:'max_joint_qty', width:90 },
+      { title:'凑MOQ量', key:'joint_fill_qty', dataIndex:'joint_fill_qty', width:76 },
+      { title:'推荐计划数量(凑联合MOQ后)', key:'suggest_joint_qty', dataIndex:'suggest_joint_qty', width:134, ellipsis:true },
+      { title:'成套采购分组', key:'set_group', dataIndex:'set_group', width:94 },
+      { title:'凑成套采购量', key:'set_fill_qty', dataIndex:'set_fill_qty', width:90 },
+      { title:'推荐计划数量(凑成套采购后)', key:'suggest_set_qty', dataIndex:'suggest_set_qty', width:134, ellipsis:true },
+      { title:'最小包装量', key:'mpq', dataIndex:'mpq', width:82 },
+      { title:'推荐计划数量(凑MPQ后)', key:'suggest_mpq_qty', dataIndex:'suggest_mpq_qty', width:122, ellipsis:true },
+      { title:'推荐计划数量', key:'suggest_qty', dataIndex:'suggest_qty', width:100, sorter:(a,b)=>a.suggest_qty-b.suggest_qty },
+      { title:'是否计划拦截', key:'is_blocked', dataIndex:'is_blocked', width:86 },
+      { title:'拦截原因', key:'block_reason', dataIndex:'block_reason', width:110, ellipsis:true },
+      { title:'调整计划数量', key:'adjust_qty', dataIndex:'adjust_qty', width:90, sorter:(a,b)=>a.adjust_qty-b.adjust_qty },
+      { title:'调整原因', key:'adjust_reason', dataIndex:'adjust_reason', width:108, ellipsis:true },
+      { title:'要求到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:104 },
+      { title:'单据状态', key:'bill_status', dataIndex:'bill_status', width:84 },
+      { title:'审批意见', key:'approve_remark', dataIndex:'approve_remark', width:100, ellipsis:true },
+      { title:'更新时间', key:'update_time', dataIndex:'update_time', width:138 },
+      { title:'修改人名称', key:'modifier', dataIndex:'modifier', width:88 },
+      { title:'审批人名称', key:'approver', dataIndex:'approver', width:88 },
+      { title:'审批时间', key:'approve_time', dataIndex:'approve_time', width:138 },
+      { title:'操作', key:'action', width:96, fixed:'right' },
+    ];
+    const poRegDefaultVisible = ['data_date','plan_type','part_code','part_name','cur_purchase_code','wh_code','wh_name','target_stock','safety_stock','expected_stock','cover_days','suggest_qty','adjust_qty','required_arrival_date','moq_group','bill_status','action'];
+    const poRegHiddenCols = ref([]);
+    const poRegVisibleColumns = computed(()=> poRegColumns.filter(c=>!poRegHiddenCols.value.includes(c.key)));
+    const poRegScrollX = poRegColumns.reduce((s,c)=>s+(c.width||100),0);
+    function poRegToggleCol(k){ const i=poRegHiddenCols.value.indexOf(k); if(i>=0) poRegHiddenCols.value.splice(i,1); else poRegHiddenCols.value.push(k); }
+    const poRegFilters = reactive({ part_code:'', part_name:'', cur_purchase_code:'', wh_code:'', wh_name:'', plan_type:undefined, abc_class:undefined, vehicle_code:'', purchase_type:undefined, planner:undefined, bill_status:undefined, plan_batch:'', cover_days:'' });
+    const poRegApplied = reactive({ part_code:'', part_name:'', cur_purchase_code:'', wh_code:'', wh_name:'', plan_type:undefined, abc_class:undefined, vehicle_code:'', purchase_type:undefined, planner:undefined, bill_status:undefined, plan_batch:'', cover_days:'' });
+    const poRegFilterExpanded = ref(false);
+    const poRegFav = ref(false);
+    const poRegPage = reactive({ current:1, size:15 });
+    const poRegSelectedKeys = ref([]);
+    function poRegResetFilters(){
+      Object.keys(poRegFilters).forEach(k=>{ poRegFilters[k] = (typeof poRegFilters[k]==='string') ? '' : undefined; });
+      Object.assign(poRegApplied, poRegFilters); poRegPage.current = 1; msg('筛选条件已重置');
+    }
+    function poRegDoSearch(){ Object.assign(poRegApplied, poRegFilters); poRegPage.current=1; poRegSelectedKeys.value=[]; msg('查询完成，共命中 '+poRegFiltered.value.length+' 条记录','success'); }
+    function poRegToggleFav(){ poRegFav.value=!poRegFav.value; msg(poRegFav.value?'已收藏本页':'已取消收藏','success'); }
+    const poRegQueryFiltered = computed(()=> poRegularData.filter(r=>{
+      if(poRegApplied.part_code && !r.part_code.toLowerCase().includes(poRegApplied.part_code.toLowerCase())) return false;
+      if(poRegApplied.part_name && !r.part_name.includes(poRegApplied.part_name)) return false;
+      if(poRegApplied.cur_purchase_code && !r.cur_purchase_code.toLowerCase().includes(poRegApplied.cur_purchase_code.toLowerCase())) return false;
+      if(poRegApplied.wh_code && !r.wh_code.toLowerCase().includes(poRegApplied.wh_code.toLowerCase())) return false;
+      if(poRegApplied.wh_name && !r.wh_name.includes(poRegApplied.wh_name)) return false;
+      if(poRegApplied.plan_type && r.plan_type!==poRegApplied.plan_type) return false;
+      if(poRegApplied.vehicle_code && !r.vehicle_code.toLowerCase().includes(poRegApplied.vehicle_code.toLowerCase())) return false;
+      if(poRegApplied.abc_class && r.abc_class!==poRegApplied.abc_class) return false;
+      if(poRegApplied.purchase_type && r.purchase_type!==poRegApplied.purchase_type) return false;
+      if(poRegApplied.planner && r.planner!==poRegApplied.planner) return false;
+      if(poRegApplied.bill_status && r.bill_status!==poRegApplied.bill_status) return false;
+      if(poRegApplied.plan_batch && !r.plan_batch.toLowerCase().includes(poRegApplied.plan_batch.toLowerCase())) return false;
+      if(poRegApplied.cover_days && String(r.cover_days)!==String(poRegApplied.cover_days)) return false;
+      return true;
+    }));
+    const poRegPlanTypeRank = t => t==='紧急采购计划' ? 0 : t==='常规采购计划' ? 1 : 2;
+    const poRegSorted = computed(()=>{
+      const arr = poRegQueryFiltered.value.slice();
+      arr.sort((a,b)=>{ const r = poRegPlanTypeRank(a.plan_type)-poRegPlanTypeRank(b.plan_type); return r!==0 ? r : (a.cover_days||0)-(b.cover_days||0); });
+      return arr;
+    });
+    const poRegFiltered = computed(()=> poRegTab.value==='全部' ? poRegSorted.value : poRegSorted.value.filter(r=>r.bill_status===poRegTab.value));
+    function poRegTabCount(key){ return key==='全部' ? poRegSorted.value.length : poRegSorted.value.filter(r=>r.bill_status===key).length; }
+    const poRegPaged = computed(()=>{ const s=(poRegPage.current-1)*poRegPage.size; return poRegFiltered.value.slice(s, s+poRegPage.size); });
+    const poRegSelected = computed(()=> poRegularData.filter(r=>poRegSelectedKeys.value.includes(r.id)));
+    const poRegCanSubmit = computed(()=> poRegTab.value==='待提交' && poRegSelected.value.length>0 && poRegSelected.value.every(r=>r.bill_status==='待提交'));
+    const poRegCanWithdraw = computed(()=> poRegTab.value==='待审批' && poRegSelected.value.length>0 && poRegSelected.value.every(r=>r.bill_status==='待审批'));
+    const poRegCanApprove = computed(()=> poRegTab.value==='待审批' && poRegSelected.value.length>0 && poRegSelected.value.every(r=>r.bill_status==='待审批'));
+    const poRegCanReject = computed(()=> poRegTab.value==='待审批' && poRegSelected.value.length>0 && poRegSelected.value.every(r=>r.bill_status==='待审批'));
+    const poRegRowSelection = computed(()=>({ selectedRowKeys: poRegSelectedKeys.value, onChange:(keys)=>{ poRegSelectedKeys.value = keys; } }));
+    function poRegCustomRow(){ return {}; }
+    function poRegBillColor(s){ return s==='待审批'?'orange':s==='已驳回'?'red':s==='审批通过'?'green':'default'; }
+    watch(poRegTab, ()=>{ poRegSelectedKeys.value=[]; poRegPage.current=1; });
+    // 动作：提交 / 撤回 / 审批通过 / 驳回
+    function poRegFirstMismatch(rows, expect){
+      const bad = rows.find(r=>r.bill_status!==expect);
+      return bad ? (bad.part_code + ' / ' + bad.wh_code) : '';
+    }
+    function poRegSubmit(){
+      if(!poRegCanSubmit.value) return;
+      poRegSelected.value.forEach(r=>{ r.bill_status='待审批'; r.update_time = new Date().toISOString().slice(0,16).replace('T',' '); });
+      msg('已提交 '+poRegSelected.value.length+' 行至待审批','success'); poRegSelectedKeys.value=[];
+    }
+    function poRegWithdraw(){
+      if(!poRegCanWithdraw.value) return;
+      poRegSelected.value.forEach(r=>{ r.bill_status='待提交'; r.update_time = new Date().toISOString().slice(0,16).replace('T',' '); });
+      msg('已撤回 '+poRegSelected.value.length+' 行至待提交','success'); poRegSelectedKeys.value=[];
+    }
+    const poRegApproveOpen = ref(false); const poRegApproveRemark = ref('审批通过'); const poRegApproveErr = ref('');
+    const poRegRejectOpen = ref(false); const poRegRejectRemark = ref(''); const poRegRejectErr = ref('');
+    function poRegApproveConfirm(){
+      if(!poRegApproveRemark.value || !poRegApproveRemark.value.trim()){ poRegApproveErr.value='请填写审批意见'; return; }
+      const now = new Date().toISOString().slice(0,16).replace('T',' ');
+      poRegSelected.value.forEach(r=>{
+        r.bill_status='审批通过'; r.approve_remark=poRegApproveRemark.value; r.approver='当前审批人'; r.approve_time=now;
+        if(r.adjust_qty>0){ const g=poRegGenBatch(); const b=g.batch(r.plan_cycle, r.plan_type==='紧急采购计划'); r.plan_batch=b; r.plan_line=b+String(1+Math.floor(rnd()*99999)).padStart(5,'0'); }
+        r.push_status = r.push_status==='—' ? '待推送' : r.push_status;
+        r.update_time = now;
+      });
+      msg('已审批通过 '+poRegSelected.value.length+' 行','success'); poRegApproveOpen.value=false; poRegApproveRemark.value='审批通过'; poRegApproveErr.value=''; poRegSelectedKeys.value=[];
+    }
+    function poRegRejectConfirm(){
+      if(!poRegRejectRemark.value || !poRegRejectRemark.value.trim()){ poRegRejectErr.value='请填写驳回意见'; return; }
+      const now = new Date().toISOString().slice(0,16).replace('T',' ');
+      poRegSelected.value.forEach(r=>{ r.bill_status='已驳回'; r.approve_remark=poRegRejectRemark.value; r.approver='当前审批人'; r.approve_time=now; r.plan_batch='—'; r.plan_line='—'; r.update_time=now; });
+      msg('已驳回 '+poRegSelected.value.length+' 行','success'); poRegRejectOpen.value=false; poRegRejectRemark.value=''; poRegRejectErr.value=''; poRegSelectedKeys.value=[];
+    }
+    // 编辑 / 调整弹窗
+    const poRegEditOpen = ref(false); const poRegEditRow = ref(null); const poRegEditTarget = ref(null);
+    const poRegEditErr = reactive({ adjustQty:'', adjustReason:'' });
+    const poRegEditErrList = computed(()=> Object.values(poRegEditErr).filter(Boolean));
+    function poRegOpenEdit(r){
+      poRegEditTarget.value = r;
+      poRegEditRow.value = reactive(Object.assign({}, r, { _req_date:r.required_arrival_date }));
+      poRegEditErr.adjustQty=''; poRegEditErr.adjustReason=''; poRegEditOpen.value=true;
+    }
+    function poRegSaveEdit(){
+      const row = poRegEditRow.value; if(!row) return;
+      let ok = true;
+      if(row.adjust_qty===null || row.adjust_qty===undefined || row.adjust_qty < 0 || !Number.isInteger(row.adjust_qty)){ poRegEditErr.adjustQty='调整计划数量必须为非负整数'; ok=false; } else poRegEditErr.adjustQty='';
+      if(row.adjust_qty!==row.suggest_qty && (!row.adjust_reason || !row.adjust_reason.trim())){ poRegEditErr.adjustReason='调整数量与推荐不一致时，调整原因必填'; ok=false; } else poRegEditErr.adjustReason='';
+      const today = new Date().toISOString().slice(0,10);
+      if(row.plan_type==='紧急采购计划'){
+        if(!row._req_date || row._req_date <= today){ poRegEditErr.adjustReason = poRegEditErr.adjustReason ? poRegEditErr.adjustReason+'；' : ''; poRegEditErr.adjustReason += '紧急采购计划要求到货日期须晚于当前日期'; ok=false; }
+      }
+      if(!ok){ msg('请修正表单中的错误项','error'); return; }
+      if(poRegEditTarget.value){ Object.assign(poRegEditTarget.value, { adjust_qty:row.adjust_qty, adjust_reason:row.adjust_reason, required_arrival_date:row._req_date, modifier:'当前用户', update_time:new Date().toISOString().slice(0,16).replace('T',' ') }); }
+      poRegEditOpen.value=false; msg('调整已保存','success');
+    }
+    // 详情
+    const poRegDetailOpen = ref(false); const poRegDetailRow = ref(null);
+    function poRegOpenDetail(r){ poRegDetailRow.value=r; poRegDetailOpen.value=true; }
+    // 导入
+    const poRegImportOpen = ref(false);
+    function poRegDoImport(){ poRegImportOpen.value=false; msg('导入任务已提交（设计稿示意）','success'); }
+    // 导出
+    const poRegExportOpen = ref(false); const poRegExportMode = ref('template'); const poRegExportFields = ref(poRegDefaultVisible.filter(k=>k!=='action'));
+    function poRegToggleExportField(k){ const i=poRegExportFields.value.indexOf(k); if(i>=0) poRegExportFields.value.splice(i,1); else poRegExportFields.value.push(k); }
+    function poRegExportColumns(){ return poRegExportMode.value==='template' ? poRegColumns.filter(c=>poRegDefaultVisible.includes(c.key)) : poRegColumns.filter(c=>poRegExportFields.value.includes(c.key)); }
+    function poRegCsv(rows){
+      const cols = poRegExportColumns();
+      const header = cols.map(c=>c.title);
+      const lines = [header.join(',')].concat(rows.map(r=> cols.map(c=>{ const v=r[c.dataIndex]; return (v===null||v===undefined)?'':String(v); }).join(',')));
+      const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
+      const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='JLRS_常规采购计划_'+new Date().toISOString().slice(0,10)+'.csv'; a.click(); URL.revokeObjectURL(a.href);
+      msg('导出成功，共 '+rows.length+' 条（CSV 已下载）','success');
+    }
+    function poRegExportCsv(all){ if(all){ poRegCsv(poRegularData.slice()); } else { poRegExportOpen.value=true; } }
+    const poRegExportSource = computed(()=> poRegFiltered.value);
+    function poRegDoExport(){ poRegCsv(poRegExportSource.value.slice()); poRegExportOpen.value=false; }
+    function poRegPush(){
+      const targets = (poRegSelected.value.length? poRegSelected.value : poRegFiltered.value).filter(r=>r.bill_status==='审批通过');
+      if(!targets.length){ msg('没有可推送的审批通过单据','error'); return; }
+      targets.forEach(r=>{ r.push_status='已推送'; });
+      msg('已推送 '+targets.length+' 条至 IPOS（设计稿示意）','success');
+    }
+    function poRegMoreMenu({ key }){
+      if(key==='exp') poRegExportCsv(false);
+      else if(key==='expAll') poRegExportCsv(true);
+      else if(key==='push') poRegPush();
+    }
+
+    /* ---- 5. 调拨计划（STO）：本周调拨计划（执行）/ 下周调拨计划（预排）---- */
+    const stoIsWeek = computed(()=> activeMenu.value==='sto-week');
+    const stoTitle = computed(()=> stoIsWeek.value ? '本周调拨计划' : '下周调拨计划');
+    // 计划类型枚举：本周＝紧急/常规调拨计划；下周＝仅「下周预计调拨计划」
+    const stoPlanTypeOptions = computed(()=> stoIsWeek.value ? ['紧急调拨计划','常规调拨计划'] : ['下周预计调拨计划']);
+    /* 29 个字段（PRD 5.4.4.1 计划结果表输出字段，最新）；计划批次/计划行提至第2、3列；默认全量展示，列设置可隐藏 */
+    const stoColumns = [
+      { title:'数据生成日期', key:'data_gen_date', dataIndex:'data_gen_date', width:106 },
+      { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:96 },
+      { title:'计划行', key:'plan_line', dataIndex:'plan_line', width:92 },
+      { title:'计划类型', key:'plan_type', dataIndex:'plan_type', width:108 },
+      { title:'配件号', key:'part_code', dataIndex:'part_code', width:128 },
+      { title:'配件名称', key:'part_name', dataIndex:'part_name', width:180, ellipsis:true },
+      { title:'发货仓', key:'from_wh', dataIndex:'from_wh', width:140 },
+      { title:'收货仓', key:'to_wh', dataIndex:'to_wh', width:140 },
+      { title:'收货仓最低风控线', key:'safety_stock', dataIndex:'safety_stock', width:128, sorter:(a,b)=>a.safety_stock-b.safety_stock },
+      { title:'收货仓目标库存', key:'target_stock', dataIndex:'target_stock', width:124, sorter:(a,b)=>a.target_stock-b.target_stock },
+      { title:'是否出计划日', key:'is_plan_day', dataIndex:'is_plan_day', width:104 },
+      { title:'ABC分类', key:'abc_class', dataIndex:'abc_class', width:80 },
+      { title:'车型代码', key:'vehicle_code', dataIndex:'vehicle_code', width:100 },
+      { title:'计划员', key:'planner', dataIndex:'planner', width:80 },
+      { title:'预期库存', key:'expected_stock', dataIndex:'expected_stock', width:92, sorter:(a,b)=>a.expected_stock-b.expected_stock },
+      { title:'可用库存数量', key:'avail_qty', dataIndex:'avail_qty', width:104, sorter:(a,b)=>a.avail_qty-b.avail_qty },
+      { title:'欠交数量', key:'owed_qty', dataIndex:'owed_qty', width:84, sorter:(a,b)=>a.owed_qty-b.owed_qty },
+      { title:'库间在途数量', key:'transit_qty', dataIndex:'transit_qty', width:108, sorter:(a,b)=>a.transit_qty-b.transit_qty },
+      { title:'缺货数量', key:'shortage_qty', dataIndex:'shortage_qty', width:88, sorter:(a,b)=>a.shortage_qty-b.shortage_qty },
+      { title:'近3个月月均销量', key:'avg3m_qty', dataIndex:'avg3m_qty', width:128, sorter:(a,b)=>a.avg3m_qty-b.avg3m_qty },
+      { title:'当前可用天数', key:'avail_days', dataIndex:'avail_days', width:106, sorter:(a,b)=>a.avail_days-b.avail_days },
+      { title:'库间LT', key:'transfer_lt', dataIndex:'transfer_lt', width:84, sorter:(a,b)=>a.transfer_lt-b.transfer_lt },
+      { title:'要求到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:120 },
+      { title:'推荐计划数量(取整前)', key:'raw_qty', dataIndex:'raw_qty', width:148, sorter:(a,b)=>a.raw_qty-b.raw_qty },
+      { title:'推荐计划数量(分配后)', key:'alloc_qty', dataIndex:'alloc_qty', width:148, sorter:(a,b)=>a.alloc_qty-b.alloc_qty },
+      { title:'体积', key:'unit_volume', dataIndex:'unit_volume', width:76 },
+      { title:'体积单位', key:'volume_unit', dataIndex:'volume_unit', width:80 },
+      { title:'预计调拨体积', key:'est_volume', dataIndex:'est_volume', width:108, sorter:(a,b)=>a.est_volume-b.est_volume },
+      { title:'备注', key:'remark', dataIndex:'remark', width:150, ellipsis:true },
+      { title:'操作', key:'action', width:80, fixed:'right' },
+    ];
+    // 默认列：PRD 5.4.4.1 输出表 27 字段全量展示（列设置可自行隐藏）；操作列固定右侧
+    const stoDefaultVisible = stoColumns.map(c=>c.key);
+    const stoHiddenCols = ref(stoColumns.filter(c=>!stoDefaultVisible.includes(c.key)).map(c=>c.key));
+    const stoVisibleColumns = computed(()=> stoColumns.filter(c=>!stoHiddenCols.value.includes(c.key)));
+    const stoScrollX = computed(()=> stoVisibleColumns.value.reduce((s,c)=>s+(c.width||90),0));
+    function stoToggleCol(k){ const i=stoHiddenCols.value.indexOf(k); if(i>=0) stoHiddenCols.value.splice(i,1); else stoHiddenCols.value.push(k); }
+
+    const stoFilters = reactive({ part_code:'', part_name:'', plan_batch:'', from_wh:undefined, to_wh:undefined, network_id:undefined, plan_type:undefined, abc_class:undefined, planner:undefined, route_code:undefined });
+    const stoApplied = reactive({ part_code:'', part_name:'', plan_batch:'', from_wh:undefined, to_wh:undefined, network_id:undefined, plan_type:undefined, abc_class:undefined, planner:undefined, route_code:undefined });
+    const stoFilterExpanded = ref(false);
+    const stoFav = ref(false);
+    const stoPage = reactive({ current:1, size:15 });
+    function stoResetFilters(){
+      Object.keys(stoFilters).forEach(k=>{ stoFilters[k] = (typeof stoFilters[k]==='string') ? '' : undefined; });
+      Object.assign(stoApplied, stoFilters); stoPage.current = 1; msg('筛选条件已重置');
+    }
+    function stoDoSearch(){ Object.assign(stoApplied, stoFilters); stoPage.current=1; msg('查询完成，共命中 '+stoFiltered.value.length+' 条记录','success'); }
+    function stoToggleFav(){ stoFav.value=!stoFav.value; msg(stoFav.value?'已收藏本页':'已取消收藏','success'); }
+    // 本周 / 下周同源计算、仅时点不同：按 period 切分
+    const stoBaseRows = computed(()=> stoPlanData.filter(r=> r.period === (stoIsWeek.value ? 'week' : 'next')));
+    const stoFiltered = computed(()=> stoBaseRows.value.filter(r=>{
+      const f = stoApplied;
+      if(f.part_code && !r.part_code.toLowerCase().includes(f.part_code.toLowerCase())) return false;
+      if(f.part_name && !r.part_name.includes(f.part_name)) return false;
+      if(f.plan_batch && !r.plan_batch.toLowerCase().includes(f.plan_batch.toLowerCase())) return false;
+      if(f.from_wh && r.from_wh!==f.from_wh) return false;
+      if(f.to_wh && r.to_wh!==f.to_wh) return false;
+      if(f.network_id && r.network_id!==f.network_id) return false;
+      if(f.plan_type && r.plan_type!==f.plan_type) return false;
+      if(f.abc_class && r.abc_class!==f.abc_class) return false;
+      if(f.planner && r.planner!==f.planner) return false;
+      if(f.route_code && r.route_code!==f.route_code) return false;
+      return true;
+    }));
+    const stoPaged = computed(()=>{ const s=(stoPage.current-1)*stoPage.size; return stoFiltered.value.slice(s, s+stoPage.size); });
+    function stoCustomRow(){ return { style:{cursor:'default'} }; }
+
+    /* 详情：仅字段详情 + 备注编辑 */
+    const stoDetailOpen = ref(false);
+    const stoDetailRow = ref(null);
+    const stoDetailRemark = ref('');
+    function stoOpenDetail(r){ stoDetailRow.value = r; stoDetailRemark.value = (r && r.remark) || ''; stoDetailOpen.value = true; }
+    function stoSaveRemark(){ if(stoDetailRow.value){ stoDetailRow.value.remark = stoDetailRemark.value; msg('备注已保存','success'); } }
+
+    /* 导出 */
+    const stoExportOpen = ref(false);
+    const stoExportFields = ref(stoColumns.filter(c=>c.key!=='action').map(c=>c.key));
+    function stoToggleExportField(k){ const i=stoExportFields.value.indexOf(k); if(i>=0) stoExportFields.value.splice(i,1); else stoExportFields.value.push(k); }
+    function stoDoExport(){
+      const rows = stoFiltered.value;
+      const cols = stoColumns.filter(c=> stoExportFields.value.includes(c.key));
+      const header = cols.map(c=>c.title);
+      const lines = [header.join(',')].concat(rows.map(r=> cols.map(c=>{ const v=r[c.dataIndex]; return (v===null||v===undefined)?'':String(v).replace(/,/g,'，'); }).join(',')));
+      const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
+      const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='JLRS_'+stoTitle.value+'_'+new Date().toISOString().slice(0,10)+'.csv'; a.click(); URL.revokeObjectURL(a.href);
+      msg('导出成功，共 '+rows.length+' 条（CSV 已下载）','success');
+      stoExportOpen.value = false;
+    }
+
+    /* ===== 给供应商的滚动计划（PRD 4.4.3.2 支持供应商协同）=====
+       字段口径：数据日期 / 计划批次 / 计划行 / 配件号 / 配件名称 / 车型 / 计划数量（调整计划数量＝最终下单数量）/
+       采购LT / 月份列 M1~M6（增加采购LT之后的 6 个自然月，值＝该自然月的预测需求量）
+       协同：滚动计划同步到 SAP，同步状态 未同步 / 已同步SAP */
+    const rollDataDate = '2026-10-25';
+    /* 基准月：数据月（2026-10）次月起 6 个自然月（PRD：增加采购LT之后的未来 6 个月） */
+    const rollMonthLabels = (function(){
+      const out = []; let y = 2026, m = 11;
+      for(let i=0;i<6;i++){ out.push(y + '-' + pad2(m)); m++; if(m>12){ m = 1; y++; } }
+      return out;
+    })();
+    const rollBaseMonth = rollMonthLabels[0];
+    const rollSyncStatuses = ['未同步','已同步SAP'];
+    const rollMonthCols = Array.from({length:6}, function(_, i){
+      const k = 'm' + (i+1);
+      return { title:'M' + (i+1), key:k, dataIndex:k, width:74, align:'right',
+               sorter:function(a,b){ return (a[k]||0) - (b[k]||0); } };
+    });
+    const rollColumns = [
+      { title:'数据日期', key:'data_date', dataIndex:'data_date', width:104 },
+      { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:92 },
+      { title:'计划行', key:'plan_line', dataIndex:'plan_line', width:84 },
+      { title:'供应商编码', key:'supplier_code', dataIndex:'supplier_code', width:110 },
+      { title:'供应商名称', key:'supplier_name', dataIndex:'supplier_name', width:190, ellipsis:true },
+      { title:'配件号', key:'part_code', dataIndex:'part_code', width:120 },
+      { title:'配件名称', key:'part_name', dataIndex:'part_name', width:170, ellipsis:true },
+      { title:'车型', key:'vehicle_code', dataIndex:'vehicle_code', width:96 },
+      { title:'计划数量', key:'plan_qty', dataIndex:'plan_qty', width:92, sorter:(a,b)=>a.plan_qty-b.plan_qty },
+      { title:'采购LT(月)', key:'purchase_lt', dataIndex:'purchase_lt', width:104, sorter:(a,b)=>a.purchase_lt-b.purchase_lt },
+      { title:'预测起始月份', key:'start_month', dataIndex:'start_month', width:136 },
+    ].concat(rollMonthCols).concat([
+      { title:'未来6个月合计', key:'month_total', dataIndex:'month_total', width:126, sorter:(a,b)=>a.month_total-b.month_total },
+      { title:'同步状态', key:'sync_status', dataIndex:'sync_status', width:112 },
+      { title:'同步时间', key:'sync_time', dataIndex:'sync_time', width:146 },
+      { title:'操作', key:'action', width:118, fixed:'right' },
+    ]);
+    const rollScrollX = computed(()=> rollColumns.reduce((s,c)=> s + (c.width || 90), 0));
+
+    const rollPlanData = Vue.reactive([]);
+    (function buildRollPlan(){
+      const lineSeq = {};
+      for(let i=0;i<22;i++){
+        const m = matData[(i*5 + 3) % matData.length];
+        const s = supplierData[i % 8];
+        const lt = [2,3,4,6][i % 4];                       // 采购LT（月）
+        const batch = (i % 7 === 0) ? 'M2610' : 'W2643';   // 计划批次：与采购计划一致
+        lineSeq[batch] = (lineSeq[batch] || 0) + 1;
+        const months = [];
+        let total = 0;
+        const shape = 40 + ((i * 7) % 120);                // 该配件的月均需求基数
+        /* 预测起始月份 ＝ 数据月（2026-10）+ 采购LT；M1~M6 自该月起滚动 6 个自然月 */
+        let cursor = 2026 * 12 + 10 + lt;                  // 以「年*12+月」做游标，避免跨年判断
+        let sy = Math.floor((cursor - 1) / 12), sm = ((cursor - 1) % 12) + 1;
+        const startMonth = sy + '.' + pad2(sm);
+        let my = sy, mm2 = sm;
+        for(let k=0;k<6;k++){
+          const fct = Math.max(0, Math.round(shape * (0.82 + rnd()*0.45) * (1 + k*0.03)));
+          total += fct;
+          months.push({
+            short: my + '-' + pad2(mm2),
+            label: my + '年' + mm2 + '月1日',
+            fct: fct,
+          });
+          mm2++; if(mm2 > 12){ mm2 = 1; my++; }
+          cursor++;
+        }
+        const row = {
+          id: 'ROLL' + (i+1), data_date: rollDataDate, plan_batch: batch,
+          plan_line: String(lineSeq[batch]).padStart(6,'0'),
+          supplier_code: s.supplier_code, supplier_name: s.supplier_name,
+          part_code: m.material_code, part_name: m.material_name,
+          vehicle_code: poRegVehicleCodes[i % poRegVehicleCodes.length],
+          plan_qty: Math.max(1, Math.round(60 + rnd()*900)),
+          purchase_lt: lt, start_month: startMonth, month_total: total,
+          sync_status: rollSyncStatuses[i % 2],
+          sync_time: (i % 2 === 0) ? '—' : ('2026-10-' + pad2(20 + (i % 5)) + ' 09:' + pad2(10 + (i % 40))),
+          sync_by: (i % 2 === 0) ? '—' : '计划员 王磊',
+          remark: '', months: months,
+        };
+        months.forEach(function(mm, k){ row['m' + (k+1)] = mm.fct; });
+        rollPlanData.push(row);
+      }
+    })();
+
+    const rollFilters = reactive({ supplier_code:'', supplier_name:'', part_code:'', part_name:'', plan_batch:'', sync_status:undefined, vehicle_code:undefined, purchase_lt:undefined });
+    const rollApplied = reactive({ supplier_code:'', supplier_name:'', part_code:'', part_name:'', plan_batch:'', sync_status:undefined, vehicle_code:undefined, purchase_lt:undefined });
+    const rollFilterExpanded = ref(false);
+    const rollFav = ref(false);
+    const rollPage = reactive({ current:1, size:15 });
+    const rollTab = ref('all');
+    const rollTabs = [
+      { key:'all', label:'全部' },
+      { key:'未同步', label:'未同步' },
+      { key:'已同步SAP', label:'已同步SAP' },
+    ];
+    const rollSelKeys = ref([]);
+    function rollResetFilters(){
+      Object.keys(rollFilters).forEach(k=>{ rollFilters[k] = (typeof rollFilters[k]==='string') ? '' : undefined; });
+      Object.assign(rollApplied, rollFilters); rollPage.current = 1; msg('筛选条件已重置');
+    }
+    function rollDoSearch(){ Object.assign(rollApplied, rollFilters); rollPage.current = 1; msg('查询完成，共命中 ' + rollFiltered.value.length + ' 条记录','success'); }
+    const rollFiltered = computed(()=> rollPlanData.filter(function(r){
+      const f = rollApplied;
+      if(f.supplier_code && !r.supplier_code.toLowerCase().includes(f.supplier_code.toLowerCase())) return false;
+      if(f.supplier_name && !r.supplier_name.includes(f.supplier_name)) return false;
+      if(f.part_code && !String(r.part_code).toLowerCase().includes(f.part_code.toLowerCase())) return false;
+      if(f.part_name && !String(r.part_name).includes(f.part_name)) return false;
+      if(f.plan_batch && !r.plan_batch.toLowerCase().includes(f.plan_batch.toLowerCase())) return false;
+      if(f.sync_status && r.sync_status !== f.sync_status) return false;
+      if(f.vehicle_code && r.vehicle_code !== f.vehicle_code) return false;
+      if(f.purchase_lt && r.purchase_lt !== f.purchase_lt) return false;
+      return true;
+    }));
+    const rollRows = computed(()=> rollTab.value==='all' ? rollFiltered.value : rollFiltered.value.filter(r=> r.sync_status === rollTab.value));
+    const rollPaged = computed(()=>{ const s = (rollPage.current - 1) * rollPage.size; return rollRows.value.slice(s, s + rollPage.size); });
+    function rollTabCount(k){ return rollFiltered.value.filter(r=> r.sync_status === k).length; }
+    watch(rollTab, ()=>{ rollSelKeys.value = []; rollPage.current = 1; });
+    watch(activeMenu, ()=>{ rollTab.value = 'all'; rollSelKeys.value = []; rollPage.current = 1; });
+    function rollSyncColor(s){ return s === '已同步SAP' ? 'green' : 'default'; }
+
+    const rollRowSelection = computed(()=> ({ selectedRowKeys: rollSelKeys.value, onChange:function(k){ rollSelKeys.value = k; } }));
+    const rollSelRows = computed(()=> rollRows.value.filter(r=> rollSelKeys.value.includes(r.id)));
+    const rollCanSync = computed(()=> rollSelRows.value.length > 0);
+
+    /* 6 个月滚动明细列（详情弹窗）：仅月份 + 预测需求量 */
+    const rollMonthDetailCols = [
+      { title:'月份', key:'label', dataIndex:'label', width:150 },
+      { title:'预测需求量', key:'fct', dataIndex:'fct', width:140, align:'right' },
+    ];
+
+    /* 详情 */
+    const rollDetailOpen = ref(false);
+    const rollDetailRow = ref(null);
+    function rollOpenDetail(r){ rollDetailRow.value = r; rollDetailOpen.value = true; }
+
+    /* 同步到 SAP */
+    const rollPublishOpen = ref(false);
+    const rollPublishNote = ref('');
+    const rollPublishRows = ref([]);
+    const rollPublishSupplierCount = computed(()=> new Set(rollPublishRows.value.map(r=> r.supplier_code)).size);
+    /* 同步弹窗里的「预测起始月份」示例（取所选首行，各行按自身采购LT） */
+    const rollPublishStartSample = computed(()=> (rollPublishRows.value[0] && rollPublishRows.value[0].start_month) || '2026.12');
+    function rollOpenPublish(){
+      const picks = rollSelRows.value;
+      if(!picks.length){ msg('请先勾选需要同步到 SAP 的行','warning'); return; }
+      rollPublishRows.value = picks; rollPublishNote.value = ''; rollPublishOpen.value = true;
+    }
+    function rollDoPublish(){
+      const now = '2026-10-25 19:' + pad2(10 + (rollPublishRows.value.length % 45));
+      let n = 0;
+      rollPublishRows.value.forEach(function(r){
+        r.sync_status = '已同步SAP'; r.sync_time = now; r.sync_by = '计划员 王磊'; n++;
+      });
+      rollPublishOpen.value = false; rollSelKeys.value = [];
+      msg('已同步 ' + n + ' 行滚动计划到 SAP（涉及 ' + rollPublishSupplierCount.value + ' 家供应商）','success');
+    }
+    function rollPublishOne(r){
+      if(!r) return;
+      if(r.sync_status === '已同步SAP'){ msg('该行已同步 SAP，无需重复同步','warning'); return; }
+      r.sync_status = '已同步SAP'; r.sync_time = '2026-10-25 19:30'; r.sync_by = '计划员 王磊';
+      msg('已同步到 SAP：' + r.supplier_name + '（' + r.part_code + '）','success');
+    }
+
+    /* 导出 */
+    const rollExportOpen = ref(false);
+    const rollExportFields = ref(rollColumns.filter(c=>c.key!=='action').map(c=>c.key));
+    function rollToggleExportField(k){ const i = rollExportFields.value.indexOf(k); if(i>=0) rollExportFields.value.splice(i,1); else rollExportFields.value.push(k); }
+    function rollDoExport(){
+      const rows = rollRows.value;
+      const cols = rollColumns.filter(c=> rollExportFields.value.includes(c.key));
+      const header = cols.map(c=> c.exportTitle || c.title);
+      const lines = [header.join(',')].concat(rows.map(r=> cols.map(c=>{ const v = r[c.dataIndex]; return (v===null||v===undefined) ? '' : String(v).replace(/,/g,'，'); }).join(',')));
+      const blob = new Blob(['\uFEFF' + lines.join('\n')], {type:'text/csv;charset=utf-8'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = 'JLRS_给供应商的滚动计划_' + rollDataDate + '.csv'; a.click(); URL.revokeObjectURL(a.href);
+      msg('导出成功，共 ' + rows.length + ' 条（CSV 已下载）','success');
+      rollExportOpen.value = false;
+    }
+
     /* ---- 通用主数据页面引擎 ---- */
     const baseMenuKeys = ['wh-abc','dealer','mat-master','mat-ext','wh-master','dealer-ext','supplier','supplier-ext','part-supplier','replace'];
     const isBaseMenu = computed(()=> baseMenuKeys.includes(activeMenu.value));
@@ -4081,6 +5784,8 @@ const app = createApp({
     });
     function genCustomRow(record){ return { onClick:()=>openGenDetail(record), style:{cursor:'pointer'} }; }
     const genDetailOpen = ref(false);
+    // 详情统一用居中弹窗的页面（采购计划 + 配件组管理）；其余模块暂沿用抽屉，避免影响未要求的模块
+    const modalDetailKeys = ['part-group','po-regular','po-eop','po-approval','po-issue'];
     const genDetailRow = ref(null);
     function openGenDetail(r){ genDetailRow.value = r; genDetailOpen.value = true; }
     const genEditOpen = ref(false);
@@ -4204,22 +5909,314 @@ const app = createApp({
     const planPlannerModal = reactive({ open:false, mode:'add', form:{ code:'', name:'', groupCode:undefined, status:'启用' } });
     const planGroupModal = reactive({ open:false, mode:'add', form:{ code:'', name:'', description:'', status:'启用' } });
 
+    /* ===== 采购计划扩展页：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划 ===== */
+    const poPlanKeys = ['po-atb','po-bridge','po-ref'];
+    // 审批状态页签（与常规采购计划一致）：全部 / 待提交 / 待审批 / 已驳回 / 审批通过
+    const poPlanTabs = [
+      { key:'全部', label:'全部' }, { key:'待提交', label:'待提交' }, { key:'待审批', label:'待审批' },
+      { key:'已驳回', label:'已驳回' }, { key:'审批通过', label:'审批通过' },
+    ];
+    const poPlanTab = ref('全部');
+    const poPlanCfg = {
+      'po-atb': {
+        key:'po-atb', title:'All Time Buy 计划', data:poAtbData,
+        batch:true, fold:false, trend:true,
+        filters:[
+          { key:'part_code', label:'配件号', type:'input', w:140 },
+          { key:'part_name', label:'配件名称', type:'input', w:170 },
+          { key:'eop_flag', label:'停产标记', type:'select', w:110, options:['是','否'] },
+          { key:'planner', label:'计划员', type:'select', w:110, options:fcPlanners },
+          { key:'bill_status', label:'单据状态', type:'select', w:120, options:poRegStatuses },
+          { key:'approver', label:'审批人', type:'input', w:120 },
+        ],
+        columns:[
+          { title:'配件号', key:'part_code', dataIndex:'part_code', width:140 },
+          { title:'配件名称', key:'part_name', dataIndex:'part_name', width:210, ellipsis:true },
+          { title:'全国预期库存', key:'expected_stock', dataIndex:'expected_stock', width:120, sorter:(a,b)=>a.expected_stock-b.expected_stock },
+          { title:'全生命周期累计需求', key:'life_demand', dataIndex:'life_demand', width:152, sorter:(a,b)=>a.life_demand-b.life_demand },
+          { title:'净需求', key:'net_demand', dataIndex:'net_demand', width:96, sorter:(a,b)=>a.net_demand-b.net_demand },
+          { title:'MOQ', key:'moq', dataIndex:'moq', width:80 },
+          { title:'MPQ', key:'mpq', dataIndex:'mpq', width:80 },
+          { title:'采购计划数量', key:'plan_qty', dataIndex:'plan_qty', width:118, sorter:(a,b)=>a.plan_qty-b.plan_qty },
+          { title:'调整计划数量', key:'adjust_qty', dataIndex:'adjust_qty', width:118 },
+          { title:'调整原因', key:'adjust_reason', dataIndex:'adjust_reason', width:150, ellipsis:true },
+          { title:'停产标记', key:'eop_flag', dataIndex:'eop_flag', width:96 },
+          { title:'单据状态', key:'bill_status', dataIndex:'bill_status', width:100 },
+          { title:'审批意见', key:'approve_remark', dataIndex:'approve_remark', width:130, ellipsis:true },
+          { title:'审批人', key:'approver', dataIndex:'approver', width:100 },
+          { title:'审批时间', key:'approve_time', dataIndex:'approve_time', width:140 },
+          { title:'操作', key:'action', width:160, fixed:'right' },
+        ],
+      },
+      'po-bridge': {
+        key:'po-bridge', title:'Bridge Buy 计划', data:poBridgeData,
+        batch:false, fold:false, trend:true,
+        filters:[
+          { key:'part_code', label:'配件号', type:'input', w:140 },
+          { key:'part_name', label:'配件名称', type:'input', w:170 },
+          { key:'wh_code', label:'收货仓库', type:'select', w:130, options:['CJDC','SH01','BJ01','GZ01','CD01'] },
+          { key:'bill_status', label:'单据状态', type:'select', w:120, options:poRegStatuses },
+          { key:'planner', label:'计划员', type:'select', w:110, options:fcPlanners },
+        ],
+        columns:[
+          { title:'配件号', key:'part_code', dataIndex:'part_code', width:140 },
+          { title:'配件名称', key:'part_name', dataIndex:'part_name', width:200, ellipsis:true },
+          { title:'收货仓库', key:'wh_name', dataIndex:'wh_name', width:120 },
+          { title:'买断区间', key:'buyout_interval', dataIndex:'buyout_interval', width:120, sorter:(a,b)=>a.buyout_year-b.buyout_year },
+          { title:'区间预测需求量', key:'forecast_qty', dataIndex:'forecast_qty', width:140, sorter:(a,b)=>a.forecast_qty-b.forecast_qty },
+          { title:'属地预期库存', key:'expected_stock', dataIndex:'expected_stock', width:126 },
+          { title:'净需求', key:'net_demand', dataIndex:'net_demand', width:96, sorter:(a,b)=>a.net_demand-b.net_demand },
+          { title:'MOQ', key:'moq', dataIndex:'moq', width:80 },
+          { title:'MPQ', key:'mpq', dataIndex:'mpq', width:80 },
+          { title:'采购计划数量', key:'plan_qty', dataIndex:'plan_qty', width:118 },
+          { title:'调整计划数量', key:'adjust_qty', dataIndex:'adjust_qty', width:118 },
+          { title:'调整原因', key:'adjust_reason', dataIndex:'adjust_reason', width:150, ellipsis:true },
+          { title:'单据状态', key:'bill_status', dataIndex:'bill_status', width:100 },
+          { title:'审批人', key:'approver', dataIndex:'approver', width:100 },
+          { title:'操作', key:'action', width:160, fixed:'right' },
+        ],
+      },
+      'po-ref': {
+        key:'po-ref', title:'参考零件采购计划', data:poRefData,
+        batch:false, fold:false, trend:false,
+        filters:[
+          { key:'part_code', label:'新件配件号', type:'input', w:150 },
+          { key:'part_name', label:'配件名称', type:'input', w:170 },
+          { key:'ref_vehicle', label:'参考车型', type:'select', w:130, options:['L550','L460','L256','X260','E-PACE','DEFENDER'] },
+          { key:'ref_part_code', label:'参考配件号', type:'input', w:150 },
+          { key:'bill_status', label:'单据状态', type:'select', w:120, options:poRegStatuses },
+          { key:'planner', label:'计划员', type:'select', w:110, options:fcPlanners },
+        ],
+        columns:[
+          { title:'新件配件号', key:'part_code', dataIndex:'part_code', width:150 },
+          { title:'配件名称', key:'part_name', dataIndex:'part_name', width:210, ellipsis:true },
+          { title:'参考车型', key:'ref_vehicle', dataIndex:'ref_vehicle', width:110 },
+          { title:'参考配件号', key:'ref_part_code', dataIndex:'ref_part_code', width:150 },
+          { title:'预测需求量', key:'forecast_qty', dataIndex:'forecast_qty', width:110, sorter:(a,b)=>a.forecast_qty-b.forecast_qty },
+          { title:'全国预期库存', key:'expected_stock', dataIndex:'expected_stock', width:120 },
+          { title:'净需求', key:'net_demand', dataIndex:'net_demand', width:96, sorter:(a,b)=>a.net_demand-b.net_demand },
+          { title:'MOQ', key:'moq', dataIndex:'moq', width:80 },
+          { title:'MPQ', key:'mpq', dataIndex:'mpq', width:80 },
+          { title:'采购计划数量', key:'plan_qty', dataIndex:'plan_qty', width:118 },
+          { title:'调整计划数量', key:'adjust_qty', dataIndex:'adjust_qty', width:118 },
+          { title:'调整原因', key:'adjust_reason', dataIndex:'adjust_reason', width:150, ellipsis:true },
+          { title:'单据状态', key:'bill_status', dataIndex:'bill_status', width:100 },
+          { title:'审批人', key:'approver', dataIndex:'approver', width:100 },
+          { title:'操作', key:'action', width:140, fixed:'right' },
+        ],
+      },
+    };
+    const poPlanFilters = reactive({});
+    const poPlanApplied = reactive({});
+    poPlanKeys.forEach(function(k){
+      const f = {}, a = {};
+      poPlanCfg[k].filters.forEach(function(fl){ const d = fl.type==='select' ? undefined : ''; f[fl.key] = d; a[fl.key] = d; });
+      poPlanFilters[k] = f; poPlanApplied[k] = a;
+    });
+    const poPlanPage = computed(()=> poPlanCfg[activeMenu.value] || poPlanCfg['po-atb']);
+    const poPlanFiltersCur = computed(()=> poPlanFilters[activeMenu.value] || {});
+    const poPlanPageCur = reactive({ current:1, size:15 });
+    const poPlanSelKeys = ref([]);
+    const poPlanFav = ref(false);
+    const poPlanScrollX = computed(()=> poPlanPage.value.columns.reduce((s,c)=> s + (c.width||100), 0));
+    const poPlanFiltered = computed(()=>{
+      const cfg = poPlanPage.value;
+      const f = poPlanApplied[activeMenu.value] || {};
+      return cfg.data.filter(function(r){
+        return cfg.filters.every(function(fl){
+          const v = f[fl.key];
+          if(v===undefined || v===null || v==='') return true;
+          const rv = r[fl.key];
+          if(rv===undefined || rv===null) return false;
+          return fl.type==='select' ? String(rv)===String(v) : String(rv).toLowerCase().indexOf(String(v).toLowerCase())>=0;
+        });
+      });
+    });
+    const poBridgeCollapsed = ref(false);
+    const poPlanRows = computed(()=> poPlanTab.value==='全部'
+      ? poPlanFiltered.value
+      : poPlanFiltered.value.filter(r=> r.bill_status===poPlanTab.value));
+    function poPlanTabCount(key){ return key==='全部' ? poPlanFiltered.value.length : poPlanFiltered.value.filter(r=> r.bill_status===key).length; }
+    const poPlanPaged = computed(()=>{ const s=(poPlanPageCur.current-1)*poPlanPageCur.size; return poPlanRows.value.slice(s, s+poPlanPageCur.size); });
+    const poPlanSelected = computed(()=> poPlanPage.value.data.filter(r=> poPlanSelKeys.value.includes(r.id)));
+    const poPlanCanSubmit = computed(()=> poPlanSelected.value.length>0 && poPlanSelected.value.every(r=> r.bill_status==='待提交'));
+    const poPlanCanWithdraw = computed(()=> poPlanSelected.value.length>0 && poPlanSelected.value.every(r=> r.bill_status==='待审批'));
+    const poPlanCanApprove = computed(()=> poPlanSelected.value.length>0 && poPlanSelected.value.every(r=> r.bill_status==='待审批'));
+    const poPlanCanReject = computed(()=> poPlanSelected.value.length>0 && poPlanSelected.value.every(r=> r.bill_status==='待审批'));
+    const poPlanRowSelection = computed(()=> ({ selectedRowKeys: poPlanSelKeys.value, onChange:(k)=>{ poPlanSelKeys.value = k; } }));
+    function poPlanCustomRow(){ return {}; }
+    function poPlanStatusColor(s){ return s==='待审批' ? 'orange' : s==='已驳回' ? 'red' : s==='审批通过' ? 'green' : 'default'; }
+    function poPlanCanEdit(r){ return r.bill_status==='待提交' || r.bill_status==='已驳回'; }
+    watch(activeMenu, ()=>{ poPlanSelKeys.value = []; poPlanPageCur.current = 1; poPlanTab.value = '全部'; });
+    watch(poPlanTab, ()=>{ poPlanSelKeys.value = []; poPlanPageCur.current = 1; });
+    function poPlanSearch(){
+      Object.assign(poPlanApplied[activeMenu.value], poPlanFiltersCur.value);
+      poPlanPageCur.current = 1;
+      msg('查询完成，共命中 ' + poPlanFiltered.value.length + ' 条记录', 'success');
+    }
+    function poPlanReset(){
+      const f = poPlanFilters[activeMenu.value], a = poPlanApplied[activeMenu.value];
+      poPlanPage.value.filters.forEach(function(fl){ const d = fl.type==='select' ? undefined : ''; f[fl.key] = d; a[fl.key] = d; });
+      poPlanPageCur.current = 1;
+      msg('筛选条件已重置');
+    }
+    function poPlanSubmit(){
+      if(!poPlanCanSubmit.value) return;
+      poPlanSelected.value.forEach(function(r){ r.bill_status='待审批'; r.update_time = polNow(); });
+      msg('已提交 ' + poPlanSelected.value.length + ' 行至待审批', 'success');
+      poPlanSelKeys.value = [];
+    }
+    function poPlanWithdraw(){
+      if(!poPlanCanWithdraw.value) return;
+      poPlanSelected.value.forEach(function(r){ r.bill_status='待提交'; r.update_time = polNow(); });
+      msg('已撤回 ' + poPlanSelected.value.length + ' 行至待提交', 'success');
+      poPlanSelKeys.value = [];
+    }
+    const poPlanApproveOpen = ref(false); const poPlanApproveRemark = ref('审批通过'); const poPlanApproveErr = ref('');
+    const poPlanRejectOpen = ref(false); const poPlanRejectRemark = ref(''); const poPlanRejectErr = ref('');
+    function poPlanApproveConfirm(){
+      if(!poPlanApproveRemark.value || !poPlanApproveRemark.value.trim()){ poPlanApproveErr.value = '请填写审批意见'; return; }
+      const now = polNow();
+      poPlanSelected.value.forEach(function(r){
+        r.bill_status='审批通过'; r.approve_remark=poPlanApproveRemark.value;
+        r.approver='库存控制高级经理'; r.approve_time=now; r.update_time=now;
+      });
+      msg('已审批通过 ' + poPlanSelected.value.length + ' 行', 'success');
+      poPlanApproveOpen.value=false; poPlanApproveRemark.value='审批通过'; poPlanApproveErr.value=''; poPlanSelKeys.value=[];
+    }
+    function poPlanRejectConfirm(){
+      if(!poPlanRejectRemark.value || !poPlanRejectRemark.value.trim()){ poPlanRejectErr.value = '请填写驳回意见'; return; }
+      const now = polNow();
+      poPlanSelected.value.forEach(function(r){
+        r.bill_status='已驳回'; r.approve_remark=poPlanRejectRemark.value;
+        r.approver='库存控制高级经理'; r.approve_time=now; r.update_time=now;
+      });
+      msg('已驳回 ' + poPlanSelected.value.length + ' 行', 'success');
+      poPlanRejectOpen.value=false; poPlanRejectRemark.value=''; poPlanRejectErr.value=''; poPlanSelKeys.value=[];
+    }
+    const poPlanEditOpen = ref(false); const poPlanEditRow = ref(null); const poPlanEditErr = ref('');
+    function poPlanOpenEdit(r){ poPlanEditRow.value = reactive(Object.assign({}, r)); poPlanEditErr.value=''; poPlanEditOpen.value = true; }
+    function poPlanSaveEdit(){
+      const row = poPlanEditRow.value; if(!row) return;
+      poPlanEditErr.value = '';
+      if(row.adjust_qty===null || row.adjust_qty===undefined || row.adjust_qty<0 || !Number.isInteger(row.adjust_qty)){
+        poPlanEditErr.value = '调整计划数量必须为非负整数'; return;
+      }
+      if(Number(row.adjust_qty)!==Number(row.plan_qty) && !(row.adjust_reason && String(row.adjust_reason).trim())){
+        poPlanEditErr.value = '调整数量（' + row.adjust_qty + '）与采购计划数量（' + row.plan_qty + '）不一致，调整原因必填'; return;
+      }
+      const target = poPlanPage.value.data.find(x=> x.id===row.id);
+      if(target){ target.adjust_qty = row.adjust_qty; target.adjust_reason = row.adjust_reason; target.update_time = polNow(); }
+      poPlanEditOpen.value = false;
+      msg('已保存调整（' + row.part_code + '）', 'success');
+    }
+    const poPlanDetailOpen = ref(false); const poPlanDetailRow = ref(null);
+    function poPlanOpenDetail(r){ poPlanDetailRow.value = r; poPlanDetailOpen.value = true; }
+    function poPlanExport(){
+      const cfg = poPlanPage.value;
+      const rows = poPlanFiltered.value;
+      const cols = cfg.columns.filter(c=> c.key!=='action');
+      const head = cols.map(c=> c.title).join(',');
+      const body = rows.map(function(r){
+        return cols.map(function(c){
+          const v = r[c.dataIndex];
+          return String(v===undefined || v===null ? '' : v).replace(/,/g, '，');
+        }).join(',');
+      }).join('\n');
+      const blob = new Blob(['\uFEFF' + head + '\n' + body], { type:'text/csv;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'JLRS_' + cfg.title + '_' + new Date().toISOString().slice(0,10) + '.csv';
+      a.click(); URL.revokeObjectURL(a.href);
+      msg('导出成功，共 ' + rows.length + ' 条（CSV 已下载）', 'success');
+    }
+    /* 批量下计划：从一次买断预测结果（停产件）生成 All Time Buy 计划行 */
+    const poAtbBatchOpen = ref(false);
+    const poAtbBatchSel = ref([]);
+    const poAtbBatchRows = computed(()=> fcBuyoutData.filter(r=> r.stopped==='是').map(function(r){
+      const hit = poAtbData.find(x=> x.part_code===r.part_code);
+      return Object.assign({}, r, {
+        life: Math.round(fcLongKeys.reduce((a,k)=> a + (Number(r[k])||0), 0)),
+        atb_state: hit ? (hit.bill_status==='审批通过' ? '已审批通过' : '已在计划中') : '未下计划',
+      });
+    }));
+    const poAtbBatchRowSelection = computed(()=> ({ selectedRowKeys: poAtbBatchSel.value, onChange:(k)=>{ poAtbBatchSel.value = k; } }));
+    const poAtbBatchCols = [
+      { title:'配件号', dataIndex:'part_code', width:150 },
+      { title:'配件名称', dataIndex:'part_name', width:230, ellipsis:true },
+      { title:'全生命周期累计需求', key:'life', dataIndex:'life', width:150 },
+      { title:'停产标记', dataIndex:'stopped', width:100 },
+      { title:'计划员', dataIndex:'planner', width:100 },
+      { title:'All Time Buy 计划状态', dataIndex:'atb_state', width:150 },
+    ];
+    function poAtbBatchGen(){
+      const picks = poAtbBatchRows.value.filter(r=> poAtbBatchSel.value.includes(r.id));
+      if(!picks.length){ msg('请先勾选需要下计划的配件', 'warning'); return; }
+      let add = 0, upd = 0, skip = 0;
+      picks.forEach(function(src){
+        const life = Math.round(fcLongKeys.reduce((a,k)=> a + (Number(src[k])||0), 0));
+        const hit = poAtbData.find(x=> x.part_code===src.part_code);
+        if(hit && hit.bill_status==='审批通过'){ skip++; return; }
+        const stock = hit ? hit.expected_stock : Math.round(rnd() * Math.max(1, life) * 0.5);
+        const net = Math.max(0, life - stock);
+        const mpq = hit ? hit.mpq : [10,20,25,50,100][(add+upd) % 5];
+        const moq = hit ? hit.moq : [50,100,200,300][(add+upd) % 4];
+        const plan = polPackQty(net, mpq, moq);
+        if(hit){
+          hit.life_demand = life; hit.net_demand = net;
+          hit.plan_qty = plan; hit.adjust_qty = plan; hit.adjust_reason = '';
+          hit.update_time = polNow();
+          upd++;
+          return;
+        }
+        poAtbData.unshift(Object.assign({
+          id:'ATB' + Date.now() + '_' + (add+upd), data_date:'2026-10-25',
+          part_code:src.part_code, part_name:src.part_name, base:src.base,
+          expected_stock:stock, life_demand:life, net_demand:net, mpq, moq,
+          plan_qty:plan, adjust_qty:plan, adjust_reason:'',
+          eop_flag:'是', bill_status:'待提交', approve_remark:'', approver:'', approve_time:'—',
+          planner:src.planner, buy_period:'2027~2036', update_time:polNow(),
+        }, polTrend(src)));
+        add++;
+      });
+      poAtbBatchOpen.value = false; poAtbBatchSel.value = [];
+      let tip = '已下计划：新增 ' + add + ' 条、更新 ' + upd + ' 条（待提交）';
+      if(skip) tip += '，' + skip + ' 条已审批通过跳过';
+      msg(tip, add+upd ? 'success' : 'warning');
+    }
+
     /* ---- 配件组管理（part-group）---- */
     const pgSel = ref([]);
-    const pgModal = reactive({ open:false, mode:'add', form:pgBlankForm() });
-    const pgImportOpen = ref(false);
-    const pgImportTarget = ref(undefined);
-    const pgImportText = ref('');
+    const pgModal = reactive({ open:false, mode:'add', err:'', form:pgBlankForm() });
     const pgPasteText = ref('');
+    const pgPasteOpen = ref(false);
     const pgNewPartCode = ref('');
-    const pgPartCols = [
-      { title:'配件号', dataIndex:'part_code', width:150 },
-      { title:'配件名称', dataIndex:'part_name', width:220, ellipsis:true },
-      { title:'供应商', dataIndex:'supplier_code', width:130 },
-      { title:'操作', dataIndex:'_op', width:70 },
-    ];
-    const pgGroupOptions = computed(()=> partGroupData.map(g=>({ value:g.id, label:g.group_code+' '+g.group_name })));
-
+    const pgDelOpen = ref(false);
+    const pgDelRow = ref(null);
+    // 组内配件清单列：最大配货月数仅联合 MOQ 类型需要（零件维度，默认 2，支持两位小数调整）
+    const pgPartCols = computed(()=>{
+      const cols = [
+        { title:'配件号', dataIndex:'part_code', width:150 },
+        { title:'配件名称', dataIndex:'part_name', width:220, ellipsis:true },
+        { title:'供应商', dataIndex:'supplier_code', width:130 },
+      ];
+      if(pgModal.form.group_type==='联合MOQ'){
+        cols.push({ title:'最大配货月数', dataIndex:'max_stock_months', width:130 });
+      }
+      cols.push({ title:'操作', dataIndex:'_op', width:70 });
+      return cols;
+    });
+    // 详情态配件明细列：与新增/编辑一致，只读；最大配货月数仅联合 MOQ 类型展示
+    const pgDetailCols = computed(()=>{
+      const cols = [
+        { title:'配件号', dataIndex:'part_code', width:160 },
+        { title:'配件名称', dataIndex:'part_name', width:260, ellipsis:true },
+        { title:'供应商', dataIndex:'supplier_code', width:140 },
+      ];
+      const row = genDetailRow.value;
+      if(row && row.group_type==='联合MOQ') cols.push({ title:'最大配货月数', dataIndex:'max_stock_months', width:130 });
+      return cols;
+    });
     const planGroupOptions = computed(()=> planGroups.map(g=>({ value:g.code, label:g.name + '（' + g.code + '）' })));
     const planAddSupplierGroupName = computed(()=>{ const g=planGroups.find(x=>x.code===planAddSupplierGroup.value); return g?g.name:''; });
     const planSelSupplierName = computed(()=>{
@@ -4380,9 +6377,15 @@ const app = createApp({
       const m = matData.find(x=>x.material_code===code);
       return m ? { part_name:m.material_name } : { part_name:'（主数据未匹配）' };
     }
+    // 分组编码由系统赋值，新增/编辑弹窗不再展示
+    function pgNextGroupCode(){
+      let seq = 1001;
+      while(partGroupData.some(g=>g.group_code==='PG-2026-'+seq)) seq++;
+      return 'PG-2026-' + seq;
+    }
     function pgBlankForm(){
       return {
-        id:'', group_code:'PG-2026-'+String(1001+partGroupData.length), group_name:'',
+        id:'', group_code:pgNextGroupCode(), group_name:'',
         group_type:'联合MOQ', status:'启用',
         moq_qty:1000,
         part_count:0, part_codes:'',
@@ -4392,8 +6395,9 @@ const app = createApp({
     }
     function openPgModal(mode, payload){
       pgModal.mode = mode;
+      pgModal.err = '';
       pgModal.form = payload
-        ? Object.assign({}, payload, { parts:(payload.parts||[]).map(p=>Object.assign({}, p)) })
+        ? Object.assign({}, payload, { parts:(payload.parts||[]).map(p=>Object.assign({}, p, { max_stock_months: p.max_stock_months ?? 2 })) })
         : pgBlankForm();
       pgNewPartCode.value = '';
       pgPasteText.value = '';
@@ -4406,7 +6410,7 @@ const app = createApp({
       const info = pgLookupPart(code);
       pgModal.form.parts.push(Object.assign({
         id:'PGP-N'+(Date.now()+pgModal.form.parts.length), part_code:code,
-        supplier_code:'',
+        supplier_code:'', max_stock_months:2,
       }, info));
       pgModal.form.part_count = pgModal.form.parts.length;
       pgNewPartCode.value = '';
@@ -4415,40 +6419,56 @@ const app = createApp({
       pgModal.form.parts = pgModal.form.parts.filter(x=>x.part_code!==p.part_code);
       pgModal.form.part_count = pgModal.form.parts.length;
     }
+    // 批量添加配件：按钮触发弹窗，确认后写入组内配件清单
+    function pgOpenPaste(){ pgPasteText.value = ''; pgPasteOpen.value = true; }
     function pgPasteAddParts(){
       const lines = (pgPasteText.value||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
       if(!lines.length){ antd.message.warning('请粘贴配件号，每行一个'); return; }
-      let added = 0;
+      let added = 0, dup = 0;
       lines.forEach(code=>{
-        if(pgModal.form.parts.some(p=>p.part_code===code)) return;
+        if(pgModal.form.parts.some(p=>p.part_code===code)){ dup++; return; }
         const info = pgLookupPart(code);
         pgModal.form.parts.push(Object.assign({
           id:'PGP-N'+(Date.now()+added), part_code:code,
-          supplier_code:'',
+          supplier_code:'', max_stock_months:2,
         }, info));
         added++;
       });
       pgModal.form.part_count = pgModal.form.parts.length;
       pgPasteText.value = '';
-      antd.message.success('已批量添加 '+added+' 个配件');
+      pgPasteOpen.value = false;
+      antd.message.success('已添加 '+added+' 个配件' + (dup?('，跳过 '+dup+' 个已在组内'):''));
     }
     function pgSave(){
       const f = pgModal.form;
-      if(!f.group_name){ antd.message.warning('请填写分组名称'); return; }
-      if(!f.parts || !f.parts.length){ antd.message.warning('请至少添加 1 个配件'); return; }
-      if(f.group_type==='联合MOQ' && !(f.moq_qty>0)){ antd.message.warning('请填写联合 MOQ 阈值'); return; }
+      pgModal.err = '';
+      if(!f.group_name){ pgModal.err = '请填写分组名称'; return; }
+      if(!f.parts || !f.parts.length){ pgModal.err = '请至少添加 1 个配件'; return; }
+      if(f.group_type==='联合MOQ' && !(f.moq_qty>0)){ pgModal.err = '请填写联合 MOQ 阈值'; return; }
       f.part_count = f.parts.length;
       f.part_codes = f.parts.map(p=>p.part_code).join(',');
       f.updater = '当前用户';
       f.update_time = '2026-10-22 18:00';
       if(pgModal.mode==='add'){
+        // 分组编码由系统赋值，保存时兜底保证唯一
+        if(!f.group_code || partGroupData.some(g=>g.group_code===f.group_code)) f.group_code = pgNextGroupCode();
         partGroupData.push(Object.assign({}, f, { id:'PG'+Date.now(), parts:f.parts.slice() }));
       } else {
-        const g = partGroupData.find(x=>x.group_code===f.group_code);
-        if(g) Object.assign(g, f);
+        const g = partGroupData.find(x=>x.id===f.id) || partGroupData.find(x=>x.group_code===f.group_code);
+        if(g) Object.assign(g, f, { parts:f.parts.slice() });
       }
       pgModal.open = false;
       antd.message.success('配件组已保存');
+    }
+    /* ---- 配件组管理：单条删除 ---- */
+    function pgOpenDelete(r){ pgDelRow.value = r; pgDelOpen.value = true; }
+    function pgDoDelete(){
+      const r = pgDelRow.value;
+      if(!r){ pgDelOpen.value = false; return; }
+      const i = partGroupData.findIndex(x=>x.id===r.id);
+      if(i>=0) partGroupData.splice(i,1);
+      pgDelOpen.value = false;
+      antd.message.success('已删除分组 ' + r.group_code);
     }
     /* ---- 配件组管理：批量操作 ---- */
     function pgBatchStatus(st){
@@ -4464,27 +6484,6 @@ const app = createApp({
       for(let i=partGroupData.length-1;i>=0;i--){ if(pgSel.value.includes(partGroupData[i].id)) partGroupData.splice(i,1); }
       pgSel.value = [];
       antd.message.success('已删除 '+n+' 个分组');
-    }
-    function pgOpenImport(){ pgImportTarget.value = undefined; pgImportText.value = ''; pgImportOpen.value = true; }
-    function pgConfirmImport(){
-      const g = partGroupData.find(x=>x.id===pgImportTarget.value);
-      if(!g){ antd.message.warning('请选择目标分组'); return; }
-      const lines = (pgImportText.value||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
-      if(!lines.length){ antd.message.warning('请粘贴配件号，每行一个'); return; }
-      let added = 0;
-      lines.forEach(code=>{
-        if(g.parts.some(p=>p.part_code===code)) return;
-        const info = pgLookupPart(code);
-        g.parts.push(Object.assign({
-          id:'PGP-'+g.id+'-'+(Date.now()+added), part_code:code,
-          supplier_code:'',
-        }, info));
-        added++;
-      });
-      g.part_count = g.parts.length;
-      g.part_codes = g.parts.map(p=>p.part_code).join(',');
-      pgImportOpen.value = false;
-      antd.message.success('已向 '+g.group_code+' 批量导入 '+added+' 个配件');
     }
 
     function openPlanAddSupplier(groupCode){
@@ -5065,7 +7064,7 @@ const app = createApp({
     }
     const ruleOpen = ref(false);
 
-    /* ===== 需求预测：全新车型配件预测（参考件预测流程） ===== */
+    /* ===== 需求预测：参考零件需求预测（参考件预测流程） ===== */
     const fcSteps = [
       { n:1, title:'维护参考车型库', desc:'需求数量已达标的车型', auto:false, tip:'手工维护需求数量已达到预测标准的车型档案，保存时经配件主数据校验车型存在性，不存在则阻断并提示。' },
       { n:2, title:'生成参考车型配件清单', desc:'关联车型库与配件主数据', auto:true, tip:'按参考车型代码自动匹配车型配件清单，关联配件主数据生成预测配件清单。' },
@@ -5073,7 +7072,7 @@ const app = createApp({
       { n:4, title:'计算车型月保有量', desc:'累计历史销量至当月', auto:true, tip:'按开票/实销上报日期汇总整车保有量至月（仅统计 ≥ 上市日期的数据）。' },
       { n:5, title:'计算订购率', desc:'配件月销量 ÷ 对应车型月保有量', auto:true, tip:'订购率 = 参考车型该配件月销量 ÷ 参考车型累计保有量。' },
       { n:6, title:'匹配参考订购率', desc:'上传需要预测的新车配件清单', auto:true, tip:'将需要预测的新车配件清单与参考订购率按 base / 名称匹配，未命中项支持手工调整并留痕。' },
-      { n:7, title:'全新车型配件预测', desc:'订购率 × 月度计划产量', auto:false, tip:'手工触发预测：按未来第 k 个月预测量 = 预测车型第 k 个月生产量 × 参考车型配件第 k 个月订购率（k=1,2,3,4,5,6）生成预测结果；支持在弹窗中查看配件清单与预测结果、导出并生成采购计划。' },
+      { n:7, title:'参考零件需求预测', desc:'订购率 × 月度计划产量', auto:false, tip:'手工触发预测：按未来第 k 个月预测量 = 预测车型第 k 个月生产量 × 参考车型配件第 k 个月订购率（k=1,2,3,4,5,6）生成预测结果；支持在弹窗中查看配件清单与预测结果、导出并生成采购计划。' },
     ];
     const fcStep = ref(1);
     const fcStepTitle = computed(()=>{ const s = fcSteps.find(x=>x.n===fcStep.value); return s ? s.title : ''; });
@@ -5393,17 +7392,23 @@ const app = createApp({
       const v = Number(rec[k] || 0);
       return sum >= 10 ? Math.ceil(v) : (Math.round(v*100)/100);
     }
-    /* 长周期页面：圆整视图开关、勾选行、批量调整弹窗状态 */
+    /* 长周期/一次买断页面：圆整视图开关、勾选行、批量调整弹窗状态 */
     const isFcLong = computed(()=> activeMenu.value==='fc-long' || activeMenu.value==='fc-long-draft');
+    const isFcBuyoutOnly = computed(()=> activeMenu.value==='fc-buyout' || activeMenu.value==='fc-buyout-draft');
+    // 批量调整（稀疏件圆整）在长周期与一次买断两个结果页均可用
+    const fcBatchable = computed(()=> isFcLong.value || isFcBuyoutOnly.value);
     const fcLongSel = ref([]);
+    const fcBuyoutSel = ref([]);
+    const fcBatchSelIds = computed(()=> isFcBuyoutOnly.value ? fcBuyoutSel.value : fcLongSel.value);
+    const fcBatchData = computed(()=> isFcBuyoutOnly.value ? fcBuyoutData : fcLongData);
     const fcLongBatchM = reactive({ open:false, strategy:'sparse', validMonths:12, source:'selected', codesText:'' });
     /* 批量调整支持两种范围：①已勾选行 ②导入配件号（粘贴文本或 txt/csv 文件），按配件号匹配 */
     const fcLongBatchTargets = computed(()=>{
-      if(fcLongBatchM.source === 'selected') return fcLongData.filter(r=> fcLongSel.value.indexOf(r.id) >= 0);
+      if(fcLongBatchM.source === 'selected') return fcBatchData.value.filter(r=> fcBatchSelIds.value.indexOf(r.id) >= 0);
       const codes = String(fcLongBatchM.codesText || '').split(/[\s,;，、]+/).map(x=> x.trim()).filter(Boolean);
       if(!codes.length) return [];
       const set = {}; codes.forEach(c=> { set[c] = true; });
-      return fcLongData.filter(r=> set[r.part_code]);
+      return fcBatchData.value.filter(r=> set[r.part_code]);
     });
     const fcLongBatchUnmatched = computed(()=>{
       if(fcLongBatchM.source !== 'codes') return [];
@@ -5449,7 +7454,7 @@ const app = createApp({
           seg.forEach(function(i, s){
             let v = base;
             if(rem > 0){ v += 0.01; rem -= 1; }
-            ys[i] = Math.round(v*100)/100;
+            ys[i] = Math.round(v);
           });
         });
         fcLongKeys.forEach(function(k,i){ r[k] = ys[i]; });
@@ -5458,14 +7463,16 @@ const app = createApp({
         n++;
       });
       fcLongSel.value = [];
+      fcBuyoutSel.value = [];
       fcLongBatchM.codesText = '';
       fcLongBatchM.source = 'selected';
       fcLongBatchM.open = false;
       antd.message.success('已对 ' + n + ' 个配件执行稀疏件圆整策略，调整有效期至 ' + until);
     }
-    /* 仅长周期结果页与配件组管理页展示行勾选框（供批量操作），其余页面不启用 */
+    /* 仅长周期/一次买断结果页与配件组管理页展示行勾选框（供批量操作），其余页面不启用 */
     const genRowSelection = computed(()=>{
       if(isFcLong.value) return { selectedRowKeys: fcLongSel.value, onChange: k => { fcLongSel.value = k; }, columnWidth:48 };
+      if(isFcBuyoutOnly.value) return { selectedRowKeys: fcBuyoutSel.value, onChange: k => { fcBuyoutSel.value = k; }, columnWidth:48 };
       if(activeMenu.value==='part-group') return { selectedRowKeys: pgSel.value, onChange: k => { pgSel.value = k; }, columnWidth:48 };
       return null;
     });
@@ -5541,6 +7548,14 @@ const app = createApp({
         ].concat(adjusted ? [{
           name:'人工调整预测结果', type:'line', data:adjData, smooth:true, symbol:'circle', symbolSize:6,
           itemStyle:{ color:'#52c41a' }, lineStyle:{ color:'#52c41a', width:2.4 },
+        }] : []).concat(rec.trendBuyoutTo ? [{
+          name:'买断区间', type:'line', data:[],
+          markArea:{ silent:true, itemStyle:{ color:'rgba(245,34,45,0.12)' },
+            data:[[{ xAxis:'2027' }, { xAxis:rec.trendBuyoutTo }]] },
+          markLine:{ silent:true, symbol:'none',
+            label:{ formatter:'买断区间止', position:'insideEndTop', fontSize:11, color:'#f5222d' },
+            lineStyle:{ color:'#f5222d', type:'dashed', width:1.5 },
+            data:[{ xAxis:rec.trendBuyoutTo }] },
         }] : []),
       };
     }
@@ -5666,63 +7681,246 @@ const app = createApp({
     });
 
 
-    /* 预测结果 → 采购计划：生成草稿并弹出可跳转的确认框 */
+    /* 预测结果 → 采购计划：先弹预览（同长周期生成预览交互），确认后生成草稿 */
+    const fcGenPoOpen = ref(false);
+    const fcGenPoDone = ref(false);
+    const fcGenPoPreview = ref([]);
+    const fcGenPoResult = Vue.reactive([]);
+    const fcGenPoSum = ref(0);
+    const fcGenPoCols = [
+      { title:'配件编码', dataIndex:'code', key:'code', width:110 },
+      { title:'配件名称', dataIndex:'name', key:'name', width:160, ellipsis:true },
+      { title:'base', dataIndex:'base', key:'base', width:150 },
+      { title:'参考配件号', dataIndex:'refcode', key:'refcode', width:120 },
+      { title:'未来 6 个月预测合计', key:'fsum', dataIndex:'fsum', width:170 },
+      { title:'建议采购计划数量', key:'qty', dataIndex:'qty', width:150 },
+    ];
+    const fcGenPoResultCols = [
+      { title:'计划编号', dataIndex:'plan_no', key:'plan_no', width:140 },
+      { title:'配件号', dataIndex:'code', key:'code', width:110 },
+      { title:'配件名称', dataIndex:'name', key:'name', width:160, ellipsis:true },
+      { title:'收货仓库', dataIndex:'wh_name', key:'wh_name', width:120 },
+      { title:'采购计划数量', dataIndex:'qty', key:'qty', width:120 },
+      { title:'单据状态', dataIndex:'status', key:'status', width:90 },
+    ];
     function fcGenPurchase(){
-      const rows = fcPredRows.value || [];
+      const rows = (fcPredRows.value || []).filter(r=> r.status!=='已生成采购计划' && (r.f1!=null || r.f2!=null || r.f3!=null || r.f4!=null || r.f5!=null || r.f6!=null));
+      fcGenPoPreview.value = rows.map(function(r, i){
+        const fsum = Math.round(((r.f1||0)+(r.f2||0)+(r.f3||0)+(r.f4||0)+(r.f5||0)+(r.f6||0)) * 100)/100;
+        const qty = Math.max(1, Math.round(fsum * (0.85 + (i % 6) * 0.05)));
+        return { id:r.id, code:r.code, name:r.name, base:r.base, refcode:r.refcode||'—', fsum:fsum, qty:qty };
+      });
+      fcGenPoDone.value = false;
+      fcGenPoOpen.value = true;
+    }
+    function fcGenPoConfirm(){
       let n = 0;
-      rows.forEach(function(r){
-        if(r.status==='已生成采购计划') return;
+      fcGenPoResult.splice(0, fcGenPoResult.length);
+      fcGenPoSum.value = 0;
+      fcGenPoPreview.value.forEach(function(p){
+        const r = (fcPredRows.value || []).find(x=> x.id===p.id);
+        if(!r || r.status==='已生成采购计划') return;
         const s = supplierData[n % supplierData.length];
         const w = whData[n % whData.length];
-        const qty = Math.round((r.f1+r.f2+r.f3+r.f4+r.f5+r.f6) * (0.8+rnd()*0.3));
+        const qty = p.qty;
         const moq = Math.max(1, Math.round(qty*0.4/10)*10);
+        const planNo = 'PLN-NEW-'+(100000+n);
         poRegularData.unshift({
-          id:'PR'+Date.now()+'_'+n, plan_no:'PLN-NEW-'+(100000+n), part_code:r.ref||r.code, part_name:r.name,
+          id:'PR'+Date.now()+'_'+n, plan_no:planNo, part_code:r.ref||r.code, part_name:r.name,
           base:r.base, supplier_code:s.supplier_code, supplier_name:s.supplier_name,
           wh_code:w.warehouse_code, wh_name:w.warehouse_name, qty:Math.ceil(qty/moq)*moq, raw_qty:qty,
-          eta:'2026-11-'+(10+n%15), status:'草稿', source:'全新车型预测', create_time:'2026-09-30 14:00',
+          eta:'2026-11-'+(10+n%15), status:'草稿', source:'参考零件预测', create_time:'2026-09-30 14:00',
           planner:pick(fcPlanners)
         });
         r.status = '已生成采购计划';
+        fcGenPoResult.push({ id:'G'+n, plan_no:planNo, code:r.ref||r.code, name:r.name, wh_name:w.warehouse_name, qty:Math.ceil(qty/moq)*moq, status:'草稿' });
+        fcGenPoSum.value += Math.ceil(qty/moq)*moq;
         n++;
       });
-      antd.Modal.success({ title:'生成采购计划成功', content:'已为 ' + n + ' 个全新车型配件生成常规采购计划草稿，请前往「采购计划 → 常规采购计划」查看、编辑与审批。', okText:'立即前往', onOk(){ window.location.hash = '#po-regular'; } });
+      fcGenPoDone.value = true;
     }
-    function fcGenAllTimeBuy(){
-      const src = fcBuyoutData.filter(r=> r.stopped==='是');
-      let n = 0;
-      src.slice(0, 20).forEach(function(r){
-        const s = supplierData[n % supplierData.length];
-        const total = Math.round((r.y1+r.y2+r.y3+r.y4+r.y5+r.y6+r.y7+r.y8+r.y9+r.y10)*(0.9+rnd()*0.3));
-        const moq = Math.max(1, Math.round(total*0.2/10)*10);
-        poEopData.unshift({
-          id:'PE'+Date.now()+'_'+n, part_code:r.part_code, part_name:r.part_name, base:r.base,
-          supplier_code:s.supplier_code, supplier_name:s.supplier_name,
-          eop_date:'2027-03-'+(10+n%15), avail_qty:Math.round(rnd()*200), intransit_qty:Math.round(rnd()*100),
-          cover_period:24+n%12, net_demand:total, final_qty:Math.ceil(total/moq)*moq, moq,
-          multi_brand:n%3===0?'已合并':'—', status:'草稿', planner:pick(fcPlanners), create_time:'2026-09-30 14:00'
+    function fcGenPoGo(){ fcGenPoOpen.value = false; window.location.hash = '#po-regular'; }
+    /* ===== 生成 All Time Buy 计划：勾选配件 → 全生命周期（首年~末年）需求 → 生成计划 ===== */
+    const fcAllTimeOpen = ref(false);
+    const fcAllTimeDone = ref(false);
+    const fcAllTimeData = Vue.reactive([]);
+    const fcAllTimeGenSum = ref(0);
+
+    const fcAllTimeSelRowsRaw = computed(()=> fcBuyoutData.filter(r=> fcBuyoutSel.value.indexOf(r.id) >= 0));
+    const fcAllTimeCols = computed(()=>{
+      const cols = [
+        { title:'配件号', dataIndex:'part_code', width:150, fixed:'left' },
+        { title:'配件名称', dataIndex:'part_name', width:240, ellipsis:true },
+      ];
+      fcLongFctYears.forEach(function(y){
+        cols.push({ title:y, dataIndex:'y'+(fcLongFctYears.indexOf(y)+1), width:76, align:'right' });
+      });
+      cols.push({ title:'合计', dataIndex:'total', width:100, align:'right' });
+      return cols;
+    });
+    const fcAllTimeSelRows = computed(()=> fcAllTimeSelRowsRaw.value.map(function(r){
+      const row = { id:r.id, part_code:r.part_code, part_name:r.part_name };
+      let total = 0;
+      fcLongKeys.forEach(function(k){ const v = Number(r[k]) || 0; row[k] = v; total += v; });
+      row.total = Math.round(total * 100) / 100;
+      return row;
+    }));
+    const fcAllTimeTotalRow = computed(()=>{
+      const rows = fcAllTimeSelRowsRaw.value;
+      const t = { id:'__AT_TOTAL__', part_code:'合计', part_name:'共 ' + rows.length + ' 个配件' };
+      let grand = 0;
+      fcLongKeys.forEach(function(k){
+        let s = 0;
+        rows.forEach(function(r){ s += Number(r[k]) || 0; });
+        t[k] = Math.round(s * 100) / 100;
+        grand += s;
+      });
+      t.total = Math.round(grand * 100) / 100;
+      return t;
+    });
+    const fcAllTimeRows = computed(()=>{
+      return fcAllTimeSelRows.value.length ? fcAllTimeSelRows.value.concat([fcAllTimeTotalRow.value]) : [];
+    });
+    function fcAllTimeRowClass(rec){ return rec.id === '__AT_TOTAL__' ? 'fc-bridge-total-row' : ''; }
+    const fcAllTimeResultCols = [
+      { title:'配件号', dataIndex:'part_code', width:180 },
+      { title:'配件名称', dataIndex:'part_name', width:380, ellipsis:true },
+      { title:'覆盖周期', dataIndex:'period', width:170 },
+      { title:'数量数据', dataIndex:'qty', width:140, align:'right' },
+    ];
+    function fcAllTimeGenerate(){
+      const sel = fcAllTimeSelRows.value;
+      if(!sel.length){ antd.message.warning('请先在一次买断预测结果中勾选配件'); return; }
+      // 圆整校验：全生命周期 10 年必须均已圆整为整数，否则提示先圆整再生成
+      const bad = fcGenRoundedBad(fcAllTimeSelRowsRaw.value, fcLongKeys);
+      if(bad.length){
+        antd.message.warning('所选配件存在未圆整（含小数）的年份，请先对选中的配件执行「圆整」处理后再生成 All Time Buy 计划：' + bad.slice(0,5).join('、') + (bad.length > 5 ? ' 等' : ''));
+        return;
+      }
+      const period = fcLongFctYears[0] + '~' + fcLongFctYears[fcLongFctYears.length - 1];
+      fcAllTimeData.length = 0;
+      let n = 0, sum = 0;
+      sel.forEach(function(r){
+        const qty = Math.ceil(Number(r.total) || 0);
+        sum += qty;
+        fcAllTimeData.push({
+          id:'AT' + Date.now() + '_' + n, part_code:r.part_code, part_name:r.part_name,
+          period:period, qty:qty,
         });
         n++;
       });
-      antd.Modal.success({ title:'生成 All time buy 计划成功', content:'已为 ' + n + ' 个 EOP 配件生成停产最后采购量草稿（已按 MOQ 取整），请前往「采购计划 → 停产最后采购量」审批。', okText:'立即前往', onOk(){ window.location.hash = '#po-eop'; } });
+      fcAllTimeDone.value = true;
+      fcAllTimeGenSum.value = sum;
+      antd.message.success('已生成 ' + n + ' 条 All Time Buy 计划，合计数量 ' + sum);
     }
-    function fcGenBridgeBuy(){
-      const src = fcLongData.filter(r=> r.stopped==='是');
-      let n = 0;
-      src.slice(0, 20).forEach(function(r){
-        const s = supplierData[n % supplierData.length];
-        const total = Math.round((r.y1+r.y2+r.y3+r.y4+r.y5+r.y6)*(1+rnd()*0.3));
-        const moq = Math.max(1, Math.round(total*0.2/10)*10);
-        poEopData.unshift({
-          id:'PE'+Date.now()+'_B_'+n, part_code:r.part_code, part_name:r.part_name, base:r.base,
-          supplier_code:s.supplier_code, supplier_name:s.supplier_name,
-          eop_date:'2027-06-'+(10+n%15), avail_qty:Math.round(rnd()*200), intransit_qty:Math.round(rnd()*100),
-          cover_period:36+n%12, net_demand:total, final_qty:Math.ceil(total/moq)*moq, moq,
-          multi_brand:'已合并', status:'草稿', planner:pick(fcPlanners), create_time:'2026-09-30 14:00'
+    /* ===== 生成 bridge buy 计划：勾选配件 → 选年份 → 配件×各年需求宽表 → 生成计划 ===== */
+    const fcBridgeOpen = ref(false);
+    const fcBridgeYear = ref(fcLongFctYears[0]);
+    const fcBridgeDone = ref(false);
+    const fcBridgeData = Vue.reactive([]);
+    const fcBridgeGenSum = ref(0);
+
+    // 已勾选配件（跨行取最新预测值）
+    const fcBridgeSelRowsRaw = computed(()=> fcLongData.filter(r=> fcLongSel.value.indexOf(r.id) >= 0));
+    // 展示范围：从首年（2027）到所选年份（含），之后年份不展示
+    const fcBridgeYearIdx = computed(()=> Math.max(0, fcLongFctYears.indexOf(fcBridgeYear.value)));
+    const fcBridgeActiveYears = computed(()=> fcLongFctYears.slice(0, fcBridgeYearIdx.value + 1));
+    // 宽表列：配件号 / 配件名称 + 首年~所选年份各一列 + 合计列（所选年份列头高亮）
+    const fcBridgeDetailCols = computed(()=>{
+      const cols = [
+        { title:'配件号', dataIndex:'part_code', width:150, fixed:'left' },
+        { title:'配件名称', dataIndex:'part_name', width:240, ellipsis:true },
+      ];
+      fcBridgeActiveYears.value.forEach(function(y){
+        cols.push({
+          title:y, dataIndex:'y'+(fcLongFctYears.indexOf(y)+1), width:76, align:'right',
+          customHeaderCell: function(){ return y === fcBridgeYear.value ? { class:'fc-bridge-cur-th' } : {}; },
+        });
+      });
+      cols.push({ title:'合计', dataIndex:'total', width:100, align:'right' });
+      return cols;
+    });
+    const fcBridgeScrollX = computed(()=> 150 + 240 + fcBridgeActiveYears.value.length * 76 + 100);
+    // 明细行：每个配件带展示范围内各年份的值 + 区间合计
+    const fcBridgeSelRows = computed(()=>{
+      return fcBridgeSelRowsRaw.value.map(function(r){
+        const row = { id:r.id, part_code:r.part_code, part_name:r.part_name };
+        let total = 0;
+        fcBridgeActiveYears.value.forEach(function(y){
+          const k = 'y' + (fcLongFctYears.indexOf(y) + 1);
+          const v = Number(r[k]) || 0;
+          row[k] = v;
+          total += v;
+        });
+        row.total = Math.round(total * 100) / 100;
+        return row;
+      });
+    });
+    // 合计行：各年份所选配件合计 + 区间总合计
+    const fcBridgeTotalRow = computed(()=>{
+      const rows = fcBridgeSelRowsRaw.value;
+      const t = { id:'__TOTAL__', part_code:'合计', part_name:'共 ' + rows.length + ' 个配件' };
+      let grand = 0;
+      fcBridgeActiveYears.value.forEach(function(y){
+        const k = 'y' + (fcLongFctYears.indexOf(y) + 1);
+        let s = 0;
+        rows.forEach(function(r){ s += Number(r[k]) || 0; });
+        t[k] = Math.round(s * 100) / 100;
+        grand += s;
+      });
+      t.total = Math.round(grand * 100) / 100;
+      return t;
+    });
+    const fcBridgeDetailRows = computed(()=>{
+      return fcBridgeSelRows.value.length
+        ? fcBridgeSelRows.value.concat([fcBridgeTotalRow.value])
+        : [];
+    });
+    function fcBridgeDetailRowClass(rec){ return rec.id === '__TOTAL__' ? 'fc-bridge-total-row' : ''; }
+
+    // 生成结果：仅 配件号 / 配件名称 / 年份 / 数量数据
+    const fcBridgeCols = [
+      { title:'配件号', dataIndex:'part_code', width:180 },
+      { title:'配件名称', dataIndex:'part_name', width:360, ellipsis:true },
+      { title:'年份', dataIndex:'year', width:110 },
+      { title:'数量数据', dataIndex:'qty', width:140, align:'right' },
+    ];
+    /* 圆整校验：检查所选配件在指定年份（y1..yN）是否均已圆整（整数），返回未圆整的配件+年份清单 */
+    function fcGenRoundedBad(rows, keys){
+      const bad = [];
+      rows.forEach(function(r){
+        keys.forEach(function(k){
+          const v = Number(r[k]);
+          if(Number.isFinite(v) && !Number.isInteger(v)){ bad.push(r.part_code + '（' + k + '=' + v + '）'); }
+        });
+      });
+      return bad;
+    }
+    function fcBridgeGenerate(){
+      const sel = fcBridgeSelRows.value;
+      if(!sel.length){ antd.message.warning('请先在长周期预测报表中勾选配件'); return; }
+      // 圆整校验：所选年份（首年~所选年）必须均已圆整为整数，否则提示先圆整再生成
+      const years = fcBridgeActiveYears.value;
+      const keys = years.map(function(y){ return 'y' + (fcLongFctYears.indexOf(y) + 1); });
+      const bad = fcGenRoundedBad(fcBridgeSelRowsRaw.value, keys);
+      if(bad.length){
+        antd.message.warning('所选配件存在未圆整（含小数）的年份，请先对选中的配件执行「圆整」处理后再生成 bridge buy 计划：' + bad.slice(0,5).join('、') + (bad.length > 5 ? ' 等' : ''));
+        return;
+      }
+      fcBridgeData.length = 0;
+      let n = 0, sum = 0;
+      sel.forEach(function(r){
+        const qty = Math.ceil(Number(r.total) || 0);   // 数量＝首年~所选年份的汇总需求（取整）
+        sum += qty;
+        fcBridgeData.push({
+          id:'BR' + Date.now() + '_' + n, part_code:r.part_code, part_name:r.part_name,
+          year:fcBridgeYear.value, qty:qty,
         });
         n++;
       });
-      antd.Modal.success({ title:'生成 bridge buy 计划成功', content:'已为 ' + n + ' 个长周期 EOP 配件生成 bridge buy 采购草稿（汇总至停产最后采购量），请前往「采购计划 → 停产最后采购量」审批。', okText:'立即前往', onOk(){ window.location.hash = '#po-eop'; } });
+      fcBridgeDone.value = true;
+      fcBridgeGenSum.value = sum;
+      antd.message.success('已生成 ' + n + ' 条 bridge buy 计划，合计数量 ' + sum);
     }
     function fcGenRegularPo(){
       const def = pageDefs[activeMenu.value];
@@ -6475,9 +8673,41 @@ const app = createApp({
       exportCsv, toggleFull, ruleOpen,
       dealerFilters, dealerFilterExpanded, dealerFav, dealerToggleFav, dealerTypeOptions, dealerStatusOptions, dealerDoSearch, dealerResetFilters,
       dealerColumns, dealerHiddenCols, dealerVisibleColumns, dealerFiltered, dealerPage, dealerPaged, dealerExportCsv,
+      poRegTabs, poRegTab, poRegColumns, poRegHiddenCols, poRegVisibleColumns, poRegScrollX, poRegToggleCol,
+      poRegFilters, poRegApplied, poRegFilterExpanded, poRegFav, poRegDoSearch, poRegResetFilters, poRegToggleFav,
+      poRegPage, poRegSelectedKeys, poRegFiltered, poRegTabCount, poRegPaged, poRegSelected,
+      poRegCanSubmit, poRegCanWithdraw, poRegCanApprove, poRegCanReject, poRegRowSelection, poRegCustomRow, poRegBillColor,
+      poRegSubmit, poRegWithdraw, poRegApproveOpen, poRegApproveRemark, poRegApproveErr, poRegApproveConfirm,
+      poRegRejectOpen, poRegRejectRemark, poRegRejectErr, poRegRejectConfirm,
+      poRegEditOpen, poRegEditRow, poRegEditErr, poRegEditErrList, poRegOpenEdit, poRegSaveEdit, poRegOpenDetail, poRegDetailOpen, poRegDetailRow,
+      poRegImportOpen, poRegDoImport, poRegExportOpen, poRegExportMode, poRegExportFields, poRegToggleExportField,
+      poRegExportCsv, poRegExportSource, poRegDoExport, poRegPush, poRegMoreMenu, poRegPlanTypes, poRegReceiveModes, poRegStatuses, poRegPurchaseTypes, poRegPushStatuses,
+      // 5. 调拨计划（STO）
+      stoIsWeek, stoTitle, stoColumns, stoHiddenCols, stoVisibleColumns, stoScrollX, stoToggleCol,
+      // 6. 采购计划扩展：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划
+      poPlanKeys, poPlanPage, poPlanFiltersCur, poPlanPageCur, poPlanSelKeys, poPlanFav, poPlanScrollX,
+      poPlanFiltered, poPlanRows, poPlanPaged, poPlanSelected, poPlanCanSubmit, poPlanCanWithdraw,
+      poPlanCanApprove, poPlanCanReject, poPlanRowSelection, poPlanCustomRow, poPlanStatusColor, poPlanCanEdit,
+      poPlanTabs, poPlanTab, poPlanTabCount,
+      poBridgeCollapsed, poPlanSearch, poPlanReset, poPlanSubmit, poPlanWithdraw,
+      poPlanApproveOpen, poPlanApproveRemark, poPlanApproveErr, poPlanApproveConfirm,
+      poPlanRejectOpen, poPlanRejectRemark, poPlanRejectErr, poPlanRejectConfirm,
+      poPlanEditOpen, poPlanEditRow, poPlanEditErr, poPlanOpenEdit, poPlanSaveEdit, poPlanDetailOpen, poPlanDetailRow, poPlanOpenDetail, poPlanExport,
+      poAtbBatchOpen, poAtbBatchSel, poAtbBatchRows, poAtbBatchRowSelection, poAtbBatchCols, poAtbBatchGen,
+      stoFilters, stoFilterExpanded, stoFav, stoPage, stoDoSearch, stoResetFilters, stoToggleFav,
+      stoFiltered, stoPaged, stoCustomRow,
+      stoDetailOpen, stoDetailRow, stoOpenDetail, stoDetailRemark, stoSaveRemark,
+      stoExportOpen, stoExportFields, stoToggleExportField, stoDoExport,
+      stoNetworks, stoPlanTypeOptions, stoRouteCodes, stoFromWhs, stoToWhs,
+      rollDataDate, rollBaseMonth, rollMonthLabels, rollSyncStatuses, rollColumns, rollScrollX, rollPlanData,
+      rollFilters, rollApplied, rollFilterExpanded, rollFav, rollPage, rollTab, rollTabs, rollSelKeys, rollRowSelection,
+      rollSelRows, rollCanSync, rollRows, rollPaged, rollFiltered, rollTabCount, rollSyncColor,
+      rollDetailOpen, rollDetailRow, rollOpenDetail, rollMonthDetailCols,
+      rollPublishOpen, rollPublishNote, rollPublishRows, rollPublishSupplierCount, rollPublishStartSample, rollOpenPublish, rollDoPublish, rollPublishOne,
+      rollExportOpen, rollExportFields, rollToggleExportField, rollDoExport, rollDoSearch, rollResetFilters, poRegVehicleCodes,
       isBaseMenu, baseMenuKeys, genericKeys, activeDef,
       genFilters, genApplied, genPage, genHiddenCols, genExpanded, genFav, genVisibleColumns, genPaged, genFiltered, genCustomRow,
-      genDetailOpen, genDetailRow, openGenDetail,
+      genDetailOpen, genDetailRow, openGenDetail, modalDetailKeys,
       fcTrendSplit, trendModal, openTrendModal, closeTrendModal, hasTrend, fcReasonErr,
       trendUnit, trendHistLabel, trendFctLabel, trendAdjusted, trendAdjDesc,
       fcRegMdl, fcOpenRegMdl, closeRegMdl, refreshRegMdlCharts, fcApplyRegMdl,
@@ -6489,8 +8719,9 @@ const app = createApp({
       planAddSupplierOpen, planAddSupplierGroup, planAddSupplierGroupName, planAddSupplierSelected, openPlanAddSupplier, planConfirmAddSupplier,
       planPlannerModal, openPlanPlannerModal, planSavePlanner, planGroupModal, openPlanGroupModal, planSaveGroup,
       pgSel, pgModal, openPgModal, pgSave, pgAddPart, pgRemovePart, pgPasteText, pgPasteAddParts, pgNewPartCode,
-      pgBatchStatus, pgBatchDelete, pgImportOpen, pgImportTarget, pgImportText, pgOpenImport, pgConfirmImport,
-      pgPartCols, pgGroupOptions, pgTypeOptions,
+      pgBatchStatus, pgBatchDelete,
+      pgPartCols, pgTypeOptions, pgDetailCols,
+      pgPasteOpen, pgOpenPaste, pgDelOpen, pgDelRow, pgOpenDelete, pgDoDelete,
       planDeleteNode, planRemoveSupplierRel, planSave,
       plan2Keyword, plan2PlannerColumns, plan2PlannerRows, plan2GroupCount, openPlan2PlannerModal, plan2PlannerModal, plan2SavePlanner,
       plan2PlannerOptions, openPlan2GroupModal, plan2GroupModal, plan2SaveGroup,
@@ -6512,11 +8743,16 @@ const app = createApp({
       svcDir, svcBrandTab, svcFlip, svcSelectBrand,
       fcSteps, fcStep, fcStepTitle, fcStepDesc, fcStepTip, fcRefRows, fcRefPage, fcRefPaged, fcRefColumns,
       fcRefModal, fcOpenRefModal, fcSaveRef, fcDelRef, fcImportOpen, fcDoImport,
-      fcDrawer, fcDrawerTitle, fcDrawerCols, fcDrawerRows, fcOpenDrawer, fcGenPurchase, fcGenAllTimeBuy, fcGenBridgeBuy,
+      fcDrawer, fcDrawerTitle, fcDrawerCols, fcDrawerRows, fcOpenDrawer, fcGenPurchase,
+      fcAllTimeOpen, fcAllTimeDone, fcAllTimeData, fcAllTimeGenSum, fcAllTimeCols, fcAllTimeRows,
+      fcAllTimeRowClass, fcAllTimeResultCols, fcAllTimeGenerate,
+      fcBatchable, fcBuyoutSel, fcBatchSelIds,
+      fcBridgeOpen, fcBridgeYear, fcBridgeDone, fcBridgeData, fcBridgeDetailCols, fcBridgeDetailRows, fcBridgeScrollX,
+      fcBridgeDetailRowClass, fcBridgeGenSum, fcBridgeCols, fcBridgeGenerate, fcLongFctYears,
       fcLongTotal, fcLongYearVal, isFcLong, fcLongSel, fcLongBatchM, fcLongBatchApply, genRowSelection,
       fcLongBatchTargets, fcLongBatchUnmatched, fcLongBatchFile,
       fcNewRows, fcNewPage, fcNewPaged, fcNewSel, fcNewColumns, fcNewModal, fcOpenNewModal, fcSaveNew, fcDelNew,
-      fcStatusOptions, fcPartsM, fcPartsSel, fcPartsCols, fcPartsFiltered, fcOpenParts, fcPredM, fcPredSel, fcPredCols, fcPredFiltered, fcOpenPred, fcUpdatePred, fcPredUnmatched, fcPredRefParts, fcPredRefNameMap, fcBatchM, fcBatchRows, fcBatchCols, fcBatchStatus, fcBatchValid, fcBatchInvalidCount, fcOpenBatch, fcBatchRowChange, fcDownloadTpl, fcImportRef, fcBatchSave, fcPredRefChange, fcNewCoeffs, fcApplyCoeffs, fcResetNewCoeffs, fcCoefOpen, fcOpenCoeffModal, isFcLongBuyoutDraft, isFcNewDraft, fcSaveLongBuyout, fcSavePred,
+      fcStatusOptions, fcPartsM, fcPartsSel, fcPartsCols, fcPartsFiltered, fcOpenParts, fcPredM, fcPredSel, fcPredCols, fcPredFiltered, fcOpenPred, fcUpdatePred, fcPredUnmatched, fcPredRefParts, fcPredRefNameMap, fcBatchM, fcBatchRows, fcBatchCols, fcBatchStatus, fcBatchValid, fcBatchInvalidCount, fcOpenBatch, fcBatchRowChange, fcDownloadTpl, fcImportRef, fcBatchSave, fcPredRefChange, fcNewCoeffs, fcApplyCoeffs, fcResetNewCoeffs, fcCoefOpen, fcOpenCoeffModal, isFcLongBuyoutDraft, isFcNewDraft, fcSaveLongBuyout, fcSavePred, fcGenPoOpen, fcGenPoDone, fcGenPoPreview, fcGenPoResult, fcGenPoSum, fcGenPoCols, fcGenPoResultCols, fcGenPoConfirm, fcGenPoGo,
       fcABCs, fcPlanners,
       btGranOpts, btPartCols, btPartRows, btPoolCols, btPoolFiltered, btPicker,
       btOpenPicker, btPickerChange, btPickerOk, btRemovePart, btClearParts, btDownloadTpl, btImportParts,
