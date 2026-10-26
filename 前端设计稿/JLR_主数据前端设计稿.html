@@ -3413,7 +3413,7 @@ mark {
                         <a-form-item label="参数描述"><a-input :value="gpEdit.desc" disabled/></a-form-item>
                       </a-col>
                       <a-col :span="12">
-                        <a-form-item label="默认值" required><a-input v-model:value="gpEdit.def" placeholder="请输入默认值"/></a-form-item>
+                        <a-form-item label="默认值" required :extra="gpIsCoeff ? '根据同建储类型默认目标满足率计算：Φ⁻¹(目标满足率 ÷ 100)，保留2位小数' : ''"><a-input v-model:value="gpEdit.def" :disabled="gpIsCoeff" placeholder="请输入默认值"/></a-form-item>
                       </a-col>
                       <a-col :span="12">
                         <a-form-item label="备注"><a-textarea v-model:value="gpEdit.remark" :rows="3" :maxlength="500" show-count placeholder="请输入备注（选填）"/></a-form-item>
@@ -3862,7 +3862,7 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 //# sourceMappingURL=antd.min.js.map</script>
 <script src="warehouse-network.js?v=20261026-real-network"></script>
 <script src="stocking-rules.js?v=20261026-create"></script>
-<script src="global-parameters.js?v=20261023-service-factor"></script>
+<script src="global-parameters.js?v=20261026-derived-service"></script>
 <script src="inventory-results.js?v=20261026-real-network"></script>
 <script src="inventory-strategy.js?v=20261026-real-network"></script>
 <script>
@@ -8933,19 +8933,21 @@ const app = createApp({
       {title:'操作',key:'act',width:80,fixed:'right'}
     ];
     const gpEdit=reactive({id:'',buildType:'',code:'',desc:'',def:'',remark:''});
-    const gpIsCoeff=computed(()=>false);
+    const gpIsCoeff=computed(()=>gpEdit.code==='PARM05'&&gpEdit.buildType!=='通用');
     function gpOpenEdit(row){Object.assign(gpEdit,row);gpView.value='edit';}
     function gpBack(){gpView.value='list';}
     function gpSave(){
       if(gpView.value!=='edit')return;
+      if(gpIsCoeff.value)gpEdit.def=String(gpModel.getDefault(gpRaw,gpEdit.buildType,'PARM05'));
       const errors=gpEdit.buildType==='通用'?[...(!String(gpEdit.def??'').trim()?['默认值为必填项']:[]),...gpModel.validateRemark(gpEdit)]:gpModel.validate(gpEdit);
       if(errors.length){antd.message.error(errors.join('；'));return;}
       const row=gpRaw.find(r=>r.id===gpEdit.id);
       if(!row){antd.message.error('配置不存在，请刷新');return;}
       const next={...row,def:String(gpEdit.def).trim(),remark:String(gpEdit.remark??'').trim(),editor:'超级管理员',time:new Date().toLocaleString('sv-SE',{timeZone:'Asia/Shanghai'})};
-      const updated=gpRaw.map(r=>r.id===row.id?next:{...r});
+      const updated=gpModel.derive(gpRaw.map(r=>r.id===row.id?next:{...r}));
+      if(gpEdit.code==='PARM04'){const linked=updated.find(r=>r.buildType===row.buildType&&r.code==='PARM05');if(linked){linked.editor=next.editor;linked.time=next.time;}}
       try{localStorage.setItem(gpModel.storageKey,JSON.stringify(updated));}catch(e){antd.message.error('保存失败，请检查浏览器存储空间');return;}
-      Object.assign(row,next);antd.message.success('保存成功');gpView.value='list';
+      gpRaw.splice(0,gpRaw.length,...updated);antd.message.success('保存成功');gpView.value='list';
     }
 
     return {
