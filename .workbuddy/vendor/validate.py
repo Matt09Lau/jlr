@@ -30,12 +30,14 @@ PAGES = [
     ("fc-regular",   "常规预测",           "2026-10",        False),
     ("fc-best",      "最佳模型",           "最优模型",       False),
     ("part-group",      "配件组管理",        "分组类型",      False),
-    ("po-regular",      "常规采购计划",      "数据生成日期",  False),
+    ("po-regular",      "采购计划",          "数据生成日期",  False),
+    ("po-history",      "历史采购计划",      "数据生成日期",  False),
+    ("po-export",       "采购计划导出",      "导出状态",      False),
     ("po-eop",          "停产最后采购量",    "末采数量",      False),
     ("po-approval",     "采购计划审批",      "审批状态",      False),
     ("po-issue",        "采购订单下达",      "PO单号",        False),
-    ("sto-week",        "本周调拨计划",      "计划批次",      False),
-    ("sto-next",        "下周调拨计划",      "计划批次",      False),
+    ("sto-week",        "调拨计划",          "计划批次",      False),
+    ("sto-next",        "给仓库的滚动调拨计划", "计划批次",   False),
     ("po-atb",          "All Time Buy 计划", "全生命周期累计需求", False),
     ("po-bridge",       "Bridge Buy 计划",   "属地预期库存",  False),
     ("po-ref",          "参考零件采购计划",  "参考车型",      False),
@@ -137,7 +139,7 @@ def check_po_pages():
     field_left = [k for k in ["需求仓库要求到货日期", "wh_required_arrival_date"] if k in src]
 
     checks = [
-        ("po-regular", "常规采购计划", "数据生成日期"),
+        ("po-regular", "采购计划", "数据生成日期"),
         ("po-eop", "停产最后采购量", "末采数量"),
         ("po-approval", "采购计划审批", "审批状态"),
         ("po-issue", "采购订单下达", "PO单号"),
@@ -1195,7 +1197,7 @@ def check_menu():
                  "草稿", "计划层级管理", "计划层级管理2", "服务水平dashboard", "基础数据管理",
                  "库存策略参数", "采购LT", "目标满足率", "备货规则", "库间LT", "增储天数", "计划周期", "配件风控线", "配件多分类风控线", "建储水位线计算结果",
                  "配件组管理",
-                 "计划管理", "常规采购计划", "本周调拨计划", "下周调拨计划",
+                 "计划管理", "采购计划", "历史采购计划", "采购计划导出", "调拨计划", "给仓库的滚动调拨计划",
                  "All Time Buy 计划", "Bridge Buy 计划", "参考零件采购计划",
                  "给供应商的滚动计划",
                  "停产最后采购量", "采购计划审批", "采购订单下达"]
@@ -1203,7 +1205,8 @@ def check_menu():
     # 不应出现（已移除的纯占位菜单 / 已更名的旧称）
     must_not = ["历史需求处理", "准确率报表", "预测回测配置",
                 "售后订单管理", "【本地测试页面】", "计划层级管理3",
-                "全新车型配件预测", "参考零件采购计划（首储）"]
+                "全新车型配件预测", "参考零件采购计划（首储）",
+                "常规采购计划", "本周调拨计划", "下周调拨计划"]
     bad = [k for k in must_not if k in r]
     # 菜单归属顺序：停产最后采购量/采购计划审批/采购订单下达 应位于「草稿」组（常规预测(草稿) 之后），
     # 且采购计划组内 参考零件采购计划 之后直接是「报表」组
@@ -1217,6 +1220,17 @@ def check_menu():
         bad.append("草稿组顺序(三页应位于草稿组内)")
     if not (0 <= ipo < irep):
         bad.append("采购计划组顺序(po-ref 后应为报表组)")
+    # 顺序要求：给供应商的滚动计划 应位于 采购计划（po-regular）之后、调拨计划（sto-week）之前
+    ipo_reg = r.find("采购计划")
+    iroll = r.find("给供应商的滚动计划")
+    isto = r.find("调拨计划")   # 先命中「调拨计划」(本周改名)，其位置在「给仓库的滚动调拨计划」之前
+    if not (0 <= ipo_reg < iroll < isto):
+        bad.append("采购计划组顺序(po-roll 应在采购计划下、调拨计划上)")
+    # 顺序要求：历史采购计划 / 采购计划导出 应位于 采购计划 之下、给供应商的滚动计划 之上
+    ihist = r.find("历史采购计划")
+    iexp = r.find("采购计划导出")
+    if not (0 <= ipo_reg < ihist < iexp < iroll):
+        bad.append("采购计划组顺序(po-history/po-export 应在采购计划下、给供应商的滚动计划上)")
     ok = (not miss) and (not bad)
     detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
     return {"key":"menu","ok":ok,"msg":detail}
@@ -1248,7 +1262,7 @@ def check_strategy():
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
     return {"ok": True, "msg": f"{len(STRATEGY_PAGES)} 页全部渲染正常"}
 
-STO_PAGES = [("sto-week", "本周调拨计划"), ("sto-next", "下周调拨计划")]
+STO_PAGES = [("sto-week", "调拨计划"), ("sto-next", "给仓库的滚动调拨计划")]
 # 字段口径＝PRD 5.4.4.1 计划结果表 29 字段（最新；无缺口/STO单号/执行状态/所需车次/缺口结转标记/运输线路）
 STO_COLS = ["数据生成日期", "计划类型", "配件号", "配件名称", "发货仓", "收货仓",
             "收货仓最低风控线", "收货仓目标库存", "是否出计划日", "ABC分类", "车型代码",
@@ -1338,18 +1352,20 @@ def check_po_plan():
     return {"ok": True, "msg": "3 页渲染正常，列集对齐 PRD 第 6/7 章"}
 
 def check_po_roll():
-    """给供应商的滚动计划（PRD 4.4.3.2 支持供应商协同）：
-    15 个基础字段 + 6 个月份列（M1~M6，PRD 口径：增加LT后未来 6 个月）+ 同步状态页签 + 同步到 SAP。
-    顶部口径说明条已按用户要求移除，且不应残留 M7~M12 与 12 个月口径。"""
+    """给供应商的滚动计划（PRD 第 5 章）：
+    17 个基础字段（含参数 MOQ / MPQ）+ 6 个月份列（M1~M6＝各月计划数量，PRD 5.4.3 计算链终值）
+    + 同步状态展示（后台定时任务自动同步，前台已移除所有手动同步入口）。顶部口径说明条已按用户要求移除，且不应残留 M7~M12 与 12 个月口径。
+    详情弹窗须含「参数」区与计算实例完整表（指标为行、M1~M6 为列），由探针 probe_poreg_roll.mjs 校验。"""
     r = rendered(dump("po-roll"))
     base_cols = ["数据日期", "计划批次", "计划行", "供应商编码", "供应商名称", "配件号", "配件名称",
-                 "车型", "计划数量", "采购LT(月)", "预测起始月份", "未来6个月合计", "同步状态", "同步时间", "操作"]
+                 "车型", "MOQ", "MPQ", "计划数量", "采购LT(月)", "预测起始月份", "未来6个月合计",
+                 "同步状态", "同步时间", "操作"]
     miss = [c for c in base_cols if not has_col(r, c)]
     month_miss = [("M%d" % i) for i in range(1, 7) if not has_col(r, "M%d" % i)]
     tab_miss = [t for t in ["全部", "未同步", "已同步SAP"] if t not in r]
     bad = []
-    if "同步到 SAP" not in r:
-        bad.append("缺同步到SAP按钮")
+    if "同步到 SAP" in r:
+        bad.append("不应残留同步到SAP按钮")
     # 已移除：顶部口径说明条、12 个月列、发布状态口径
     if "滚动计划口径" in r:
         bad.append("顶部口径说明条未移除")
@@ -1364,6 +1380,59 @@ def check_po_roll():
     detail = (f"基础列={len(base_cols)-len(miss)}/{len(base_cols)} 月份列={6-len(month_miss)}/6 "
               f"页签缺失={tab_miss if tab_miss else '无'} 行={rows} 异常={bad if bad else '无'} 列缺失={miss if miss else '无'}")
     return {"key": "po-roll", "ok": ok, "msg": detail}
+
+def check_po_archive():
+    """历史采购计划（po-history）+ 采购计划导出（po-export）两页渲染与口径校验。
+    历史页：列表列须与采购计划全量一致（默认全量 57 数据列，仅去掉顶部状态tab，归档只读）；
+    导出页：精简为下单字段，含「导出状态」列与 待导出/已导出 两个 tab（无「全部」tab、无标记按钮），
+            导出按钮名为「导出」，导出成功后自动打「已导出」标签。"""
+    bad = []
+    # ---- 历史采购计划 ----
+    rh = rendered(dump("po-history"))
+    if rh.count("ant-table-row") <= 0:
+        bad.append("po-history(rows=0)")
+    # 无顶部状态tab：归档页不应渲染 antd tabs 组件（审批状态页签）；单据状态仅作为数据列展示
+    if "ant-tabs-tab" in rh or "ant-tabs-nav" in rh:
+        bad.append("po-history(不应有状态tab)")
+    for col in ["数据生成日期", "调整计划数量", "拦截原因", "配件号", "单据状态"]:
+        if not has_col(rh, col):
+            bad.append("po-history(缺列:" + col + ")")
+    # 列须与采购计划全量一致：断言采购计划中「非首屏默认列」在历史页同样渲染（防只显示 11 列的回归）
+    po_full_extra = ["推荐计划数量(凑MOQ后)", "推荐计划数量(凑联合MOQ后)", "推荐计划数量(凑MPQ后)",
+                     "最低风控线", "预期库存数量", "近 3 个月月均销量", "修改人名称", "审批时间", "是否多供应商"]
+    for col in po_full_extra:
+        if not has_col(rh, col):
+            bad.append("po-history(列未与采购计划全量一致,缺:" + col + ")")
+    # ---- 采购计划导出 ----
+    re_ = rendered(dump("po-export"))
+    if re_.count("ant-table-row") <= 0:
+        bad.append("po-export(rows=0)")
+    if not has_col(re_, "导出状态"):
+        bad.append("po-export(缺导出状态列)")
+    # 顶部 tab：仅 待导出 / 已导出（不应有「全部」tab）
+    for t in ["待导出", "已导出"]:
+        if t not in re_:
+            bad.append("po-export(缺tab:" + t + ")")
+    if has_col(re_, "全部"):
+        bad.append("po-export(不应有「全部」tab)")
+    # 精简后须保留的下单字段
+    for col in ["计划数量(最终计划)", "当前供应商", "采购LT(天)", "要求到货日期", "建储仓库", "计划批次", "计划行"]:
+        if not has_col(re_, col):
+            bad.append("po-export(缺列:" + col + ")")
+    # 不应残留计算过程 / 审批 / 调整 字段
+    for col in ["推荐计划数量(凑MOQ后)", "推荐计划数量(凑联合MOQ后)", "推荐计划数量(凑成套采购后)", "推荐计划数量(凑MPQ后)",
+                "审批意见", "调整原因", "最低风控线", "预期库存数量", "近 3 个月月均销量", "欠交数量", "库间在途数量", "缺货数量"]:
+        if has_col(re_, col):
+            bad.append("po-export(不应出现过程/审批/调整列:" + col + ")")
+    # 无标记按钮 / 行内标记链接；导出按钮名为「导出」
+    if "标记导出" in re_ or "标记已导出" in re_:
+        bad.append("po-export(不应有标记导出按钮/链接)")
+    # antd 两字按钮会自动插空格（"导 出"），用正则匹配；"导出状态"列头不会误命中
+    if not re.search(r'>\s*导\s*出\s*<', re_):
+        bad.append("po-export(缺「导出」按钮)")
+    if bad:
+        return {"ok": False, "msg": "异常: " + ", ".join(bad)}
+    return {"ok": True, "msg": "2 页渲染正常（历史列与采购计划全量一致；导出 2 个tab无全部/无标记按钮，导出即自动打标）"}
 
 def main():
     only = sys.argv[1] if len(sys.argv) > 1 else None
@@ -1552,6 +1621,10 @@ def main():
         r = check_po_roll()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-roll        {r['msg']}")
+    if only in (None, 'po-archive', 'po-history', 'po-export'):
+        r = check_po_archive()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-archive    {r['msg']}")
     print("==== 汇总:", "全部通过" if all_ok else "存在失败", "====")
 
 if __name__ == "__main__":
