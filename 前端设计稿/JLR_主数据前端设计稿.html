@@ -1033,9 +1033,9 @@ mark {
                   <div class="f-item"><span class="f-label">拦截原因</span>
                     <a-select v-model:value="poRegFilters.block_reason" placeholder="拦截原因" style="width:180px" allow-clear
                       :options="poRegBlockReasonOptions"/></div>
-                  <div class="f-item"><span class="f-label">车型代码</span>
-                    <a-input v-model:value="poRegFilters.vehicle_code" placeholder="车型代码" style="width:130px" allow-clear/></div>
                   <template v-if="poRegFilterExpanded">
+                    <div class="f-item"><span class="f-label">车型代码</span>
+                      <a-input v-model:value="poRegFilters.vehicle_code" placeholder="车型代码" style="width:130px" allow-clear/></div>
                     <div class="f-item"><span class="f-label">ABC分类</span>
                       <a-select v-model:value="poRegFilters.abc_class" placeholder="ABC分类" style="width:110px" allow-clear
                         :options="[{value:'A',label:'A'},{value:'B',label:'B'},{value:'C',label:'C'}]"/></div>
@@ -1073,16 +1073,7 @@ mark {
                 <a-button :disabled="!poRegCanApprove" @click="poRegApproveOpen=true">审批通过</a-button>
                 <a-button danger :disabled="!poRegCanReject" @click="poRegRejectOpen=true">驳回</a-button>
                 <a-button @click="poRegImportOpen=true">⬆ 导入</a-button>
-                <a-dropdown>
-                  <a-button>更多 <span style="font-size:10px;">▾</span></a-button>
-                  <template #overlay>
-                    <a-menu @click="poRegMoreMenu">
-                      <a-menu-item key="exp">导出</a-menu-item>
-                      <a-menu-item key="expAll">全量导出</a-menu-item>
-                      <a-menu-item key="push">推送</a-menu-item>
-                    </a-menu>
-                  </template>
-                </a-dropdown>
+                <a-button @click="poRegExportCsv(false)">⬇ 导出</a-button>
                 <span style="margin-left:8px;color:#888;font-size:12px;" v-if="poRegSelected.length">已选 {{ poRegSelected.length }} 行</span>
                 <div class="toolbar-icons">
                   <a-dropdown>
@@ -1163,17 +1154,19 @@ mark {
               </div>
             </div>
 
-            <!-- 编辑 / 调整弹窗（统一居中弹窗，风格对齐「库存策略参数」） -->
+            <!-- 编辑 / 调整弹窗（统一居中弹窗，风格对齐「库存策略参数」；按拦截原因差异化编辑内容） -->
             <a-modal v-model:open="poRegEditOpen" title="调整 · 采购计划" :width="920" :footer="null" :mask-closable="false">
               <template v-if="poRegEditRow">
                 <a-alert v-if="poRegEditErrList.length" type="error" :message="poRegEditErrList.join('；')" show-icon style="margin-bottom:16px;"/>
                 <a-descriptions bordered size="small" :column="2" style="margin-bottom:20px;">
                   <a-descriptions-item label="配件号">{{ poRegEditRow.part_code }}</a-descriptions-item>
                   <a-descriptions-item label="配件名称">{{ poRegEditRow.part_name }}</a-descriptions-item>
+                  <a-descriptions-item label="是否计划拦截">{{ poRegEditRow.is_blocked }}</a-descriptions-item>
+                  <a-descriptions-item label="拦截原因">{{ poRegEditRow.block_reason }}</a-descriptions-item>
                 </a-descriptions>
 
-                <!-- 多供应商拦截场景：仅调整供应商与原因，不调整计划数量（数量维持系统计算值） -->
-                <div v-if="poRegEditRow.multi_supplier_block==='是'" class="jlrs-form-grid">
+                <!-- 多供应商：选择供应商（及其对应 MOQ）+ 调整原因 -->
+                <div v-if="poRegEditRow.block_reason==='多供应商'" class="jlrs-form-grid">
                   <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>选择供应商（及其对应 MOQ）</span>
                     <a-radio-group v-model:value="poRegEditRow.cur_supplier_code">
                       <a-radio v-for="s in poRegEditRow.suppliers" :key="s.code" :value="s.code" style="display:block;margin:6px 0;">
@@ -1187,13 +1180,47 @@ mark {
                     <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="调整供应商须填写原因，100 字以内" :maxlength="100"/></label>
                 </div>
 
-                <!-- 其他场景：仅调整数量与原因 -->
-                <div v-else class="jlrs-form-grid">
-                  <label><span><b class="jlrs-req">*</b>调整计划数量</span>
-                    <a-input-number v-model:value="poRegEditRow.adjust_qty" :min="0" :precision="0" :placeholder="'推荐计划数量 ' + poRegEditRow.suggest_qty + '，如需调整请输入新数量'"/></label>
+                <!-- 零件无计划员：指定计划员 + 调整原因 -->
+                <div v-else-if="poRegEditRow.block_reason==='零件无计划员'" class="jlrs-form-grid">
+                  <label><span><b class="jlrs-req">*</b>指定计划员</span>
+                    <a-select v-model:value="poRegEditRow.planner" :options="fcPlanners.map(v=>({value:v,label:v}))" placeholder="请选择计划员"/></label>
                   <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>调整原因</span>
-                    <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="调整数量与推荐不一致时必填，100 字以内" :maxlength="100"/></label>
+                    <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="指定计划员须填写原因，100 字以内" :maxlength="100"/></label>
                 </div>
+
+                <!-- 无有效采购合同：填写采购合同号 + 调整原因 -->
+                <div v-else-if="poRegEditRow.block_reason==='无有效采购合同'" class="jlrs-form-grid">
+                  <label><span><b class="jlrs-req">*</b>采购合同号</span>
+                    <a-input v-model:value="poRegEditRow.contract_no" placeholder="请输入有效采购合同号"/></label>
+                  <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>调整原因</span>
+                    <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="补全采购合同须填写原因，100 字以内" :maxlength="100"/></label>
+                </div>
+
+                <!-- 联合MOQ / 成套采购 凑单超量：调整计划数量 + 调整原因 -->
+                <div v-else-if="poRegEditRow.block_reason==='联合MOQ凑单超量' || poRegEditRow.block_reason==='成套采购凑单超量'" class="jlrs-form-grid">
+                  <label><span><b class="jlrs-req">*</b>调整计划数量</span>
+                    <a-input-number v-model:value="poRegEditRow.adjust_qty" :min="0" :precision="0" :placeholder="'推荐计划数量 ' + poRegEditRow.suggest_qty + '，如超量可下调'"/></label>
+                  <label><span>当前分组</span>
+                    <a-input :value="poRegEditRow.block_reason==='联合MOQ凑单超量' ? poRegEditRow.moq_group : poRegEditRow.set_group" disabled/></label>
+                  <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>调整原因</span>
+                    <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="调整数量须填写原因，100 字以内" :maxlength="100"/></label>
+                </div>
+
+                <!-- 活动零件：填写活动名称/编号 + 调整原因 -->
+                <div v-else-if="poRegEditRow.block_reason==='活动零件'" class="jlrs-form-grid">
+                  <label><span><b class="jlrs-req">*</b>活动名称 / 编号</span>
+                    <a-input v-model:value="poRegEditRow.activity_no" placeholder="请输入活动名称或编号"/></label>
+                  <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>调整原因</span>
+                    <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="活动零件须填写原因，100 字以内" :maxlength="100"/></label>
+                </div>
+
+                <!-- 其他（系统自动拦截，计划员无需处理）：仅记录备注 -->
+                <div v-else class="jlrs-form-grid">
+                  <a-alert type="info" :message="poRegEditBlockNote" show-icon style="grid-column:1 / -1; margin-bottom:8px;"/>
+                  <label style="grid-column:1 / -1;"><span>调整原因（备注）</span>
+                    <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="系统自动拦截，计划员无需处理，可填写备注，100 字以内" :maxlength="100"/></label>
+                </div>
+
                 <div class="jlrs-modal-footer">
                   <a-button @click="poRegEditOpen=false">取消</a-button>
                   <a-button type="primary" @click="poRegSaveEdit">确定</a-button>
@@ -1262,7 +1289,7 @@ mark {
                   <a-descriptions-item v-if="poRegDetailRow.multi_supplier==='是'" label="是否多供应商">
                     <a-tag color="orange" style="margin:0;">{{ poRegDetailRow.multi_supplier }}</a-tag>
                   </a-descriptions-item>
-                  <a-descriptions-item v-if="poRegDetailRow.multi_supplier==='是'" label="当前供应商及MOQ">
+                  <a-descriptions-item v-if="poRegDetailRow.multi_supplier==='是'" label="供应商名称及MOQ">
                     {{ poRegDetailRow.cur_supplier_name }}（MOQ {{ poRegDetailRow.cur_supplier_moq }}）
                   </a-descriptions-item>
                   <a-descriptions-item label="调整原因" :span="2">{{ poRegDetailRow.adjust_reason || '—' }}</a-descriptions-item>
@@ -1338,16 +1365,21 @@ mark {
                   <div class="f-item"><span class="f-label">计划类型</span>
                     <a-select v-model:value="poHistFilters.plan_type" placeholder="计划类型" style="width:140px" allow-clear
                       :options="poRegPlanTypes.map(v=>({value:v,label:v}))"/></div>
-                  <div class="f-item"><span class="f-label">ABC分类</span>
-                    <a-select v-model:value="poHistFilters.abc_class" placeholder="ABC分类" style="width:110px" allow-clear
-                      :options="[{value:'A',label:'A'},{value:'B',label:'B'},{value:'C',label:'C'}]"/></div>
-                  <div class="f-item"><span class="f-label">车型代码</span>
-                    <a-input v-model:value="poHistFilters.vehicle_code" placeholder="车型代码" style="width:130px" allow-clear/></div>
+                  <template v-if="poHistFilterExpanded">
+                    <div class="f-item"><span class="f-label">车型代码</span>
+                      <a-input v-model:value="poHistFilters.vehicle_code" placeholder="车型代码" style="width:130px" allow-clear/></div>
+                    <div class="f-item"><span class="f-label">ABC分类</span>
+                      <a-select v-model:value="poHistFilters.abc_class" placeholder="ABC分类" style="width:110px" allow-clear
+                        :options="[{value:'A',label:'A'},{value:'B',label:'B'},{value:'C',label:'C'}]"/></div>
+                  </template>
                 </div>
                 <div class="filter-actions">
                   <a-button type="primary" @click="poHistDoSearch">搜索</a-button>
                   <a-button @click="poHistResetFilters">重置</a-button>
                   <span class="act" :style="{color:poHistFav?'#faad14':''}" @click="poHistToggleFav">{{ poHistFav ? '★' : '☆' }}</span>
+                  <span class="act" @click="poHistFilterExpanded=!poHistFilterExpanded">
+                    <span class="txt">{{ poHistFilterExpanded ? '收起' : '展开' }}</span><span style="font-size:10px;">▾</span>
+                  </span>
                 </div>
               </div>
             </div>
@@ -1411,6 +1443,7 @@ mark {
                   </template>
                   <template v-else-if="column.key==='action'">
                     <span class="link-btn" @click.stop="poHistOpenDetail(record)">详情</span>
+                    <span class="link-btn" @click.stop="poHistOpenChgLog(record)">变更记录</span>
                   </template>
                   <template v-else>{{ record[column.dataIndex] }}</template>
                 </template>
@@ -1447,7 +1480,10 @@ mark {
                   <a-descriptions-item v-if="poHistDetailRow.multi_supplier==='是'" label="是否多供应商">
                     <a-tag color="orange" style="margin:0;">{{ poHistDetailRow.multi_supplier }}</a-tag>
                   </a-descriptions-item>
-                  <a-descriptions-item v-if="poHistDetailRow.multi_supplier==='是'" label="当前供应商及MOQ">
+                  <a-descriptions-item v-if="poHistDetailRow.multi_supplier==='是'" label="供应商代码">
+                    {{ poHistDetailRow.cur_supplier_code }}
+                  </a-descriptions-item>
+                  <a-descriptions-item v-if="poHistDetailRow.multi_supplier==='是'" label="供应商名称及MOQ">
                     {{ poHistDetailRow.cur_supplier_name }}（MOQ {{ poHistDetailRow.cur_supplier_moq }}）
                   </a-descriptions-item>
                   <a-descriptions-item label="调整原因" :span="2">{{ poHistDetailRow.adjust_reason || '—' }}</a-descriptions-item>
@@ -1458,6 +1494,36 @@ mark {
                 </a-descriptions>
                 <div class="jlrs-modal-footer">
                   <a-button @click="poHistDetailOpen=false">关闭</a-button>
+                </div>
+              </template>
+            </a-modal>
+
+            <!-- 变更记录弹窗（只读）：复用采购计划同一套变更口径（PRD 4.4.3.2 九类变更类型 / 变更来源） -->
+            <a-modal v-model:open="poHistChgOpen" title="变更记录 · 历史采购计划" :width="1120" :footer="null" :mask-closable="false">
+              <template v-if="poHistChgRow">
+                <a-descriptions bordered size="small" :column="3" style="margin-bottom:16px;">
+                  <a-descriptions-item label="配件号">{{ poHistChgRow.part_code }}</a-descriptions-item>
+                  <a-descriptions-item label="配件名称">{{ poHistChgRow.part_name }}</a-descriptions-item>
+                  <a-descriptions-item label="建储仓库">{{ poHistChgRow.wh_code + ' ' + poHistChgRow.wh_name }}</a-descriptions-item>
+                  <a-descriptions-item label="计划批次">{{ poHistChgRow.plan_batch }}</a-descriptions-item>
+                  <a-descriptions-item label="计划行">{{ poHistChgRow.plan_line }}</a-descriptions-item>
+                  <a-descriptions-item label="数据日期">{{ poHistChgRow.data_date }}</a-descriptions-item>
+                </a-descriptions>
+                <div class="bt-sec-t" style="margin:0 0 10px;">变更明细（{{ (poHistChgRow.chg_log||[]).length }} 条，按时间正序）</div>
+                <a-table :columns="poRegChgColumns" :data-source="poHistChgRow.chg_log||[]" row-key="id" :pagination="false" size="small" bordered>
+                  <template #bodyCell="{ column, record }">
+                    <template v-if="column.key==='type'">
+                      <a-tag :color="poRegChgColor(record.type)" style="margin:0;">{{ record.type }}</a-tag>
+                    </template>
+                    <template v-else-if="column.key==='source'">
+                      <a-tag :color="record.source==='系统' ? 'blue' : 'green'" style="margin:0;">{{ record.source }}</a-tag>
+                    </template>
+                    <template v-else>{{ record[column.dataIndex] }}</template>
+                  </template>
+                  <template #emptyText><a-empty description="暂无变更记录"/></template>
+                </a-table>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="poHistChgOpen=false">关闭</a-button>
                 </div>
               </template>
             </a-modal>
@@ -1481,7 +1547,7 @@ mark {
                     <a-input v-model:value="poExpFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">建储仓库编码</span>
                     <a-input v-model:value="poExpFilters.wh_code" placeholder="建储仓库编码" style="width:130px" allow-clear/></div>
-                  <div class="f-item"><span class="f-label">当前供应商</span>
+                  <div class="f-item"><span class="f-label">供应商名称</span>
                     <a-input v-model:value="poExpFilters.supplier" placeholder="供应商名称" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">计划类型</span>
                     <a-select v-model:value="poExpFilters.plan_type" placeholder="计划类型" style="width:140px" allow-clear
@@ -1540,6 +1606,9 @@ mark {
                   <template v-if="column.key==='part_code'">
                     <a @click.stop="poExpOpenDetail(record)">{{ record.part_code }}</a>
                   </template>
+                  <template v-else-if="column.key==='cur_purchase_code'">
+                    <a @click.stop="poExpOpenDetail(record)">{{ record.cur_purchase_code }}</a>
+                  </template>
                   <template v-else-if="column.key==='export_status'">
                     <a-tag :color="record.export_status==='已导出'?'green':'orange'" style="margin:0;">{{ record.export_status }}</a-tag>
                   </template>
@@ -1572,10 +1641,12 @@ mark {
                   <a-descriptions-item label="配件号">{{ poExpDetailRow.part_code }}</a-descriptions-item>
                   <a-descriptions-item label="配件名称">{{ poExpDetailRow.part_name }}</a-descriptions-item>
                   <a-descriptions-item label="当前采购件号">{{ poExpDetailRow.cur_purchase_code }}</a-descriptions-item>
+                  <a-descriptions-item label="当前采购配件名称">{{ poExpDetailRow.cur_purchase_name }}</a-descriptions-item>
                   <a-descriptions-item label="建储仓库">{{ poExpDetailRow.wh_code }} {{ poExpDetailRow.wh_name }}</a-descriptions-item>
                   <a-descriptions-item label="计划数量(最终计划)"><b>{{ poExpDetailRow.adjust_qty }}</b></a-descriptions-item>
-                  <a-descriptions-item label="当前供应商">{{ poExpDetailRow.cur_supplier_name }}</a-descriptions-item>
-                  <a-descriptions-item label="供应商MOQ">{{ poExpDetailRow.cur_supplier_moq }}</a-descriptions-item>
+                  <a-descriptions-item label="供应商代码">{{ poExpDetailRow.cur_supplier_code }}</a-descriptions-item>
+                  <a-descriptions-item label="供应商名称">{{ poExpDetailRow.cur_supplier_name }}</a-descriptions-item>
+                  <a-descriptions-item label="起订量">{{ poExpDetailRow.cur_supplier_moq }}</a-descriptions-item>
                   <a-descriptions-item label="采购LT(天)">{{ poExpDetailRow.purchase_lt }}</a-descriptions-item>
                   <a-descriptions-item label="要求到货日期">{{ poExpDetailRow.required_arrival_date }}</a-descriptions-item>
                   <a-descriptions-item label="计划批次">{{ poExpDetailRow.plan_batch }}</a-descriptions-item>
@@ -4957,7 +5028,7 @@ const poRegularData = Vue.reactive([]);
 // planner=true：需计划员处理（待处理）；planner=false：计划员无需处理（全部-其他拦截原因）
 const poRegBlockReasons = [
   { group:'待处理（需计划员处理）', items:[
-    '零件无计划员','无有效采购合同','多供应商待指定，需人工选定供应商',
+    '零件无计划员','无有效采购合同','多供应商',
     '联合MOQ凑单超量','成套采购凑单超量','活动零件'
   ]},
   { group:'全部（其他拦截原因）', items:[
@@ -4965,7 +5036,8 @@ const poRegBlockReasons = [
   ]}
 ];
 const poRegBlockReasonOptions = poRegBlockReasons.map(g=>({ label:g.group, title:g.group, options:g.items.map(v=>({ value:v, label:v })) }));
-const poRegBlockReasonPool = poRegBlockReasons.flatMap(g=>g.items).filter(v=>v!=='多供应商待指定，需人工选定供应商');
+// 待提交记录分配拦截原因时的候选池：PRD 4.4.2.10 全部 11 条原因，去掉「多供应商」（多供应商由场景单独判定）
+const poRegBlockReasonAssignPool = poRegBlockReasons.flatMap(g=>g.items).filter(v=>v!=='多供应商');
 const poRegSuppliers = [
   { code:'V001', name:'博世汽车部件（苏州）有限公司', moq:50, since:'2021-03-15' },
   { code:'V002', name:'采埃孚（中国）投资有限公司', moq:100, since:'2022-06-01' },
@@ -4975,41 +5047,51 @@ const poRegSuppliers = [
 ];
 /* 常规采购计划：变更记录（原型示意）
    每行计划按时间顺序记录变更日志，字段口径：
-   变更类型 / 变更字段 / 变更前值 / 变更后值 / 变更来源 / 变更人 / 变更时间 / 变更原因 */
+   变更类型 / 变更内容（合并 变更字段+变更前+变更后，按变更类型格式化）/ 变更来源 / 变更人 / 变更时间 / 变更原因 */
+function poRegChgContent(e){
+  const ov = (e.old_value==null || e.old_value==='') ? '—' : e.old_value;
+  const nv = (e.new_value==null || e.new_value==='') ? '—' : e.new_value;
+  switch(e.type){
+    case '计划生成': return '系统按计算步骤生成该计划行，原始采购计划数量：'+ov+' → '+nv;
+    case '解除拦截': return '是否计划拦截、拦截原因：'+ov+' → '+nv+'（'+(e.reason||'—')+'）';
+    case '数量调整': return '调整计划数量：'+ov+' → '+nv;
+    case '调整供应商': return '供应商、对应的MOQ：'+ov+' → '+nv;
+    case '批量导入调整': return '批量导入调整计划数量：'+ov+' → '+nv;
+    case '提交审批': return '单据状态：'+ov+' → '+nv;
+    case '审批通过': return '单据状态、审批意见、审批人、审批时间：'+ov+' → '+nv;
+    case '驳回': return '单据状态、审批意见、审批人、审批时间：'+ov+' → '+nv;
+    case '计划导出执行': return '计划导出执行（客服导出计划去IPOS下单）：'+ov+' → '+nv;
+    default: return (e.field||'字段')+'：'+ov+' → '+nv;
+  }
+}
 function poRegMakeLog(r){
   const pad = (v)=> String(v).padStart(2,'0');
   const log = [];
   const baseDay = 20 + (Number(String(r.id).replace(/\D/g,'')) % 4);
   let n = 0;
-  const push = (type, field, oldV, newV, operator, source, reason) => {
-    n++;
-    const total = n * 13;
-    log.push({
-      id: r.id + '-LG' + pad(n),
-      time: '2026-10-' + pad(baseDay) + ' ' + pad((8 + Math.floor(total/60)) % 24) + ':' + pad(total % 60),
-      type: type, field: field, old_value: oldV, new_value: newV,
-      operator: operator, source: source, reason: reason,
-    });
-  };
-  push('计划生成', '推荐计划数量', '—', r.suggest_qty, '系统', '系统', '按计算逻辑生成采购计划');
-  push('MOQ取整', '推荐计划数量(起订量取整)', r.suggest_raw_qty, r.suggest_moq_qty, '系统', '系统', '按起订量 MOQ 取 MAX 下限');
-  if(r.is_joint_moq === '是'){
-    push('联合MOQ凑单', '推荐计划数量(凑联合MOQ后)', r.suggest_moq_qty, r.suggest_joint_qty, '系统', '系统', '联合MOQ组内凑单，组总量达标');
-  }
-  if(r.set_group !== '—'){
-    push('成套采购凑单', '推荐计划数量(凑成套采购后)', r.suggest_joint_qty, r.suggest_set_qty, '系统', '系统', '成套采购组凑单');
-  }
-  push('MPQ取整', '推荐计划数量', r.suggest_set_qty, r.suggest_mpq_qty, '系统', '系统', '按最小包装量向上取整');
+    const push = (type, field, oldV, newV, operator, source, reason) => {
+      n++;
+      const total = n * 13;
+      log.push({
+        id: r.id + '-LG' + pad(n),
+        time: '2026-10-' + pad(baseDay) + ' ' + pad((8 + Math.floor(total/60)) % 24) + ':' + pad(total % 60),
+        type: type, field: field, old_value: oldV, new_value: newV,
+        operator: operator, source: source, reason: reason,
+        content: poRegChgContent({ type:type, field:field, old_value:oldV, new_value:newV, reason:reason }),
+      });
+    };
+  // 变更类型严格取自 PRD 4.4.3.2 变更记录「变更类型」目录（9 类）：
+  // 计划生成(系统) / 解除拦截(系统) / 数量调整(人工) / 调整供应商(人工) / 批量导入调整(人工) / 提交审批(人工) / 审批通过(人工) / 驳回(人工) / 计划导出执行(人工)
+  // 「计划生成」按 PRD 语义＝按整个计算步骤生成该计划行、初始数量落库，故 MOQ/联合MOQ/成套/MPQ 各取整步骤不再单列变更（明细见列表对应数量列）
+  const genReason = '按计算步骤生成该计划行，初始数量落库' + (r.is_blocked === '是' ? ('；生成时触发计划拦截（拦截原因：' + r.block_reason + '）') : '');
+  push('计划生成', '原始采购计划', '—', r.suggest_qty, '系统', '系统', genReason);
   if(r.adjust_qty !== r.suggest_qty){
     push('数量调整', '调整计划数量', r.suggest_qty, r.adjust_qty, r.planner, '人工', r.adjust_reason || '人工调整');
-  }
-  if(r.is_blocked === '是'){
-    push('计划拦截', '是否计划拦截', '否', '是', '系统', '系统', r.block_reason);
   }
   // 解除拦截：历史上被拦截（多供应商改选或联合MOQ/成套采购重新计算）但当前已解除
   if(r.was_blocked === '是' && r.is_blocked === '否'){
     const reason = (r.demo_supplier_change === '是') ? '指定供应商后拦截消除' : '联合MOQ/成套采购重新计算后拦截消除';
-    push('解除拦截', '是否计划拦截', '是', '否', '系统', '系统', reason);
+    push('解除拦截', '是否计划拦截、拦截原因', '是', '否', '系统', '系统', reason);
   }
   // 调整供应商：多供应商场景，人工改选供应商（含对应 MOQ 的前后变化）
   if(r.demo_supplier_change === '是' && r.suppliers && r.suppliers.length > 1){
@@ -5023,10 +5105,10 @@ function poRegMakeLog(r){
     push('提交审批', '单据状态', '待提交', '待审批', r.planner, '人工', '计划员提交审批');
   }
   if(r.bill_status === '审批通过'){
-    push('审批通过', '单据状态', '待审批', '审批通过', r.approver, '人工', r.approve_remark || '同意');
+    push('审批通过', '单据状态、审批意见、审批人、审批时间', '待审批', '审批通过', r.approver, '人工', r.approve_remark || '同意');
   }
   if(r.bill_status === '已驳回'){
-    push('驳回', '单据状态', '待审批', '已驳回', r.approver, '人工', r.approve_remark || '退回补充');
+    push('驳回', '单据状态、审批意见、审批人、审批时间', '待审批', '已驳回', r.approver, '人工', r.approve_remark || '退回补充');
   }
   return log;
 }
@@ -5062,9 +5144,9 @@ for(let i=0;i<64;i++){
   const suggestMpqQty = Math.ceil(suggestSetQty/mpq)*mpq;
   const suggestQty = suggestMpqQty;
   // 供应商与拦截场景（原型示意）
-  // 多供应商拦截：一个配件存在多个可选供应商，需人工指定供应商后再确定计划数量（拦截原因＝多供应商待指定，需人工选定供应商）
+  // 多供应商拦截：一个配件存在多个可选供应商，需人工指定供应商后再确定计划数量（拦截原因＝多供应商）
   // 已改选供应商（演示）：历史上由多供应商改选其一并已解除拦截
-  // 其余拦截行按 PRD 拦截原因枚举（缺采购件/缺计划员/联合MOQ/成套/活动件/非计划日等）循环演示，覆盖「待处理」与「全部」两组
+  // 其余拦截行按 PRD 4.4.2.10 拦截原因枚举循环演示，覆盖「待处理」与「全部」两组
   const isMultiBlock = (i % 9 === 0);
   const isMissingBlock = (!isMultiBlock && i % 11 === 0);
   const demoSupplier = (!isMultiBlock && !isMissingBlock && i % 17 === 0);
@@ -5077,10 +5159,20 @@ for(let i=0;i<64;i++){
     suppliers.push(Object.assign({}, poRegSuppliers[(sIdx+2)%poRegSuppliers.length]));
   }
   const multiSupplier = suppliers.length > 1 ? '是' : '否';
-  const isBlocked = (isMultiBlock || isMissingBlock) ? '是' : '否';
-  const blockReason = isMultiBlock ? '多供应商待指定，需人工选定供应商'
-                   : (isMissingBlock ? poRegBlockReasonPool[i % poRegBlockReasonPool.length] : '—');
-  const multiSupplierBlock = isMultiBlock ? '是' : '否';
+  // 待提交记录：是否计划拦截固定为「是」，拦截原因必须有值（取值 PRD 4.4.2.10 计划拦截）
+  // 非待提交记录：沿用场景化拦截（多供应商 / 缺计划员等），保持演示多样
+  let isBlocked, blockReason, multiSupplierBlock;
+  if(billStatus==='待提交'){
+    isBlocked = '是';
+    if(isMultiBlock) blockReason = '多供应商';
+    else if(isMissingBlock) blockReason = '零件无计划员';
+    else blockReason = poRegBlockReasonAssignPool[i % poRegBlockReasonAssignPool.length];
+    multiSupplierBlock = isMultiBlock ? '是' : '否';
+  } else {
+    isBlocked = (isMultiBlock || isMissingBlock) ? '是' : '否';
+    blockReason = isMultiBlock ? '多供应商' : (isMissingBlock ? '零件无计划员' : '—');
+    multiSupplierBlock = isMultiBlock ? '是' : '否';
+  }
   const wasBlocked = (demoSupplier || wasBlockedOther) ? '是' : '否';
   const chosenIdx = demoSupplier ? 1 : 0;
   const curSupplier = suppliers[chosenIdx];
@@ -5177,7 +5269,7 @@ function poBuildFullRow(i, opts){
   if(isMultiBlock){ suppliers.push(Object.assign({}, poRegSuppliers[(sIdx+1)%poRegSuppliers.length])); suppliers.push(Object.assign({}, poRegSuppliers[(sIdx+2)%poRegSuppliers.length])); }
   const multiSupplier = suppliers.length > 1 ? '是' : '否';
   const isBlocked = opts.forceApproved ? '否' : (isMultiBlock ? '是' : '否');
-  const blockReason = isBlocked==='是' ? '多供应商待指定，需人工选定供应商' : '—';
+  const blockReason = isBlocked==='是' ? '多供应商' : '—';
   const multiSupplierBlock = isMultiBlock ? '是' : '否';
   const curSupplier = suppliers[0];
   const adjustQty = (i % 7 === 3) ? suggestQty + 60 : suggestQty;
@@ -6174,16 +6266,19 @@ const app = createApp({
     const poRegColumns = [
       { title:'数据生成日期', key:'data_date', dataIndex:'data_date', width:100 },
       { title:'计划类型', key:'plan_type', dataIndex:'plan_type', width:112, sorter:(a,b)=>a.plan_type.localeCompare(b.plan_type) },
-      { title:'配件号', key:'part_code', dataIndex:'part_code', width:108, sorter:(a,b)=>a.part_code.localeCompare(b.part_code) },
-      { title:'配件名称', key:'part_name', dataIndex:'part_name', width:132, ellipsis:true },
-      /* 第一屏核心列：推荐计划数量(取整前) / 调整计划数量 / 调整原因 / 是否计划拦截 / 拦截原因 */
-      { title:'推荐计划数量(取整前)', key:'suggest_raw_qty', dataIndex:'suggest_raw_qty', width:118 },
+      { title:'当前采购件号', key:'cur_purchase_code', dataIndex:'cur_purchase_code', width:112 },
+      { title:'当前采购配件名称', key:'cur_purchase_name', dataIndex:'cur_purchase_name', width:132, ellipsis:true },
+      /* 第一屏核心列（默认可见，无需横向滚动即可见）：
+         当前采购件号 / 当前采购配件名称（置于最前，紧邻计划类型）/ 推荐计划数量(凑MPQ后) / 调整计划数量 / 调整原因 / 是否计划拦截 / 拦截原因；
+         其后紧跟 配件号 / 配件名称 / 推荐计划数量(取整前)（置于第一屏末尾） */
+      { title:'推荐计划数量(凑MPQ后)', key:'suggest_mpq_qty', dataIndex:'suggest_mpq_qty', width:122, ellipsis:true },
       { title:'调整计划数量', key:'adjust_qty', dataIndex:'adjust_qty', width:90, sorter:(a,b)=>a.adjust_qty-b.adjust_qty },
       { title:'调整原因', key:'adjust_reason', dataIndex:'adjust_reason', width:150, ellipsis:true },
       { title:'是否计划拦截', key:'is_blocked', dataIndex:'is_blocked', width:96 },
       { title:'拦截原因', key:'block_reason', dataIndex:'block_reason', width:150, ellipsis:true },
-      { title:'当前采购件号', key:'cur_purchase_code', dataIndex:'cur_purchase_code', width:112 },
-      { title:'当前采购配件名称', key:'cur_purchase_name', dataIndex:'cur_purchase_name', width:132, ellipsis:true },
+      { title:'配件号', key:'part_code', dataIndex:'part_code', width:108, sorter:(a,b)=>a.part_code.localeCompare(b.part_code) },
+      { title:'配件名称', key:'part_name', dataIndex:'part_name', width:132, ellipsis:true },
+      { title:'推荐计划数量(取整前)', key:'suggest_raw_qty', dataIndex:'suggest_raw_qty', width:118 },
       { title:'是否出计划日', key:'is_plan_day', dataIndex:'is_plan_day', width:100 },
       { title:'建储仓库编码', key:'wh_code', dataIndex:'wh_code', width:98 },
       { title:'建储仓库名称', key:'wh_name', dataIndex:'wh_name', width:112, ellipsis:true },
@@ -6204,6 +6299,8 @@ const app = createApp({
       { title:'近 3 个月月均销量', key:'avg_3m_sales', dataIndex:'avg_3m_sales', width:110, ellipsis:true },
       { title:'当前可用天数', key:'cover_days', dataIndex:'cover_days', width:92, sorter:(a,b)=>a.cover_days-b.cover_days },
       { title:'起订量', key:'moq', dataIndex:'moq', width:66 },
+      { title:'供应商代码', key:'cur_supplier_code', dataIndex:'cur_supplier_code', width:100 },
+      { title:'供应商名称', key:'cur_supplier_name', dataIndex:'cur_supplier_name', width:160, ellipsis:true },
       { title:'推荐计划数量(凑MOQ后)', key:'suggest_moq_qty', dataIndex:'suggest_moq_qty', width:122, ellipsis:true },
       { title:'联合MOQ分组', key:'moq_group', dataIndex:'moq_group', width:100 },
       { title:'联合MOQ数量', key:'joint_moq_qty', dataIndex:'joint_moq_qty', width:100 },
@@ -6218,11 +6315,8 @@ const app = createApp({
       { title:'凑成套采购量', key:'set_fill_qty', dataIndex:'set_fill_qty', width:90 },
       { title:'推荐计划数量(凑成套采购后)', key:'suggest_set_qty', dataIndex:'suggest_set_qty', width:134, ellipsis:true },
       { title:'最小包装量', key:'mpq', dataIndex:'mpq', width:82 },
-      { title:'推荐计划数量(凑MPQ后)', key:'suggest_mpq_qty', dataIndex:'suggest_mpq_qty', width:122, ellipsis:true },
       { title:'推荐计划数量', key:'suggest_qty', dataIndex:'suggest_qty', width:100, sorter:(a,b)=>a.suggest_qty-b.suggest_qty },
       { title:'是否多供应商', key:'multi_supplier', dataIndex:'multi_supplier', width:96 },
-      { title:'当前供应商', key:'cur_supplier_name', dataIndex:'cur_supplier_name', width:160, ellipsis:true },
-      { title:'当前供应商MOQ', key:'cur_supplier_moq', dataIndex:'cur_supplier_moq', width:100 },
       { title:'要求到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:104 },
       { title:'单据状态', key:'bill_status', dataIndex:'bill_status', width:84 },
       { title:'审批意见', key:'approve_remark', dataIndex:'approve_remark', width:100, ellipsis:true },
@@ -6232,7 +6326,7 @@ const app = createApp({
       { title:'审批时间', key:'approve_time', dataIndex:'approve_time', width:138 },
       { title:'操作', key:'action', width:170, fixed:'right' },
     ];
-    const poRegDefaultVisible = ['data_date','plan_type','part_code','part_name','suggest_raw_qty','adjust_qty','adjust_reason','is_blocked','block_reason','bill_status','action'];
+    const poRegDefaultVisible = ['data_date','plan_type','part_code','part_name','suggest_raw_qty','adjust_qty','adjust_reason','is_blocked','block_reason','cur_purchase_code','cur_purchase_name','suggest_mpq_qty','bill_status','action'];
     const poRegHiddenCols = ref([]);
     const poRegVisibleColumns = computed(()=> poRegColumns.filter(c=>!poRegHiddenCols.value.includes(c.key)));
     const poRegScrollX = poRegColumns.reduce((s,c)=>s+(c.width||100),0);
@@ -6315,7 +6409,7 @@ const app = createApp({
     }
     // 编辑 / 调整弹窗
     const poRegEditOpen = ref(false); const poRegEditRow = ref(null); const poRegEditTarget = ref(null);
-    const poRegEditErr = reactive({ adjustQty:'', adjustReason:'' });
+    const poRegEditErr = reactive({ adjustQty:'', adjustReason:'', supplier:'', planner:'', contract:'', activity:'' });
     const poRegEditErrList = computed(()=> Object.values(poRegEditErr).filter(Boolean));
     function poRegOpenEdit(r){
       poRegEditTarget.value = r;
@@ -6329,35 +6423,80 @@ const app = createApp({
     }
     // 多供应商拦截场景：展示当前选定供应商及其对应 MOQ（数量不在本弹窗调整）
     const poRegEditCurSupplier = computed(()=>{ const r=poRegEditRow.value; if(!r||!r.suppliers) return null; return r.suppliers.find(s=>s.code===r.cur_supplier_code) || null; });
+    // 系统自动拦截（计划员无需处理）类原因 → 弹窗提示文案
+    const poRegEditBlockNoteMap = {
+      '非计划日':'当前为非计划日，系统自动拦截，计划员无需处理',
+      '库存充足':'库存充足，系统自动拦截，计划员无需处理',
+      '替代拦截':'替代关系拦截，计划员无需处理',
+      '一次买断件':'一次买断件，计划员无需处理',
+      '直供件':'直供件，计划员无需处理',
+    };
+    const poRegEditBlockNote = computed(()=> poRegEditBlockNoteMap[poRegEditRow.value ? poRegEditRow.value.block_reason : ''] || '');
     function poRegSaveEdit(){
       const row = poRegEditRow.value; if(!row) return;
       let ok = true;
-      const isMulti = row.multi_supplier_block==='是';
-      if(!isMulti && (row.adjust_qty===null || row.adjust_qty===undefined || row.adjust_qty < 0 || !Number.isInteger(row.adjust_qty))){ poRegEditErr.adjustQty='调整计划数量必须为非负整数'; ok=false; } else poRegEditErr.adjustQty='';
-      // 多供应商拦截场景：改选供应商属于实质调整，调整原因必填
-      const needReason = isMulti || (row.adjust_qty!==row.suggest_qty);
-      if(needReason && (!row.adjust_reason || !row.adjust_reason.trim())){ poRegEditErr.adjustReason = isMulti ? '调整供应商须填写调整原因' : '调整数量与推荐不一致时，调整原因必填'; ok=false; } else poRegEditErr.adjustReason='';
+      const reason = row.block_reason;
+      const isReadOnly = ['非计划日','库存充足','替代拦截','一次买断件','直供件'].includes(reason);
+      // 按拦截原因做差异化校验
+      if(reason==='多供应商'){
+        if(!row.cur_supplier_code){ poRegEditErr.supplier='请选择供应商'; ok=false; } else poRegEditErr.supplier='';
+      }
+      if(reason==='零件无计划员'){
+        if(!row.planner){ poRegEditErr.planner='请指定计划员'; ok=false; } else poRegEditErr.planner='';
+      }
+      if(reason==='无有效采购合同'){
+        if(!row.contract_no || !row.contract_no.trim()){ poRegEditErr.contract='请填写采购合同号'; ok=false; } else poRegEditErr.contract='';
+      }
+      if(reason==='活动零件'){
+        if(!row.activity_no || !row.activity_no.trim()){ poRegEditErr.activity='请填写活动名称/编号'; ok=false; } else poRegEditErr.activity='';
+      }
+      if(reason==='联合MOQ凑单超量' || reason==='成套采购凑单超量'){
+        if(row.adjust_qty===null || row.adjust_qty===undefined || row.adjust_qty < 0 || !Number.isInteger(row.adjust_qty)){ poRegEditErr.adjustQty='调整计划数量必须为非负整数'; ok=false; } else poRegEditErr.adjustQty='';
+      }
+      // 调整原因：除「系统自动拦截（计划员无需处理）」外均必填
+      const needReason = !isReadOnly;
+      if(needReason && (!row.adjust_reason || !row.adjust_reason.trim())){ poRegEditErr.adjustReason='调整原因必填（100 字以内）'; ok=false; } else poRegEditErr.adjustReason='';
       if(!ok){ msg('请修正表单中的错误项','error'); return; }
-      // 调整弹窗仅维护「调整计划数量」与「调整原因」（多供应商场景仅调整供应商与原因），要求到货日期等其余字段不在弹窗内编辑（保持原值）
       if(poRegEditTarget.value){
         const t = poRegEditTarget.value;
-        const upd = isMulti ? { adjust_reason:row.adjust_reason, modifier:'当前用户', update_time:new Date().toISOString().slice(0,16).replace('T',' ') }
-                            : { adjust_qty:row.adjust_qty, adjust_reason:row.adjust_reason, modifier:'当前用户', update_time:new Date().toISOString().slice(0,16).replace('T',' ') };
-        // 多供应商拦截：写回选定供应商、解除拦截，并追加「调整供应商」+「解除拦截」两条变更记录
-        if(isMulti){
+        const ts = new Date().toISOString().slice(0,16).replace('T',' ');
+        const log = (t.chg_log||[]).slice();
+        const pushLog = (type, field, oldV, newV, source, reasonTxt)=>{ log.push({ id:t.id+'-LG'+String(log.length+1).padStart(2,'0'), time:ts, type, field, old_value:oldV, new_value:newV, operator:'当前用户', source, reason:reasonTxt, content: poRegChgContent({ type, field, old_value:oldV, new_value:newV, reason:reasonTxt }) }); };
+        const upd = { modifier:'当前用户', update_time:ts };
+        // 变更类型严格取自 PRD 4.4.3.2「变更类型」目录（9 类），变更来源按目录固定：
+        // 系统＝计划生成/解除拦截；人工＝数量调整/调整供应商/批量导入调整/提交审批/审批通过/驳回/计划导出执行
+        if(reason==='多供应商'){
+          // 写回选定供应商、解除拦截，并追加「调整供应商」+「解除拦截」两条变更记录
           const sel = (row.suppliers||[]).find(s=>s.code===row.cur_supplier_code) || row.suppliers[0];
           const oldS = (t.suppliers||[]).find(s=>s.code===t.cur_supplier_code) || (t.suppliers||[])[0] || sel;
           upd.cur_supplier_code = sel.code; upd.cur_supplier_name = sel.name; upd.cur_supplier_moq = sel.moq;
           upd.is_blocked = '否'; upd.block_reason = '—'; upd.multi_supplier_block = '否';
-          const log = (t.chg_log||[]).slice();
-          const ts = new Date().toISOString().slice(0,16).replace('T',' ');
-          if(sel.code !== oldS.code){
-            log.push({ id:t.id+'-LG'+String(log.length+1).padStart(2,'0'), time:ts, type:'调整供应商', field:'供应商、对应的MOQ', old_value:(oldS.name+'（MOQ '+oldS.moq+'）'), new_value:(sel.name+'（MOQ '+sel.moq+'）'), operator:'当前用户', source:'人工', reason:'多供应商场景，手工改选供应商' });
-          }
-          log.push({ id:t.id+'-LG'+String(log.length+1).padStart(2,'0'), time:ts, type:'解除拦截', field:'是否计划拦截', old_value:'是', new_value:'否', operator:'系统', source:'系统', reason:'指定供应商后拦截消除' });
-          upd.chg_log = log;
-          const last = log[log.length-1]; upd.last_change_type = last.type; upd.last_change_time = last.time;
+          if(sel.code !== oldS.code){ pushLog('调整供应商','供应商、对应的MOQ',(oldS.name+'（MOQ '+oldS.moq+'）'),(sel.name+'（MOQ '+sel.moq+'）'),'人工','多供应商场景，手工改选供应商'); }
+          pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','指定供应商后拦截消除');
+        } else if(reason==='零件无计划员'){
+          // 「指定计划员」本身不属于目录内变更类型，其净效果＝拦截解除，故仅记 解除拦截(系统)，明细写入变更原因
+          upd.planner = row.planner; upd.is_blocked='否'; upd.block_reason='—';
+          pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','指定计划员（'+(t.planner||'—')+' → '+row.planner+'）后拦截消除');
+        } else if(reason==='无有效采购合同'){
+          // 「补全采购合同」同理归入 解除拦截(系统)，明细写入变更原因
+          upd.contract_no = row.contract_no; upd.is_blocked='否'; upd.block_reason='—';
+          pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','补全有效采购合同（合同号 '+row.contract_no+'）后拦截消除');
+        } else if(reason==='联合MOQ凑单超量' || reason==='成套采购凑单超量'){
+          upd.adjust_qty = row.adjust_qty; upd.adjust_reason = row.adjust_reason;
+          upd.is_blocked='否'; upd.block_reason='—';
+          pushLog('数量调整','调整计划数量', t.adjust_qty, row.adjust_qty, '人工', row.adjust_reason||'下调凑单超量');
+          pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','调整数量后拦截消除');
+        } else if(reason==='活动零件'){
+          // 「登记活动信息」同理归入 解除拦截(系统)，明细写入变更原因
+          upd.activity_no = row.activity_no; upd.is_blocked='否'; upd.block_reason='—';
+          pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','登记活动信息（'+row.activity_no+'）后拦截消除');
+        } else {
+          // 系统自动拦截（计划员无需处理）：仅更新备注，维持拦截。
+          // 备注变更不属于目录内任何变更类型，故不落变更日志（明细保留在「调整原因」列）
+          upd.adjust_reason = row.adjust_reason;
         }
+        upd.chg_log = log;
+        const last = log[log.length-1]; upd.last_change_type = last.type; upd.last_change_time = last.time;
         Object.assign(t, upd);
       }
       poRegEditOpen.value=false; msg('调整已保存','success');
@@ -6370,18 +6509,15 @@ const app = createApp({
     function poRegOpenChgLog(r){ poRegChgRow.value=r; poRegChgOpen.value=true; }
     const poRegChgColumns = [
       { title:'变更时间', key:'time', dataIndex:'time', width:130 },
-      { title:'变更类型', key:'type', dataIndex:'type', width:120 },
-      { title:'变更字段', key:'field', dataIndex:'field', width:200 },
-      { title:'变更前', key:'old_value', dataIndex:'old_value', width:100 },
-      { title:'变更后', key:'new_value', dataIndex:'new_value', width:100 },
+      { title:'变更类型', key:'type', dataIndex:'type', width:140 },
+      { title:'变更内容', key:'content', dataIndex:'content', width:340, ellipsis:true },
       { title:'变更来源', key:'source', dataIndex:'source', width:80 },
       { title:'变更人', key:'operator', dataIndex:'operator', width:90 },
       { title:'变更原因 / 说明', key:'reason', dataIndex:'reason', width:230, ellipsis:true },
     ];
     function poRegChgColor(t){
-      const map = { '计划生成':'blue', 'MOQ取整':'geekblue', 'MPQ取整':'geekblue', '联合MOQ凑单':'purple',
-        '成套采购凑单':'purple', '数量调整':'orange', '计划拦截':'red', '解除拦截':'green', '调整供应商':'volcano',
-        '提交审批':'cyan', '审批通过':'green', '驳回':'red', '撤回':'gold', '批量导入调整':'orange', '重算刷新':'blue' };
+      const map = { '计划生成':'blue', '解除拦截':'green', '数量调整':'orange', '调整供应商':'volcano',
+        '批量导入调整':'gold', '提交审批':'cyan', '审批通过':'green', '驳回':'red', '计划导出执行':'purple' };
       return map[t] || 'default';
     }
     // 导入
@@ -6421,6 +6557,7 @@ const app = createApp({
     const poHistVisibleColumns = computed(()=> poHistColumns.filter(c=>!poHistHiddenCols.value.includes(c.key)));
     const poHistScrollX = computed(()=> poHistVisibleColumns.value.reduce((s,c)=>s+(c.width||100),0));
     function poHistToggleCol(k){ const i=poHistHiddenCols.value.indexOf(k); if(i>=0) poHistHiddenCols.value.splice(i,1); else poHistHiddenCols.value.push(k); }
+    const poHistFilterExpanded = ref(false);   // 与采购计划一致：ABC分类 / 车型代码 收在「展开」里
     const poHistFilters = reactive({ part_code:'', part_name:'', wh_code:'', wh_name:'', plan_type:undefined, abc_class:undefined, vehicle_code:'' });
     const poHistApplied = reactive({ part_code:'', part_name:'', wh_code:'', wh_name:'', plan_type:undefined, abc_class:undefined, vehicle_code:'' });
     const poHistFav = ref(false);
@@ -6450,6 +6587,9 @@ const app = createApp({
     function poHistBillColor(s){ return s==='待审批'?'orange':s==='已驳回'?'red':s==='审批通过'?'green':'default'; }
     const poHistDetailOpen = ref(false); const poHistDetailRow = ref(null);
     function poHistOpenDetail(r){ poHistDetailRow.value=r; poHistDetailOpen.value=true; }
+    // 变更记录：与采购计划共用同一套列定义与配色（PRD 4.4.3.2 九类变更类型 / 变更来源），只读展示
+    const poHistChgOpen = ref(false); const poHistChgRow = ref(null);
+    function poHistOpenChgLog(r){ poHistChgRow.value=r; poHistChgOpen.value=true; }
     function poHistCsv(rows){
       const cols = poHistVisibleColumns.value;
       const header = cols.map(c=>c.title);
@@ -6469,13 +6609,16 @@ const app = createApp({
     const poExpColumns = [
       { title:'数据生成日期', key:'data_date', dataIndex:'data_date', width:100 },
       { title:'计划类型', key:'plan_type', dataIndex:'plan_type', width:112, sorter:(a,b)=>a.plan_type.localeCompare(b.plan_type) },
+      /* 第一屏顺序与「采购计划」保持一致：当前采购件号 / 当前采购配件名称 置于 配件号 / 配件名称 之前 */
+      { title:'当前采购件号', key:'cur_purchase_code', dataIndex:'cur_purchase_code', width:112 },
+      { title:'当前采购配件名称', key:'cur_purchase_name', dataIndex:'cur_purchase_name', width:132, ellipsis:true },
       { title:'配件号', key:'part_code', dataIndex:'part_code', width:108, sorter:(a,b)=>a.part_code.localeCompare(b.part_code) },
       { title:'配件名称', key:'part_name', dataIndex:'part_name', width:132, ellipsis:true },
-      { title:'当前采购件号', key:'cur_purchase_code', dataIndex:'cur_purchase_code', width:112 },
       { title:'建储仓库', key:'wh', dataIndex:'wh', width:170, ellipsis:true },
       { title:'计划数量(最终计划)', key:'adjust_qty', dataIndex:'adjust_qty', width:118, sorter:(a,b)=>a.adjust_qty-b.adjust_qty },
-      { title:'当前供应商', key:'cur_supplier_name', dataIndex:'cur_supplier_name', width:170, ellipsis:true },
-      { title:'供应商MOQ', key:'cur_supplier_moq', dataIndex:'cur_supplier_moq', width:90 },
+      { title:'供应商代码', key:'cur_supplier_code', dataIndex:'cur_supplier_code', width:110 },
+      { title:'供应商名称', key:'cur_supplier_name', dataIndex:'cur_supplier_name', width:170, ellipsis:true },
+      { title:'起订量', key:'cur_supplier_moq', dataIndex:'cur_supplier_moq', width:90 },
       { title:'采购LT(天)', key:'purchase_lt', dataIndex:'purchase_lt', width:84 },
       { title:'要求到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:104 },
       { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:88 },
@@ -9893,15 +10036,16 @@ const app = createApp({
       poRegCanSubmit, poRegCanApprove, poRegCanReject, poRegRowSelection, poRegCustomRow, poRegBillColor,
       poRegSubmit, poRegApproveOpen, poRegApproveRemark, poRegApproveErr, poRegApproveConfirm,
       poRegRejectOpen, poRegRejectRemark, poRegRejectErr, poRegRejectConfirm,
-      poRegEditOpen, poRegEditRow, poRegEditErr, poRegEditErrList, poRegOpenEdit, poRegSaveEdit, poRegEditCurSupplier, poRegOpenDetail, poRegDetailOpen, poRegDetailRow,
+      poRegEditOpen, poRegEditRow, poRegEditErr, poRegEditErrList, poRegOpenEdit, poRegSaveEdit, poRegEditCurSupplier, poRegEditBlockNote, poRegOpenDetail, poRegDetailOpen, poRegDetailRow,
       poRegChgOpen, poRegChgRow, poRegOpenChgLog, poRegChgColumns, poRegChgColor,
       poRegImportOpen, poRegDoImport, poRegExportOpen, poRegExportMode, poRegExportFields, poRegToggleExportField,
       poRegExportCsv, poRegExportSource, poRegDoExport, poRegPush, poRegMoreMenu, poRegPlanTypes, poRegReceiveModes, poRegStatuses, poRegPurchaseTypes, poRegBlockReasonOptions, poRegPushStatuses,
       // 历史采购计划（po-history）
       poHistColumns, poHistHiddenCols, poHistVisibleColumns, poHistScrollX, poHistToggleCol,
-      poHistFilters, poHistApplied, poHistFav, poHistDoSearch, poHistResetFilters, poHistToggleFav,
+      poHistFilters, poHistApplied, poHistFilterExpanded, poHistFav, poHistDoSearch, poHistResetFilters, poHistToggleFav,
       poHistPage, poHistSelectedKeys, poHistFiltered, poHistPaged, poHistSelected, poHistRowSelection, poHistCustomRow,
       poHistOpenDetail, poHistDetailOpen, poHistDetailRow, poHistBillColor, poHistDoExport,
+      poHistChgOpen, poHistChgRow, poHistOpenChgLog,
       // 采购计划导出（po-export）
       poExpTabs, poExpTab, poExpColumns, poExpHiddenCols, poExpVisibleColumns, poExpScrollX, poExpToggleCol,
       poExpFilters, poExpApplied, poExpFav, poExpPage, poExpSelectedKeys, poExpFiltered, poExpTabCount,

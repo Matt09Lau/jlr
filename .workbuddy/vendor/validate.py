@@ -1403,6 +1403,22 @@ def check_po_archive():
     for col in po_full_extra:
         if not has_col(rh, col):
             bad.append("po-history(列未与采购计划全量一致,缺:" + col + ")")
+    # 筛选区：默认 5 项可见，车型代码 / ABC分类 收在「展开」折叠里（与采购计划一致）
+    fi = rh.find('<div class="filter-row"')
+    fr = rh[fi:rh.find('<div class="toolbar-row"')] if fi >= 0 else ""
+    vis = re.findall(r'class="f-label"[^>]*>([^<]+)<', fr)
+    for need in ["配件号", "配件名称", "建储仓库编码", "建储仓库名称", "计划类型"]:
+        if need not in vis:
+            bad.append("po-history(筛选默认缺:" + need + ")")
+    for hidden in ["车型代码", "ABC分类"]:
+        if hidden in vis:
+            bad.append("po-history(" + hidden + "应收在展开折叠里)")
+    if "展开" not in fr and "收起" not in fr:
+        bad.append("po-history(缺展开/收起切换)")
+    # 行操作：详情 + 变更记录（变更记录沿用采购计划同一套 PRD 4.4.3.2 口径）
+    acts = re.findall(r'class="link-btn"[^>]*>([^<]*)<', rh)
+    if "变更记录" not in [a.strip() for a in acts]:
+        bad.append("po-history(缺变更记录入口)")
     # ---- 采购计划导出 ----
     re_ = rendered(dump("po-export"))
     if re_.count("ant-table-row") <= 0:
@@ -1416,7 +1432,7 @@ def check_po_archive():
     if has_col(re_, "全部"):
         bad.append("po-export(不应有「全部」tab)")
     # 精简后须保留的下单字段
-    for col in ["计划数量(最终计划)", "当前供应商", "采购LT(天)", "要求到货日期", "建储仓库", "计划批次", "计划行"]:
+    for col in ["计划数量(最终计划)", "供应商名称", "采购LT(天)", "要求到货日期", "建储仓库", "计划批次", "计划行"]:
         if not has_col(re_, col):
             bad.append("po-export(缺列:" + col + ")")
     # 不应残留计算过程 / 审批 / 调整 字段
@@ -1430,6 +1446,20 @@ def check_po_archive():
     # antd 两字按钮会自动插空格（"导 出"），用正则匹配；"导出状态"列头不会误命中
     if not re.search(r'>\s*导\s*出\s*<', re_):
         bad.append("po-export(缺「导出」按钮)")
+    # 第一屏列序与采购计划一致：当前采购件号 / 当前采购配件名称 必须排在 配件号 / 配件名称 之前
+    ehds = [re.sub(r"<[^>]+>", "", h).strip() for h in re.findall(r"<th[^>]*>(.*?)</th>", re_, re.S)]
+
+    def _idx(t):
+        return ehds.index(t) if t in ehds else -1
+    for t in ["当前采购件号", "当前采购配件名称", "配件号", "配件名称"]:
+        if _idx(t) < 0:
+            bad.append("po-export(缺列:" + t + ")")
+    if 0 <= _idx("当前采购件号") and 0 <= _idx("配件号") and not _idx("当前采购件号") < _idx("配件号"):
+        bad.append("po-export(当前采购件号应在配件号之前)")
+    if 0 <= _idx("当前采购配件名称") and 0 <= _idx("配件名称") and not _idx("当前采购配件名称") < _idx("配件名称"):
+        bad.append("po-export(当前采购配件名称应在配件名称之前)")
+    if "供应商代码" not in ehds:
+        bad.append("po-export(缺供应商代码列)")
     if bad:
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
     return {"ok": True, "msg": "2 页渲染正常（历史列与采购计划全量一致；导出 2 个tab无全部/无标记按钮，导出即自动打标）"}
