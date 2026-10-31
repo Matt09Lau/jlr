@@ -37,8 +37,9 @@ PAGES = [
     ("po-approval",     "采购计划审批",      "审批状态",      False),
     ("po-issue",        "采购订单下达",      "PO单号",        False),
     ("sto-week",        "调拨计划",          "计划批次",      False),
+    ("sto-export",      "调拨计划导出",      "计划批次",      False),
     ("sto-summary",     "调拨计划汇总",      "数据快照日期",  False),
-    ("sto-next",        "给仓库的滚动调拨计划", "计划批次",   False),
+    ("sto-next",        "给仓库的预计调拨计划", "计划批次",   False),
     ("po-atb",          "All Time Buy 计划", "全生命周期累计需求", False),
     ("po-bridge",       "Bridge Buy 计划",   "属地预期库存",  False),
     ("po-ref",          "参考零件采购计划",  "参考车型",      False),
@@ -1198,7 +1199,7 @@ def check_menu():
                  "草稿", "计划层级管理", "计划层级管理2", "服务水平dashboard", "基础数据管理",
                  "库存策略参数", "采购LT", "目标满足率", "备货规则", "库间LT", "增储天数", "计划周期", "配件风控线", "配件多分类风控线", "建储水位线计算结果",
                  "配件组管理",
-                 "计划管理", "采购计划", "历史采购计划", "采购计划导出", "调拨计划", "调拨计划汇总", "给仓库的滚动调拨计划",
+                 "计划管理", "采购计划", "历史采购计划", "采购计划导出", "调拨计划", "调拨计划导出", "调拨计划汇总", "给仓库的预计调拨计划",
                  "All Time Buy 计划", "Bridge Buy 计划", "参考零件采购计划",
                  "给供应商的滚动计划",
                  "停产最后采购量", "采购计划审批", "采购订单下达"]
@@ -1207,7 +1208,7 @@ def check_menu():
     must_not = ["历史需求处理", "准确率报表", "预测回测配置",
                 "售后订单管理", "【本地测试页面】", "计划层级管理3",
                 "全新车型配件预测", "参考零件采购计划（首储）",
-                "常规采购计划", "本周调拨计划", "下周调拨计划"]
+                "常规采购计划", "本周调拨计划", "下周调拨计划", "给仓库的滚动调拨计划"]
     bad = [k for k in must_not if k in r]
     # 菜单归属顺序：停产最后采购量/采购计划审批/采购订单下达 应位于「草稿」组（常规预测(草稿) 之后），
     # 且采购计划组内 参考零件采购计划 之后直接是「报表」组
@@ -1227,11 +1228,12 @@ def check_menu():
     isto = r.find("调拨计划")   # 先命中「调拨计划」(本周改名)，其位置在「给仓库的滚动调拨计划」之前
     if not (0 <= ipo_reg < iroll < isto):
         bad.append("采购计划组顺序(po-roll 应在采购计划下、调拨计划上)")
-    # 顺序要求：调拨计划汇总 应位于 调拨计划（sto-week）之下、给仓库的滚动调拨计划（sto-next）之上
+    # 顺序要求：调拨计划(sto-week) → 调拨计划导出(sto-export) → 调拨计划汇总(sto-summary) → 给仓库的预计调拨计划(sto-next)
+    isto_exp = r.find("调拨计划导出")
     isum = r.find("调拨计划汇总")
-    inext = r.find("给仓库的滚动调拨计划")
-    if not (0 <= isto < isum < inext):
-        bad.append("计划顺序(调拨计划汇总 应在 调拨计划 下、给仓库的滚动调拨计划 上)")
+    inext = r.find("给仓库的预计调拨计划")
+    if not (0 <= isto < isto_exp < isum < inext):
+        bad.append("计划顺序(调拨计划 → 调拨计划导出 → 调拨计划汇总 → 给仓库的预计调拨计划)")
     # 顺序要求：历史采购计划 / 采购计划导出 应位于 采购计划 之下、给供应商的滚动计划 之上
     ihist = r.find("历史采购计划")
     iexp = r.find("采购计划导出")
@@ -1340,6 +1342,36 @@ def check_sto_summary():
     if bad:
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
     return {"ok": True, "msg": "已执行计划汇总渲染正常（35 列严格对齐业务报表 / 三套仓网切换 / 仅导出无编辑）"}
+
+def check_sto_export():
+    """调拨计划导出（sto-export）：字段与「调拨计划」一致（29 输出字段）+ 导出状态/导出时间，
+    逻辑同「采购计划导出」：顶部仅「待导出」tab、勾选行或筛选全量导出、导出后自动标记已导出。
+    断言：渲染出行、29 字段齐备、含导出状态/导出时间、顶部仅一个 tab、无「已导出」tab、无导入/无审批/无编辑。"""
+    r = rendered(dump("sto-export"))
+    bad = []
+    if r.count("ant-table-row") <= 0:
+        bad.append("rows=0")
+    for c in ["数据生成日期", "计划批次", "计划行", "计划类型", "配件号", "配件名称", "发货仓", "收货仓",
+              "收货仓最低风控线", "收货仓目标库存", "是否出计划日", "ABC分类", "车型代码", "计划员",
+              "预期库存", "可用库存数量", "欠交数量", "库间在途数量", "缺货数量", "近3个月月均销量",
+              "当前可用天数", "库间LT", "要求到货日期", "推荐计划数量(取整前)", "推荐计划数量(分配后)",
+              "体积", "体积单位", "预计调拨体积", "备注"]:
+        if c not in r:
+            bad.append("缺列:" + c)
+    for c in ["导出状态", "导出时间"]:
+        if c not in r:
+            bad.append("缺列:" + c)
+    if "待导出" not in r:
+        bad.append("缺「待导出」tab")
+    if "已导出（" in r:
+        bad.append("不应有「已导出」tab")
+    for b in ["导入", "审批通过", "驳回", "新增"]:
+        if b in r:
+            bad.append("导出页不应有:" + b)
+    if bad:
+        return {"ok": False, "msg": "异常: " + ", ".join(bad)}
+    return {"ok": True, "msg": "调拨计划导出渲染正常（29 字段复用 / 仅待导出 tab / 导出后自动标记）"}
+
 
 def check_po_plan():
     """采购计划扩展 3 页：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划。
@@ -1685,6 +1717,10 @@ def main():
         r = check_sto_summary()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] sto-summary   {r['msg']}")
+    if only in (None, 'sto', 'sto-export'):
+        r = check_sto_export()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] sto-export    {r['msg']}")
     if only in (None, 'po-plan', 'po-atb', 'po-bridge', 'po-ref'):
         r = check_po_plan()
         all_ok = all_ok and r["ok"]

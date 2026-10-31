@@ -1959,7 +1959,7 @@ mark {
 
             <!-- 详情弹窗：仅字段详情 + 备注编辑 -->
             <a-modal v-model:open="stoDetailOpen" :width="920" :footer="null" :mask-closable="false"
-              :title="'详情 · ' + (stoIsWeek ? '调拨计划' : '给仓库的滚动调拨计划')">
+              :title="'详情 · ' + (stoIsWeek ? '调拨计划' : '给仓库的预计调拨计划')">
               <template v-if="stoDetailRow">
                 <a-descriptions bordered size="small" :column="2">
                   <a-descriptions-item label="数据生成日期">{{ stoDetailRow.data_gen_date }}</a-descriptions-item>
@@ -2015,6 +2015,181 @@ mark {
                 <a-button @click="stoExportOpen=false">取消</a-button>
                 <a-button type="primary" @click="stoDoExport">导出</a-button>
               </div>
+            </a-modal>
+          </template>
+
+          <!-- ============ 6.5.2 调拨计划导出（sto-export）：调拨计划执行导出视图，逻辑同「采购计划导出」 ============ -->
+          <template v-else-if="activeMenu==='sto-export'">
+
+            <!-- 顶部状态tab：仅 待导出 -->
+            <a-tabs v-model:activeKey="stoExpTab" type="card" style="margin-bottom:12px;">
+              <a-tab-pane v-for="t in stoExpTabs" :key="t.key" :tab="t.label + '（'+stoExpTabCount(t.key)+'）'"/>
+            </a-tabs>
+
+            <a-alert type="info" :show-icon="true" style="margin-bottom:12px;">
+              <template #message>导出范围＝当前筛选命中的全部记录（勾选行时仅导出已勾选行）；导出后自动标记为「已导出」并记录导出时间。调拨计划导出结果可上传 IPOS 生成 STO 调拨单，并回写 STO 单号、发运状态与收货状态（见 5.4.4.1）。</template>
+            </a-alert>
+
+            <!-- 筛选卡片 -->
+            <div class="card">
+              <div class="filter-row">
+                <div class="filter-items">
+                  <div class="f-item"><span class="f-label">配件号</span>
+                    <a-input v-model:value="stoExpFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">配件名称</span>
+                    <a-input v-model:value="stoExpFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">计划批次</span>
+                    <a-input v-model:value="stoExpFilters.plan_batch" placeholder="计划批次" style="width:130px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">发货仓</span>
+                    <a-select v-model:value="stoExpFilters.from_wh" placeholder="发货仓" style="width:150px" allow-clear
+                      :options="stoFromWhs.map(v=>({value:v,label:v}))"/></div>
+                  <div class="f-item"><span class="f-label">收货仓</span>
+                    <a-select v-model:value="stoExpFilters.to_wh" placeholder="收货仓" style="width:150px" allow-clear
+                      :options="stoToWhs.map(v=>({value:v,label:v}))"/></div>
+                  <div class="f-item"><span class="f-label">计划类型</span>
+                    <a-select v-model:value="stoExpFilters.plan_type" placeholder="计划类型" style="width:130px" allow-clear
+                      :options="stoExpPlanTypes.map(v=>({value:v,label:v}))"/></div>
+                  <div class="f-item"><span class="f-label">ABC分类</span>
+                    <a-select v-model:value="stoExpFilters.abc_class" placeholder="ABC分类" style="width:110px" allow-clear
+                      :options="[{value:'A',label:'A'},{value:'B',label:'B'},{value:'C',label:'C'}]"/></div>
+                  <template v-if="stoExpFilterExpanded">
+                    <div class="f-item"><span class="f-label">仓网</span>
+                      <a-select v-model:value="stoExpFilters.network_id" placeholder="仓网" style="width:110px" allow-clear
+                        :options="stoNetworks.map(v=>({value:v,label:v}))"/></div>
+                    <div class="f-item"><span class="f-label">计划员</span>
+                      <a-select v-model:value="stoExpFilters.planner" placeholder="计划员" style="width:110px" allow-clear
+                        :options="fcPlanners.map(v=>({value:v,label:v}))"/></div>
+                    <div class="f-item"><span class="f-label">运输线路</span>
+                      <a-select v-model:value="stoExpFilters.route_code" placeholder="运输线路" style="width:140px" allow-clear
+                        :options="stoRouteCodes.map(v=>({value:v,label:v}))"/></div>
+                  </template>
+                </div>
+                <div class="filter-actions">
+                  <a-button type="primary" @click="stoExpDoSearch">搜索</a-button>
+                  <a-button @click="stoExpResetFilters">重置</a-button>
+                  <span class="act" :style="{color:stoExpFav?'#faad14':''}" @click="stoExpToggleFav">{{ stoExpFav ? '★' : '☆' }}</span>
+                  <span class="act" @click="stoExpFilterExpanded=!stoExpFilterExpanded">
+                    <span class="txt">{{ stoExpFilterExpanded ? '收起' : '展开' }}</span><span style="font-size:10px;">▾</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 表格卡片 -->
+            <div class="card" style="margin-bottom:0;">
+              <div class="toolbar-row">
+                <a-button type="primary" :disabled="!stoExpCanExport" @click="stoExpDoExport">导出</a-button>
+                <span style="margin-left:8px;color:#888;font-size:12px;" v-if="stoExpSelected.length">已选 {{ stoExpSelected.length }} 行</span>
+                <div class="toolbar-icons">
+                  <a-dropdown>
+                    <span title="密度" @click.stop="() => {}">↕</span>
+                    <template #overlay>
+                      <a-menu @click="({key})=>tableSize=key">
+                        <a-menu-item key="large">默认</a-menu-item>
+                        <a-menu-item key="middle">中等</a-menu-item>
+                        <a-menu-item key="small">紧凑</a-menu-item>
+                      </a-menu>
+                    </template>
+                  </a-dropdown>
+                  <a-dropdown :trigger="['click']">
+                    <span title="列设置" @click.stop="() => {}">⚙</span>
+                    <template #overlay>
+                      <a-card style="width:220px;max-height:460px;overflow:auto;" :body-style="{padding:'8px 12px'}">
+                        <div style="font-weight:600;margin-bottom:6px;">列展示设置</div>
+                        <div class="col-set-item" v-for="c in stoExpColumns.filter(x=>x.key!=='action' && x.key!=='export_status')" :key="c.key">
+                          <a-checkbox :checked="!stoExpHiddenCols.includes(c.key)" @change="stoExpToggleCol(c.key)"/>{{ c.title }}
+                        </div>
+                      </a-card>
+                    </template>
+                  </a-dropdown>
+                  <span title="全屏" @click="toggleFull">⛶</span>
+                </div>
+              </div>
+
+              <a-table
+                :columns="stoExpVisibleColumns"
+                :data-source="stoExpPaged"
+                :pagination="false"
+                :size="tableSize"
+                row-key="id"
+                :row-selection="stoExpRowSelection"
+                :scroll="{x: stoExpScrollX}"
+                :custom-row="stoExpCustomRow"
+              >
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key==='part_code'">
+                    <a @click.stop="stoExpOpenDetail(record)">{{ record.part_code }}</a>
+                  </template>
+                  <template v-else-if="column.key==='plan_type'">
+                    <a-tag :color="record.plan_type==='紧急调拨计划'?'orange':'blue'" style="margin:0;">{{ record.plan_type }}</a-tag>
+                  </template>
+                  <template v-else-if="column.key==='export_status'">
+                    <a-tag :color="record.export_status==='已导出'?'green':'orange'" style="margin:0;">{{ record.export_status }}</a-tag>
+                  </template>
+                  <template v-else-if="column.key==='action'">
+                    <span class="link-btn" @click.stop="stoExpOpenDetail(record)">详情</span>
+                  </template>
+                  <template v-else>{{ record[column.dataIndex] }}</template>
+                </template>
+                <template #emptyText><a-empty description="暂无待导出的调拨计划"/></template>
+              </a-table>
+
+              <div class="pager-row">
+                <span class="total">共 {{ stoExpFiltered.length }} 条</span>
+                <a-pagination
+                  v-model:current="stoExpPage.current"
+                  v-model:pageSize="stoExpPage.size"
+                  :total="stoExpFiltered.length"
+                  :page-size-options="['15','30','50']"
+                  show-size-changer
+                  :show-quick-jumper="true"
+                />
+              </div>
+            </div>
+
+            <!-- 详情弹窗（29 字段 + 导出状态，只读） -->
+            <a-modal v-model:open="stoExpDetailOpen" title="详情 · 调拨计划导出" :width="920" :footer="null" :mask-closable="false">
+              <template v-if="stoExpDetailRow">
+                <div class="bt-sec-t" style="margin:0 0 10px;">计划信息</div>
+                <a-descriptions bordered :column="2" size="small" style="margin-bottom:20px;">
+                  <a-descriptions-item label="数据生成日期">{{ stoExpDetailRow.data_gen_date }}</a-descriptions-item>
+                  <a-descriptions-item label="计划批次">{{ stoExpDetailRow.plan_batch }}</a-descriptions-item>
+                  <a-descriptions-item label="计划行">{{ stoExpDetailRow.plan_line }}</a-descriptions-item>
+                  <a-descriptions-item label="计划类型">{{ stoExpDetailRow.plan_type }}</a-descriptions-item>
+                  <a-descriptions-item label="配件号">{{ stoExpDetailRow.part_code }}</a-descriptions-item>
+                  <a-descriptions-item label="配件名称">{{ stoExpDetailRow.part_name }}</a-descriptions-item>
+                  <a-descriptions-item label="发货仓">{{ stoExpDetailRow.from_wh }}</a-descriptions-item>
+                  <a-descriptions-item label="收货仓">{{ stoExpDetailRow.to_wh }}</a-descriptions-item>
+                  <a-descriptions-item label="推荐计划数量(分配后)"><b>{{ stoExpDetailRow.alloc_qty }}</b></a-descriptions-item>
+                  <a-descriptions-item label="推荐计划数量(取整前)">{{ stoExpDetailRow.raw_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="收货仓最低风控线">{{ stoExpDetailRow.safety_stock }}</a-descriptions-item>
+                  <a-descriptions-item label="收货仓目标库存">{{ stoExpDetailRow.target_stock }}</a-descriptions-item>
+                  <a-descriptions-item label="预期库存">{{ stoExpDetailRow.expected_stock }}</a-descriptions-item>
+                  <a-descriptions-item label="可用库存数量">{{ stoExpDetailRow.avail_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="欠交数量">{{ stoExpDetailRow.owed_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="库间在途数量">{{ stoExpDetailRow.transit_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="缺货数量">{{ stoExpDetailRow.shortage_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="近3个月月均销量">{{ stoExpDetailRow.avg3m_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="当前可用天数">{{ stoExpDetailRow.avail_days }}</a-descriptions-item>
+                  <a-descriptions-item label="库间LT">{{ stoExpDetailRow.transfer_lt }}</a-descriptions-item>
+                  <a-descriptions-item label="要求到货日期">{{ stoExpDetailRow.required_arrival_date }}</a-descriptions-item>
+                  <a-descriptions-item label="预计调拨体积">{{ stoExpDetailRow.est_volume }}</a-descriptions-item>
+                  <a-descriptions-item label="体积">{{ stoExpDetailRow.unit_volume }}</a-descriptions-item>
+                  <a-descriptions-item label="体积单位">{{ stoExpDetailRow.volume_unit }}</a-descriptions-item>
+                  <a-descriptions-item label="是否出计划日">{{ stoExpDetailRow.is_plan_day }}</a-descriptions-item>
+                  <a-descriptions-item label="ABC分类">{{ stoExpDetailRow.abc_class }}</a-descriptions-item>
+                  <a-descriptions-item label="车型代码">{{ stoExpDetailRow.vehicle_code }}</a-descriptions-item>
+                  <a-descriptions-item label="计划员">{{ stoExpDetailRow.planner }}</a-descriptions-item>
+                  <a-descriptions-item label="备注" :span="2">{{ stoExpDetailRow.remark || '—' }}</a-descriptions-item>
+                  <a-descriptions-item label="导出状态">
+                    <a-tag :color="stoExpDetailRow.export_status==='已导出'?'green':'orange'" style="margin:0;">{{ stoExpDetailRow.export_status }}</a-tag>
+                  </a-descriptions-item>
+                  <a-descriptions-item label="导出时间">{{ stoExpDetailRow.exported_time || '—' }}</a-descriptions-item>
+                </a-descriptions>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="stoExpDetailOpen=false">关闭</a-button>
+                </div>
+              </template>
             </a-modal>
           </template>
 
@@ -5545,6 +5720,20 @@ const stoPlanData = Vue.reactive([]);
   });
 })();
 
+/* ===== 采购计划扩展页：All Time Buy 计划 / Bri    });
+})();
+
+/* ===== 调拨计划导出（sto-export）：与「调拨计划」本周执行页同源（period=week），额外带 export_status（待导出/已导出）与导出时间 ===== */
+const stoExpData = Vue.reactive([]);
+stoPlanData.filter(r=> r.period === 'week').forEach(function(r, i){
+  const row = Object.assign({}, r, { id: 'STOEXP' + r.id });
+  row.export_status = (i % 3 === 0) ? '已导出' : '待导出';
+  row.exported_time = (row.export_status === '已导出')
+    ? ('2026-10-' + String(20 + (i % 8)).padStart(2,'0') + ' ' + String(9 + (i % 9)).padStart(2,'0') + ':' + String(10 + (i % 49)).padStart(2,'0'))
+    : '';
+  stoExpData.push(row);
+});
+
 /* ===== 采购计划扩展页：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划=====
    口径依据 PRD 第 6/7 章：
    净需求 = MAX(需求 − 预期库存, 0)
@@ -5918,7 +6107,7 @@ const app = createApp({
     const openGroups = reactive({ base:true, strategy:true, draft:false, report:false });
     const VALID_KEYS = ['strategy-purchase','strategy-service','strategy-stocking','strategy-transfer','strategy-increase','strategy-cycle','strategy-risk','strategy-riskRule','strategy-result','mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier','plan-hier-2','plan-hier-3','gp-params','svc-dash',
       'fc-new','fc-new-draft','fc-long','fc-long-draft','fc-buyout','fc-buyout-draft','fc-regular','fc-regular-draft','fc-wh-regular','fc-best','fc-backtest','fc-backtest-draft',
-      'part-group','po-regular','po-history','po-export','po-eop','po-approval','po-issue','sto-week','sto-summary','sto-next',
+      'part-group','po-regular','po-history','po-export','po-eop','po-approval','po-issue','sto-week','sto-export','sto-summary','sto-next',
       'po-atb','po-bridge','po-ref','po-roll'];
     function keyFromHash(){
       const h = (window.location.hash||'').replace(/^#/,'').trim();
@@ -5966,8 +6155,9 @@ const app = createApp({
       { type:'item', key:'po-export', parent:'po', title:'采购计划导出', icon:'📤' },
       { type:'item', key:'po-roll', parent:'po', title:'给供应商的滚动计划', icon:'📨' },
       { type:'item', key:'sto-week', parent:'po', title:'调拨计划', icon:'🚚' },
+      { type:'item', key:'sto-export', parent:'po', title:'调拨计划导出', icon:'📤' },
       { type:'item', key:'sto-summary', parent:'po', title:'调拨计划汇总', icon:'📊' },
-      { type:'item', key:'sto-next', parent:'po', title:'给仓库的滚动调拨计划', icon:'🗓' },
+      { type:'item', key:'sto-next', parent:'po', title:'给仓库的预计调拨计划', icon:'🗓' },
       { type:'item', key:'po-atb', parent:'po', title:'All Time Buy 计划', icon:'🧾' },
       { type:'item', key:'po-bridge', parent:'po', title:'Bridge Buy 计划', icon:'🌉' },
       { type:'item', key:'po-ref', parent:'po', title:'参考零件采购计划', icon:'🆕' },
@@ -6803,7 +6993,7 @@ const app = createApp({
 
     /* ---- 5. 调拨计划（STO）：本周调拨计划（执行）/ 下周调拨计划（预排）---- */
     const stoIsWeek = computed(()=> activeMenu.value==='sto-week');
-    const stoTitle = computed(()=> stoIsWeek.value ? '调拨计划' : '给仓库的滚动调拨计划');
+    const stoTitle = computed(()=> stoIsWeek.value ? '调拨计划' : '给仓库的预计调拨计划');
     // 计划类型枚举：本周＝紧急/常规调拨计划；下周＝仅「下周预计调拨计划」
     const stoPlanTypeOptions = computed(()=> stoIsWeek.value ? ['紧急调拨计划','常规调拨计划'] : ['下周预计调拨计划']);
     /* 29 个字段（PRD 5.4.4.1 计划结果表输出字段，最新）；计划批次/计划行提至第2、3列；默认全量展示，列设置可隐藏 */
@@ -6897,6 +7087,85 @@ const app = createApp({
       msg('导出成功，共 '+rows.length+' 条（CSV 已下载）','success');
       stoExportOpen.value = false;
     }
+
+    /* ================= 6.5.2 调拨计划导出（sto-export） =================
+       口径：字段与「调拨计划」一致（29 个输出字段，去操作列），额外带 export_status（待导出/已导出）与导出时间；
+       逻辑同「采购计划导出」：顶部仅「待导出」状态tab，勾选行导出或按当前筛选命中全量导出，
+       导出成功后自动打「已导出」标签并记录导出时间（已导出行随 tab 移出待导出清单），列表只读、仅详情与导出。 */
+    const stoExpTabs = [ { key:'待导出', label:'待导出' } ];
+    const stoExpTab = ref('待导出');
+    const stoExpPlanTypes = ['紧急调拨计划','常规调拨计划'];
+    const stoExpColumns = (function(){
+      const out = stoColumns.filter(c=> c.key!=='action').map(c=> c);
+      out.push({ title:'导出状态', key:'export_status', dataIndex:'export_status', width:92, fixed:'right' });
+      out.push({ title:'导出时间', key:'exported_time', dataIndex:'exported_time', width:150, fixed:'right' });
+      out.push({ title:'操作', key:'action', width:80, fixed:'right' });
+      return out;
+    })();
+    const stoExpHiddenCols = ref([]);
+    const stoExpVisibleColumns = computed(()=> stoExpColumns.filter(c=> !stoExpHiddenCols.value.includes(c.key)));
+    const stoExpScrollX = computed(()=> stoExpVisibleColumns.value.reduce((s,c)=> s + (c.width||100), 0));
+    function stoExpToggleCol(k){ const i=stoExpHiddenCols.value.indexOf(k); if(i>=0) stoExpHiddenCols.value.splice(i,1); else stoExpHiddenCols.value.push(k); }
+
+    const stoExpFilters = reactive({ part_code:'', part_name:'', plan_batch:'', from_wh:undefined, to_wh:undefined, plan_type:undefined, abc_class:undefined, network_id:undefined, planner:undefined, route_code:undefined });
+    const stoExpApplied = reactive({ part_code:'', part_name:'', plan_batch:'', from_wh:undefined, to_wh:undefined, plan_type:undefined, abc_class:undefined, network_id:undefined, planner:undefined, route_code:undefined });
+    const stoExpFilterExpanded = ref(false);
+    const stoExpFav = ref(false);
+    const stoExpPage = reactive({ current:1, size:15 });
+    function stoExpResetFilters(){
+      Object.keys(stoExpFilters).forEach(k=>{ stoExpFilters[k] = (typeof stoExpFilters[k]==='string') ? '' : undefined; });
+      Object.assign(stoExpApplied, stoExpFilters); stoExpPage.current = 1; msg('筛选条件已重置');
+    }
+    function stoExpDoSearch(){ Object.assign(stoExpApplied, stoExpFilters); stoExpPage.current=1; stoExpSelectedKeys.value=[]; msg('查询完成，共命中 '+stoExpFiltered.value.length+' 条记录','success'); }
+    function stoExpToggleFav(){ stoExpFav.value=!stoExpFav.value; msg(stoExpFav.value?'已收藏本页':'已取消收藏','success'); }
+
+    const stoExpQueryFiltered = computed(()=> stoExpData.filter(function(r){
+      const f = stoExpApplied;
+      if(f.part_code && !r.part_code.toLowerCase().includes(f.part_code.toLowerCase())) return false;
+      if(f.part_name && !r.part_name.includes(f.part_name)) return false;
+      if(f.plan_batch && !r.plan_batch.toLowerCase().includes(f.plan_batch.toLowerCase())) return false;
+      if(f.from_wh && r.from_wh!==f.from_wh) return false;
+      if(f.to_wh && r.to_wh!==f.to_wh) return false;
+      if(f.plan_type && r.plan_type!==f.plan_type) return false;
+      if(f.abc_class && r.abc_class!==f.abc_class) return false;
+      if(f.network_id && r.network_id!==f.network_id) return false;
+      if(f.planner && r.planner!==f.planner) return false;
+      if(f.route_code && r.route_code!==f.route_code) return false;
+      return true;
+    }));
+    const stoExpFiltered = computed(()=> stoExpQueryFiltered.value.filter(r=> r.export_status===stoExpTab.value));
+    function stoExpTabCount(key){ return stoExpQueryFiltered.value.filter(r=> r.export_status===key).length; }
+    const stoExpPaged = computed(()=>{ const s=(stoExpPage.current-1)*stoExpPage.size; return stoExpFiltered.value.slice(s, s+stoExpPage.size); });
+
+    const stoExpSelectedKeys = ref([]);
+    const stoExpSelected = computed(()=> stoExpData.filter(r=> stoExpSelectedKeys.value.includes(r.id)));
+    const stoExpRowSelection = computed(()=> ({ selectedRowKeys: stoExpSelectedKeys.value, onChange:(keys)=>{ stoExpSelectedKeys.value = keys; } }));
+    function stoExpCustomRow(){ return {}; }
+
+    const stoExpDetailOpen = ref(false); const stoExpDetailRow = ref(null);
+    function stoExpOpenDetail(r){ stoExpDetailRow.value = r; stoExpDetailOpen.value = true; }
+
+    const stoExpCanExport = computed(()=> stoExpSelected.value.length>0 || stoExpFiltered.value.length>0);
+    const stoExpExportSource = computed(()=> stoExpSelected.value.length ? stoExpSelected.value : stoExpFiltered.value);
+    function stoExpDoExport(){
+      const rows = stoExpExportSource.value.slice();
+      if(!rows.length){ msg('没有可导出的调拨计划','error'); return; }
+      const cols = stoExpVisibleColumns.value.filter(c=> c.key!=='action');
+      const header = cols.map(c=> c.title);
+      const lines = [header.join(',')].concat(rows.map(r=> cols.map(c=>{
+        const v = (c.key==='export_status') ? '已导出' : r[c.dataIndex];
+        return (v===null||v===undefined)?'':String(v).replace(/,/g,'，');
+      }).join(',')));
+      const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
+      const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+      a.download='JLRS_调拨计划_'+new Date().toISOString().slice(0,10)+'.csv'; a.click(); URL.revokeObjectURL(a.href);
+      // 导出成功后自动打上「已导出」标签（无需单独的标记按钮）
+      const now = new Date().toISOString().slice(0,16).replace('T',' ');
+      rows.forEach(r=>{ r.export_status='已导出'; r.exported_time=now; });
+      stoExpSelectedKeys.value=[];
+      msg('导出成功，共 '+rows.length+' 条，已记录导出时间','success');
+    }
+    watch(stoExpTab, ()=>{ stoExpSelectedKeys.value=[]; stoExpPage.current=1; });
 
     /* ================= 6. 调拨计划汇总（STO 汇总维度报表） =================
        口径＝PRD 6.5.2「汇总维度页面（导出后的计划：相当于执行了的计划）」，列结构严格按业务报表 35 列输出：
@@ -10319,6 +10588,11 @@ const app = createApp({
       stoDetailOpen, stoDetailRow, stoOpenDetail, stoDetailRemark, stoSaveRemark,
       stoExportOpen, stoExportFields, stoToggleExportField, stoDoExport,
       stoNetworks, stoPlanTypeOptions, stoRouteCodes, stoFromWhs, stoToWhs,
+      stoExpTabs, stoExpTab, stoExpPlanTypes, stoExpColumns, stoExpHiddenCols, stoExpVisibleColumns,
+      stoExpScrollX, stoExpToggleCol, stoExpFilters, stoExpFilterExpanded, stoExpFav, stoExpPage,
+      stoExpResetFilters, stoExpDoSearch, stoExpToggleFav, stoExpFiltered, stoExpPaged, stoExpTabCount,
+      stoExpSelected, stoExpRowSelection, stoExpCustomRow, stoExpCanExport, stoExpDoExport,
+      stoExpDetailOpen, stoExpDetailRow, stoExpOpenDetail,
       stoSumTab, stoSumColumns, stoSumHiddenCols, stoSumVisibleColumns, stoSumScrollX, stoSumToggleCol,
       stoSumCenter, stoSumRegions, stoSumFmt,
       stoSumFilters, stoSumFilterExpanded, stoSumFav, stoSumPage, stoSumNetCount,
