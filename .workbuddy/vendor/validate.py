@@ -37,7 +37,7 @@ PAGES = [
     ("po-approval",     "采购计划审批",      "审批状态",      False),
     ("po-issue",        "采购订单下达",      "PO单号",        False),
     ("sto-week",        "调拨计划",          "计划批次",      False),
-    ("sto-summary",     "调拨计划汇总",      "执行状态",      False),
+    ("sto-summary",     "调拨计划汇总",      "数据快照日期",  False),
     ("sto-next",        "给仓库的滚动调拨计划", "计划批次",   False),
     ("po-atb",          "All Time Buy 计划", "全生命周期累计需求", False),
     ("po-bridge",       "Bridge Buy 计划",   "属地预期库存",  False),
@@ -1310,19 +1310,26 @@ def check_sto():
     return {"ok": True, "msg": "2 页渲染正常，字段口径对齐 PRD 5.4.4.1 输出表"}
 
 def check_sto_summary():
-    """调拨计划汇总（sto-summary）：导出后的「已执行计划」只读汇总报表。
-    断言：渲染出行、复用调拨计划 29 输出字段、含「执行状态（已执行）」列、
-    三套仓网（CJLR/JLR/JLRC）可切换 tab、仅导出（无导入、无编辑/无审批）。"""
+    """调拨计划汇总（sto-summary）：PRD 6.5.2 汇总维度页面，导出后的「已执行计划」只读报表。
+    列结构严格按业务报表 35 列：数据快照日期 / 配件号 / 配件名称 + 每个区域仓 7 列
+    （目标库存、调拨占比、调拨数量、库存+在途、潜在缺口、当前占比、目标占比）+ 仓网 4 列
+    （中心仓库存、调拨后未分配量、总需求、已分配量）。
+    断言：渲染出行、35 列齐备、三套仓网可切换、仅导出（无导入/无编辑/无审批）。"""
     r = rendered(dump("sto-summary"))
     bad = []
     if r.count("ant-table-row") <= 0:
         bad.append("rows=0")
-    for c in ["计划批次", "计划行", "计划类型", "配件号", "配件名称", "发货仓", "收货仓",
-              "推荐计划数量(分配后)", "推荐计划数量(取整前)", "预计调拨体积", "备注"]:
+    for c in ["数据快照日期", "配件号", "配件名称"]:
         if c not in r:
             bad.append("缺列:" + c)
-    if "执行状态" not in r or "已执行" not in r:
-        bad.append("缺执行状态/已执行 列")
+    # CJLR 仓网：中心仓 CJDC，区域仓 CJV0~CJV3，每组 7 列
+    for reg in ["CJV0", "CJV1", "CJV2", "CJV3"]:
+        for m in ["目标库存", "调拨占比", "调拨数量", "库存+在途", "潜在缺口", "当前占比", "目标占比"]:
+            if (reg + " " + m) not in r:
+                bad.append("缺列:" + reg + " " + m)
+    for c in ["CJDC 中心仓库存", "CJLR 调拨后未分配量", "CJLR 总需求", "CJLR 已分配量"]:
+        if c not in r:
+            bad.append("缺列:" + c)
     for n in ["CJLR", "JLR", "JLRC"]:
         if n not in r:
             bad.append("缺仓网:" + n)
@@ -1332,7 +1339,7 @@ def check_sto_summary():
         bad.append("报表页不应有审批按钮")
     if bad:
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
-    return {"ok": True, "msg": "已执行计划汇总渲染正常（29 字段复用 / 三套仓网切换 / 仅导出无编辑）"}
+    return {"ok": True, "msg": "已执行计划汇总渲染正常（35 列严格对齐业务报表 / 三套仓网切换 / 仅导出无编辑）"}
 
 def check_po_plan():
     """采购计划扩展 3 页：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划。

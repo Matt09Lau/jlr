@@ -2026,35 +2026,28 @@ mark {
               <a-tab-pane v-for="n in stoNetworks" :key="n" :tab="n + ' 仓网（' + stoSumNetCount(n) + '）'"/>
             </a-tabs>
 
-            <!-- 汇总统计条 -->
+            <!-- 汇总统计条（随仓网与筛选联动） -->
             <div class="card" style="margin-bottom:12px;">
-              <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:center;">
-                <div><span style="color:#888;font-size:12px;margin-right:6px;">计划行数</span><b style="font-size:16px;color:#1f2d3d;">{{ stoSumStats.lines }}</b></div>
-                <div><span style="color:#888;font-size:12px;margin-right:6px;">调拨总数量</span><b style="font-size:16px;color:#1f2d3d;">{{ stoSumStats.qty }}</b></div>
-                <div><span style="color:#888;font-size:12px;margin-right:6px;">预计调拨总体积(m³)</span><b style="font-size:16px;color:#1f2d3d;">{{ stoSumStats.vol }}</b></div>
+              <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:center;">
+                <div><span style="color:#888;font-size:12px;margin-right:6px;">配件行数</span><b style="font-size:16px;color:#1f2d3d;">{{ stoSumStats.lines }}</b></div>
+                <div><span style="color:#888;font-size:12px;margin-right:6px;">调拨总数量</span><b style="font-size:16px;color:#c0501e;">{{ stoSumFmt(stoSumStats.qty) }}</b></div>
+                <div><span style="color:#888;font-size:12px;margin-right:6px;">中心仓库存</span><b style="font-size:16px;color:#1f2d3d;">{{ stoSumFmt(stoSumStats.centerStock) }}</b></div>
+                <div><span style="color:#888;font-size:12px;margin-right:6px;">调拨后未分配量</span><b style="font-size:16px;color:#1f2d3d;">{{ stoSumFmt(stoSumStats.unalloc) }}</b></div>
+                <div><span style="color:#888;font-size:12px;margin-right:6px;">全网总需求</span><b style="font-size:16px;color:#1f2d3d;">{{ stoSumFmt(stoSumStats.demand) }}</b></div>
                 <div><span style="color:#888;font-size:12px;margin-right:6px;">涉及配件数</span><b style="font-size:16px;color:#1f2d3d;">{{ stoSumStats.parts }}</b></div>
               </div>
             </div>
 
-            <!-- 筛选卡片 -->
+            <!-- 筛选卡片（仅查询，不改数；导出后即已执行计划，页面只读） -->
             <div class="card">
               <div class="filter-row">
                 <div class="filter-items">
+                  <div class="f-item"><span class="f-label">快照日期</span>
+                    <a-input v-model:value="stoSumFilters.snapshot_date" placeholder="如 2026-09-21" style="width:130px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件号</span>
                     <a-input v-model:value="stoSumFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
-                    <a-input v-model:value="stoSumFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
-                  <div class="f-item"><span class="f-label">发货仓</span>
-                    <a-select v-model:value="stoSumFilters.from_wh" placeholder="发货仓" style="width:150px" allow-clear
-                      :options="stoFromWhs.map(v=>({value:v,label:v}))"/></div>
-                  <div class="f-item"><span class="f-label">收货仓</span>
-                    <a-select v-model:value="stoSumFilters.to_wh" placeholder="收货仓" style="width:150px" allow-clear
-                      :options="stoToWhs.map(v=>({value:v,label:v}))"/></div>
-                  <div class="f-item"><span class="f-label">计划类型</span>
-                    <a-select v-model:value="stoSumFilters.plan_type" placeholder="计划类型" style="width:140px" allow-clear
-                      :options="[{value:'紧急调拨计划',label:'紧急调拨计划'},{value:'常规调拨计划',label:'常规调拨计划'},{value:'下周预计调拨计划',label:'下周预计调拨计划'}]"/></div>
-                  <div class="f-item"><span class="f-label">计划批次</span>
-                    <a-input v-model:value="stoSumFilters.plan_batch" placeholder="计划批次" style="width:130px" allow-clear/></div>
+                    <a-input v-model:value="stoSumFilters.part_name" placeholder="配件名称" style="width:170px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">ABC分类</span>
                     <a-select v-model:value="stoSumFilters.abc_class" placeholder="ABC分类" style="width:110px" allow-clear
                       :options="[{value:'A',label:'A'},{value:'B',label:'B'},{value:'C',label:'C'}]"/></div>
@@ -2064,9 +2057,9 @@ mark {
                     <div class="f-item"><span class="f-label">计划员</span>
                       <a-select v-model:value="stoSumFilters.planner" placeholder="计划员" style="width:110px" allow-clear
                         :options="fcPlanners.map(v=>({value:v,label:v}))"/></div>
-                    <div class="f-item"><span class="f-label">运输线路</span>
-                      <a-select v-model:value="stoSumFilters.route_code" placeholder="运输线路" style="width:140px" allow-clear
-                        :options="stoRouteCodes.map(v=>({value:v,label:v}))"/></div>
+                    <div class="f-item"><span class="f-label">是否调拨</span>
+                      <a-select v-model:value="stoSumFilters.has_sto" placeholder="是否调拨" style="width:110px" allow-clear
+                        :options="[{value:'是',label:'是'},{value:'否',label:'否'}]"/></div>
                   </template>
                 </div>
                 <div class="filter-actions">
@@ -2085,7 +2078,7 @@ mark {
             <div class="card" style="margin-bottom:0;">
               <div class="toolbar-row">
                 <a-button type="primary" @click="stoSumExportOpen=true">导出</a-button>
-                <span style="margin-left:8px;color:#888;font-size:12px;">当前仓网：{{ stoSumTab }} · 共 {{ stoSumFiltered.length }} 行</span>
+                <span style="margin-left:8px;color:#888;font-size:12px;">当前仓网：{{ stoSumTab }}（中心仓 {{ stoSumCenter }} → 区域仓 {{ stoSumRegions.join('、') }}）· 共 {{ stoSumFiltered.length }} 行</span>
                 <div class="toolbar-icons">
                   <a-dropdown>
                     <span title="密度" @click.stop="() => {}">↕</span>
@@ -2122,13 +2115,14 @@ mark {
                 :custom-row="stoSumCustomRow"
               >
                 <template #bodyCell="{ column, record }">
-                  <template v-if="column.key==='plan_type'">
-                    <a-tag :color="record.plan_type==='紧急调拨计划'?'orange':(record.plan_type==='下周预计调拨计划'?'purple':'blue')" style="margin:0;">{{ record.plan_type }}</a-tag>
+                  <template v-if="column.key==='part_code'">
+                    <span style="font-weight:600;color:#1f2d3d;">{{ record.part_code }}</span>
                   </template>
-                  <template v-else-if="column.key==='exec_status'">
-                    <a-tag color="green" style="margin:0;">已执行</a-tag>
+                  <template v-else-if="column.num">
+                    <span :style="{fontWeight: column.key.indexOf('_sto_qty')>0 && Number(record[column.key])>0 ? 600 : 400,
+                                    color: (column.key.indexOf('_potential')>0 && Number(record[column.key])>0) ? '#c0392b' : (column.key.indexOf('_sto_qty')>0 && Number(record[column.key])>0 ? '#c0501e' : '#1f2d3d')}">{{ stoSumFmt(record[column.key]) }}</span>
                   </template>
-                  <template v-else>{{ record[column.dataIndex] }}</template>
+                  <template v-else>{{ record[column.key] }}</template>
                 </template>
               </a-table>
 
@@ -6904,27 +6898,168 @@ const app = createApp({
       stoExportOpen.value = false;
     }
 
-    /* ================= 6. 调拨计划汇总（STO 汇总报表）：导出后即已执行计划，三套仓网切换查询，无编辑、仅导出 =================
-       报表口径：复用调拨计划 29 个输出字段（去操作列），在「计划类型」后插入「执行状态（已执行）」；
-       仓网切换：CJLR / JLR / JLRC 三套仓网分别查看（跨仓网不共享库存）；页面只读，仅支持查询与导出。 */
-    const stoSumTab = ref('CJLR');
-    const stoSumColumns = (function(){
-      const out = [];
-      stoColumns.filter(c=> c.key!=='action').forEach(function(c){
-        out.push(c);
-        if(c.key==='plan_type'){
-          out.push({ title:'执行状态', key:'exec_status', dataIndex:'exec_status', width:92 });
+    /* ================= 6. 调拨计划汇总（STO 汇总维度报表） =================
+       口径＝PRD 6.5.2「汇总维度页面（导出后的计划：相当于执行了的计划）」，列结构严格按业务报表 35 列输出：
+         数据快照日期(Snapshot Date) / 配件号(Material) / 配件名称(Material Description)
+       + 每个区域仓 7 列：目标库存(SSQ)、调拨占比(STO Ratio)、调拨数量(Total STO Qty)、
+         库存+在途(StockPlusIntr)、潜在缺口(Potential)、当前占比(Currenratio)、目标占比(SSQ Ratio)
+       + 仓网 4 列：中心仓库存(CJDC Stock)、调拨后未分配量(After STO Unallocated)、
+         总需求(Total Demand)、已分配量(Total Allocated)
+       三套仓网（跨仓网不共享库存）：CJLR＝CJDC→CJV0~CJV3；JLR＝JB09→CN00~CN03；JLRC＝CN00→CN01~CN03。
+       页面只读：无新增/编辑/审批/导入，仅支持查询与导出。 */
+    /* ---- 仓网结构（跨仓网不共享库存）：中心仓 → 区域仓 ---- */
+    const stoSumNetMap = {
+      CJLR: { center:'CJDC', regions:['CJV0','CJV1','CJV2','CJV3'] },
+      JLR:  { center:'JB09', regions:['CN00','CN01','CN02','CN03'] },
+      JLRC: { center:'CN00', regions:['CN01','CN02','CN03'] },
+    };
+    /* 每个区域仓固定 7 列，顺序与业务报表一致 */
+    const stoSumRegionMeta = [
+      { key:'ssq',       label:'目标库存',  w:100, num:true },
+      { key:'sto_ratio', label:'调拨占比',  w:96 },
+      { key:'sto_qty',   label:'调拨数量',  w:100, num:true },
+      { key:'spi',       label:'库存+在途', w:104, num:true },
+      { key:'potential', label:'潜在缺口',  w:100, num:true },
+      { key:'cur_ratio', label:'当前占比',  w:96 },
+      { key:'ssq_ratio', label:'目标占比',  w:96 },
+    ];
+    const stoSumSnapshot = '2026-09-21';
+    /* CJLR 仓网前 10 行＝业务实际导出数据（配件号/名称/各区域仓目标库存、库存+在途、调拨数量、中心仓库存、全网总需求） */
+    const stoSumRealRows = [
+      ['02533124014PVJ','扶手盖',            [48,69,54,23],    [48,69,53,22],    [0,0,1,1],   1012, 103],
+      ['02602123497','轮毂轴承',             [5,5,3,4],        [5,5,2,4],        [0,0,1,0],   3,    8],
+      ['02AJ814245','机油供油管',            [0,1,0,0],        [0,0,0,0],        [0,1,0,0],   2,    0],
+      ['02C2C41731','行李箱盖内板',          [15,20,13,3],     [14,20,15,6],     [1,0,0,0],   259,  20],
+      ['02C2D3039','法兰螺母',               [24,32,24,18],    [24,29,24,18],    [0,3,0,0],   700,  67],
+      ['02C2D34402','制动液',                [439,522,27,129], [420,530,66,139], [30,0,0,0],  1212, 600],
+      ['02C2D36171','泊车辅助系统传感器',    [1,1,1,1],        [2,2,0,2],        [0,0,1,0],   38,   1],
+      ['02C2D3660','线束支架',               [2,5,4,0],        [1,12,8,3],       [1,0,0,0],   15,   7],
+      ['02C2D38498','螺母与垫圈',            [33,51,43,27],    [28,49,39,23],    [5,2,4,4],   364,  178],
+      ['02C2Z4412','后视镜后盖',             [11,16,8,6],      [11,16,7,5],      [0,0,1,1],   39,   16],
+    ];
+    function stoSumSeedRng(seed){
+      let a = seed >>> 0;
+      return function(){ a += 0x6D2B79F5; let t = a; t = Math.imul(t ^ (t>>>15), t|1); t ^= t + Math.imul(t ^ (t>>>7), t|61); return ((t ^ (t>>>14))>>>0) / 4294967296; };
+    }
+    function stoSumHash(n){ let h = 2166136261; for(let i=0;i<n.length;i++){ h ^= n.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; }
+    function stoSumPct(v){ return (Math.round(v*10000)/100).toFixed(2) + '%'; }
+    /* 计算链：缺口＝MAX(目标库存−库存+在途,0)；调拨数量＝ROUNDUP(缺口÷MPQ)×MPQ（中心仓可分配量封顶）；
+       潜在缺口＝MAX(目标库存−库存+在途−调拨数量,0)；调拨后未分配量＝中心仓库存−Σ调拨数量；已分配量＝Σ调拨数量 */
+    function stoSumBuildRow(o){
+      const regions = o.regions, ssq = o.ssq, spi = o.spi, sto = o.sto;
+      const curSum = regions.reduce(function(a,_,i){ return a + spi[i] + sto[i]; }, 0);
+      const ssqSum = ssq.reduce((a,b)=>a+b, 0);
+      const actSsqSum = ssq.reduce(function(a,v,i){ return a + (sto[i] > 0 ? v : 0); }, 0);
+      const row = { id:o.id, snapshot_date:o.snapshot_date, part_code:o.part_code, part_name:o.part_name,
+        network_id:o.network_id, abc_class:o.abc_class, vehicle_code:o.vehicle_code, planner:o.planner };
+      regions.forEach(function(r, i){
+        row[r + '_ssq']       = ssq[i];
+        row[r + '_sto_ratio'] = (sto[i] > 0 && actSsqSum) ? stoSumPct(ssq[i] / actSsqSum) : '0.00%';
+        row[r + '_sto_qty']   = sto[i];
+        row[r + '_spi']       = spi[i];
+        row[r + '_potential'] = Math.max(0, ssq[i] - spi[i] - sto[i]);
+        row[r + '_cur_ratio'] = curSum ? stoSumPct((spi[i] + sto[i]) / curSum) : '0.00%';
+        row[r + '_ssq_ratio'] = ssqSum ? stoSumPct(ssq[i] / ssqSum) : '0.00%';
+      });
+      const alloc = sto.reduce((a,b)=>a+b, 0);
+      row.center_stock = o.center_stock;
+      row.total_alloc  = alloc;
+      row.unalloc_qty  = Math.max(0, o.center_stock - alloc);
+      row.total_demand = o.total_demand;
+      return row;
+    }
+    const stoSumData = Vue.reactive([]);
+    (function buildStoSum(){
+      let id = 0;
+      const pool = {};
+      stoPlanData.forEach(function(r){
+        pool[r.network_id] = pool[r.network_id] || [];
+        if(!pool[r.network_id].some(x=> x.part_code===r.part_code)){
+          pool[r.network_id].push({ part_code:r.part_code, part_name:r.part_name, abc_class:r.abc_class, vehicle_code:r.vehicle_code, planner:r.planner });
         }
       });
-      return out;
+      stoNetworks.forEach(function(net){
+        const meta = stoSumNetMap[net];
+        const rr = stoSumSeedRng(stoSumHash(net + '|sto-summary'));
+        const list = pool[net] || [];
+        const rows = [];
+        if(net==='CJLR'){
+          stoSumRealRows.forEach(function(x){
+            rows.push({ part_code:x[0], part_name:x[1], ssq:x[2], spi:x[3], sto:x[4], center_stock:x[5], total_demand:x[6] });
+          });
+        }
+        while(rows.length < 24 && list.length){
+          const mpq = [1,5,10,20,25,30][Math.floor(rr()*6)];
+          const ssq = [], spi = [], sto = [];
+          meta.regions.forEach(function(){
+            const s = Math.round(rr()*520);
+            const k = Math.round(rr()*(s + 40));
+            const gap = Math.max(0, s - k);
+            ssq.push(s); spi.push(k); sto.push(gap>0 ? Math.ceil(gap/mpq)*mpq : 0);
+          });
+          const alloc = sto.reduce((a,b)=>a+b, 0);
+          const ssqSum = ssq.reduce((a,b)=>a+b, 0);
+          rows.push({ part_code:'', part_name:'', ssq:ssq, spi:spi, sto:sto,
+            center_stock: alloc + Math.round(rr()*900) + Math.round(ssqSum*0.6),
+            total_demand: Math.round(rr()*620) });
+        }
+        const used = {};
+        rows.forEach(function(o, i){
+          let p = null;
+          if(o.part_code){
+            used[o.part_code] = 1;                                  // 业务实际行：配件号/名称用实际值，其余属性取自配件池
+            p = list.length ? list[i % list.length] : null;
+          } else {
+            for(let k=0;k<list.length;k++){
+              const cand = list[(i + k) % list.length];
+              if(!used[cand.part_code]){ p = cand; used[cand.part_code] = 1; break; }
+            }
+          }
+          if(!p) p = { part_code:'DEMO-' + net + '-' + pad2(i+1), part_name:'演示配件 ' + (i+1),
+                       abc_class:['A','B','C'][i % 3], vehicle_code:fcVehicles[i % fcVehicles.length], planner:fcPlanners[i % fcPlanners.length] };
+          id++;
+          stoSumData.push(stoSumBuildRow({
+            id:'SS' + net + '_' + id, snapshot_date:stoSumSnapshot,
+            part_code: o.part_code || p.part_code,
+            part_name: o.part_name || p.part_name,
+            network_id: net,
+            abc_class: p.abc_class || ['A','B','C'][i % 3],
+            vehicle_code: p.vehicle_code || fcVehicles[i % fcVehicles.length],
+            planner: p.planner || fcPlanners[i % fcPlanners.length],
+            regions: meta.regions, ssq:o.ssq, spi:o.spi, sto:o.sto,
+            center_stock:o.center_stock, total_demand:o.total_demand,
+          }));
+        });
+      });
     })();
+
+    const stoSumTab = ref('CJLR');
+    const stoSumCenter = computed(()=> stoSumNetMap[stoSumTab.value].center);
+    const stoSumRegions = computed(()=> stoSumNetMap[stoSumTab.value].regions);
+    const stoSumColumns = computed(function(){
+      const net = stoSumTab.value, meta = stoSumNetMap[net], out = [];
+      out.push({ title:'数据快照日期', key:'snapshot_date', dataIndex:'snapshot_date', width:118, fixed:'left' });
+      out.push({ title:'配件号', key:'part_code', dataIndex:'part_code', width:150, fixed:'left' });
+      out.push({ title:'配件名称', key:'part_name', dataIndex:'part_name', width:200, fixed:'left', ellipsis:true });
+      meta.regions.forEach(function(r){
+        stoSumRegionMeta.forEach(function(m){
+          out.push({ title:r + ' ' + m.label, key:r + '_' + m.key, dataIndex:r + '_' + m.key, width:m.w, align:'right', num:!!m.num });
+        });
+      });
+      out.push({ title: meta.center + ' 中心仓库存',   key:'center_stock',  dataIndex:'center_stock',  width:136, align:'right', num:true });
+      out.push({ title: net + ' 调拨后未分配量', key:'unalloc_qty',   dataIndex:'unalloc_qty',   width:152, align:'right', num:true });
+      out.push({ title: net + ' 总需求',         key:'total_demand',  dataIndex:'total_demand',  width:112, align:'right', num:true });
+      out.push({ title: net + ' 已分配量',       key:'total_alloc',   dataIndex:'total_alloc',   width:112, align:'right', num:true });
+      return out;
+    });
     const stoSumHiddenCols = ref([]);
-    const stoSumVisibleColumns = computed(()=> stoSumColumns.filter(c=> !stoSumHiddenCols.value.includes(c.key)));
+    const stoSumVisibleColumns = computed(()=> stoSumColumns.value.filter(c=> !stoSumHiddenCols.value.includes(c.key)));
     const stoSumScrollX = computed(()=> stoSumVisibleColumns.value.reduce((s,c)=> s + (c.width || 90), 0));
     function stoSumToggleCol(k){ const i=stoSumHiddenCols.value.indexOf(k); if(i>=0) stoSumHiddenCols.value.splice(i,1); else stoSumHiddenCols.value.push(k); }
 
-    const stoSumFilters = reactive({ part_code:'', part_name:'', from_wh:undefined, to_wh:undefined, plan_type:undefined, plan_batch:'', abc_class:undefined, vehicle_code:'', planner:undefined, route_code:undefined });
-    const stoSumApplied = reactive({ part_code:'', part_name:'', from_wh:undefined, to_wh:undefined, plan_type:undefined, plan_batch:'', abc_class:undefined, vehicle_code:'', planner:undefined, route_code:undefined });
+    const stoSumFilterBlank = function(){ return { snapshot_date:'', part_code:'', part_name:'', abc_class:undefined, vehicle_code:'', planner:undefined, has_sto:undefined }; };
+    const stoSumFilters = reactive(stoSumFilterBlank());
+    const stoSumApplied = reactive(stoSumFilterBlank());
     const stoSumFilterExpanded = ref(false);
     const stoSumFav = ref(false);
     const stoSumPage = reactive({ current:1, size:15 });
@@ -6934,41 +7069,46 @@ const app = createApp({
     }
     function stoSumDoSearch(){ Object.assign(stoSumApplied, stoSumFilters); stoSumPage.current=1; msg('查询完成，共命中 '+stoSumFiltered.value.length+' 条记录','success'); }
     function stoSumToggleFav(){ stoSumFav.value=!stoSumFav.value; msg(stoSumFav.value?'已收藏本页':'已取消收藏','success'); }
-    function stoSumNetCount(n){ return stoPlanData.filter(r=> r.network_id===n).length; }
-    watch(stoSumTab, ()=>{ stoSumPage.current = 1; });
+    function stoSumNetCount(n){ return stoSumData.filter(r=> r.network_id===n).length; }
+    function stoSumFmt(v){ const n = Number(v)||0; return n.toLocaleString('en-US'); }
+    watch(stoSumTab, ()=>{
+      stoSumPage.current = 1;
+      stoSumHiddenCols.value = [];
+      stoSumExportFields.value = stoSumColumns.value.map(c=>c.key);
+    });
 
-    const stoSumBaseRows = computed(()=> stoPlanData.filter(r=> r.network_id===stoSumTab.value));
-    const stoSumFiltered = computed(()=> stoSumBaseRows.value.filter(r=>{
+    const stoSumBaseRows = computed(()=> stoSumData.filter(r=> r.network_id===stoSumTab.value));
+    const stoSumFiltered = computed(()=> stoSumBaseRows.value.filter(function(r){
       const f = stoSumApplied;
-      if(f.part_code && !r.part_code.toLowerCase().includes(f.part_code.toLowerCase())) return false;
-      if(f.part_name && !r.part_name.includes(f.part_name)) return false;
-      if(f.from_wh && r.from_wh!==f.from_wh) return false;
-      if(f.to_wh && r.to_wh!==f.to_wh) return false;
-      if(f.plan_type && r.plan_type!==f.plan_type) return false;
-      if(f.plan_batch && !r.plan_batch.toLowerCase().includes(f.plan_batch.toLowerCase())) return false;
+      if(f.snapshot_date && !String(r.snapshot_date).includes(f.snapshot_date)) return false;
+      if(f.part_code && !String(r.part_code).toLowerCase().includes(f.part_code.toLowerCase())) return false;
+      if(f.part_name && !String(r.part_name).includes(f.part_name)) return false;
       if(f.abc_class && r.abc_class!==f.abc_class) return false;
-      if(f.vehicle_code && !r.vehicle_code.toLowerCase().includes(f.vehicle_code.toLowerCase())) return false;
+      if(f.vehicle_code && !String(r.vehicle_code).toLowerCase().includes(f.vehicle_code.toLowerCase())) return false;
       if(f.planner && r.planner!==f.planner) return false;
-      if(f.route_code && r.route_code!==f.route_code) return false;
+      if(f.has_sto){ const has = (Number(r.total_alloc)||0) > 0; if((f.has_sto==='是') !== has) return false; }
       return true;
     }));
     const stoSumPaged = computed(()=>{ const s=(stoSumPage.current-1)*stoSumPage.size; return stoSumFiltered.value.slice(s, s+stoSumPage.size); });
-    const stoSumStats = computed(()=>{
-      const rows = stoSumFiltered.value; let qty=0, vol=0; const parts={};
-      rows.forEach(function(r){ qty += Number(r.alloc_qty)||0; vol += Number(r.est_volume)||0; parts[r.part_code]=1; });
-      return { lines: rows.length, qty: qty, vol: Math.round(vol*100)/100, parts: Object.keys(parts).length };
+    const stoSumStats = computed(function(){
+      const rows = stoSumFiltered.value; let qty=0, cs=0, un=0, dm=0; const parts={};
+      rows.forEach(function(r){
+        qty += Number(r.total_alloc)||0; cs += Number(r.center_stock)||0;
+        un  += Number(r.unalloc_qty)||0; dm += Number(r.total_demand)||0; parts[r.part_code]=1;
+      });
+      return { lines: rows.length, qty:qty, centerStock:cs, unalloc:un, demand:dm, parts: Object.keys(parts).length };
     });
     function stoSumCustomRow(){ return { style:{cursor:'default'} }; }
 
     const stoSumExportOpen = ref(false);
-    const stoSumExportFields = ref(stoSumColumns.map(c=>c.key));
+    const stoSumExportFields = ref(stoSumColumns.value.map(c=>c.key));
     function stoSumToggleExportField(k){ const i=stoSumExportFields.value.indexOf(k); if(i>=0) stoSumExportFields.value.splice(i,1); else stoSumExportFields.value.push(k); }
     function stoSumDoExport(){
       const rows = stoSumFiltered.value;
-      const cols = stoSumColumns.filter(c=> stoSumExportFields.value.includes(c.key));
+      const cols = stoSumColumns.value.filter(c=> stoSumExportFields.value.includes(c.key));
       const header = cols.map(c=>c.title);
       const lines = [header.join(',')].concat(rows.map(r=> cols.map(c=>{
-        const v = (c.key==='exec_status') ? '已执行' : r[c.dataIndex];
+        const v = r[c.key];
         return (v===null||v===undefined)?'':String(v).replace(/,/g,'，');
       }).join(',')));
       const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
@@ -10180,6 +10320,7 @@ const app = createApp({
       stoExportOpen, stoExportFields, stoToggleExportField, stoDoExport,
       stoNetworks, stoPlanTypeOptions, stoRouteCodes, stoFromWhs, stoToWhs,
       stoSumTab, stoSumColumns, stoSumHiddenCols, stoSumVisibleColumns, stoSumScrollX, stoSumToggleCol,
+      stoSumCenter, stoSumRegions, stoSumFmt,
       stoSumFilters, stoSumFilterExpanded, stoSumFav, stoSumPage, stoSumNetCount,
       stoSumFiltered, stoSumPaged, stoSumStats, stoSumCustomRow,
       stoSumDoSearch, stoSumResetFilters, stoSumToggleFav,
