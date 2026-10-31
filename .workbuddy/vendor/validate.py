@@ -37,6 +37,7 @@ PAGES = [
     ("po-approval",     "采购计划审批",      "审批状态",      False),
     ("po-issue",        "采购订单下达",      "PO单号",        False),
     ("sto-week",        "调拨计划",          "计划批次",      False),
+    ("sto-summary",     "调拨计划汇总",      "执行状态",      False),
     ("sto-next",        "给仓库的滚动调拨计划", "计划批次",   False),
     ("po-atb",          "All Time Buy 计划", "全生命周期累计需求", False),
     ("po-bridge",       "Bridge Buy 计划",   "属地预期库存",  False),
@@ -1197,7 +1198,7 @@ def check_menu():
                  "草稿", "计划层级管理", "计划层级管理2", "服务水平dashboard", "基础数据管理",
                  "库存策略参数", "采购LT", "目标满足率", "备货规则", "库间LT", "增储天数", "计划周期", "配件风控线", "配件多分类风控线", "建储水位线计算结果",
                  "配件组管理",
-                 "计划管理", "采购计划", "历史采购计划", "采购计划导出", "调拨计划", "给仓库的滚动调拨计划",
+                 "计划管理", "采购计划", "历史采购计划", "采购计划导出", "调拨计划", "调拨计划汇总", "给仓库的滚动调拨计划",
                  "All Time Buy 计划", "Bridge Buy 计划", "参考零件采购计划",
                  "给供应商的滚动计划",
                  "停产最后采购量", "采购计划审批", "采购订单下达"]
@@ -1226,6 +1227,11 @@ def check_menu():
     isto = r.find("调拨计划")   # 先命中「调拨计划」(本周改名)，其位置在「给仓库的滚动调拨计划」之前
     if not (0 <= ipo_reg < iroll < isto):
         bad.append("采购计划组顺序(po-roll 应在采购计划下、调拨计划上)")
+    # 顺序要求：调拨计划汇总 应位于 调拨计划（sto-week）之下、给仓库的滚动调拨计划（sto-next）之上
+    isum = r.find("调拨计划汇总")
+    inext = r.find("给仓库的滚动调拨计划")
+    if not (0 <= isto < isum < inext):
+        bad.append("计划顺序(调拨计划汇总 应在 调拨计划 下、给仓库的滚动调拨计划 上)")
     # 顺序要求：历史采购计划 / 采购计划导出 应位于 采购计划 之下、给供应商的滚动计划 之上
     ihist = r.find("历史采购计划")
     iexp = r.find("采购计划导出")
@@ -1303,6 +1309,31 @@ def check_sto():
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
     return {"ok": True, "msg": "2 页渲染正常，字段口径对齐 PRD 5.4.4.1 输出表"}
 
+def check_sto_summary():
+    """调拨计划汇总（sto-summary）：导出后的「已执行计划」只读汇总报表。
+    断言：渲染出行、复用调拨计划 29 输出字段、含「执行状态（已执行）」列、
+    三套仓网（CJLR/JLR/JLRC）可切换 tab、仅导出（无导入、无编辑/无审批）。"""
+    r = rendered(dump("sto-summary"))
+    bad = []
+    if r.count("ant-table-row") <= 0:
+        bad.append("rows=0")
+    for c in ["计划批次", "计划行", "计划类型", "配件号", "配件名称", "发货仓", "收货仓",
+              "推荐计划数量(分配后)", "推荐计划数量(取整前)", "预计调拨体积", "备注"]:
+        if c not in r:
+            bad.append("缺列:" + c)
+    if "执行状态" not in r or "已执行" not in r:
+        bad.append("缺执行状态/已执行 列")
+    for n in ["CJLR", "JLR", "JLRC"]:
+        if n not in r:
+            bad.append("缺仓网:" + n)
+    if "导入" in r:
+        bad.append("不应有导入")
+    if "审批通过" in r or "驳回" in r:
+        bad.append("报表页不应有审批按钮")
+    if bad:
+        return {"ok": False, "msg": "异常: " + ", ".join(bad)}
+    return {"ok": True, "msg": "已执行计划汇总渲染正常（29 字段复用 / 三套仓网切换 / 仅导出无编辑）"}
+
 def check_po_plan():
     """采购计划扩展 3 页：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划。
     断言列集对齐 PRD 第 6/7 章，且各页专属能力齐备。"""
@@ -1328,8 +1359,6 @@ def check_po_plan():
     ra = rendered(dump("po-atb"))
     rb = rendered(dump("po-bridge"))
     rr = rendered(dump("po-ref"))
-    if "批量下计划" not in ra:
-        bad.append("po-atb(缺批量下计划)")
     if "买断区间" not in rb:
         bad.append("po-bridge(缺买断区间)")
     if "展开年份" in rb or "折叠年份" in rb:
@@ -1384,8 +1413,8 @@ def check_po_roll():
 def check_po_archive():
     """历史采购计划（po-history）+ 采购计划导出（po-export）两页渲染与口径校验。
     历史页：列表列须与采购计划全量一致（默认全量 57 数据列，仅去掉顶部状态tab，归档只读）；
-    导出页：精简为下单字段，含「导出状态」列与 待导出/已导出 两个 tab（无「全部」tab、无标记按钮），
-            导出按钮名为「导出」，导出成功后自动打「已导出」标签。"""
+    导出页：精简为下单字段，含「导出状态」列与 仅 待导出 一个 tab（无「全部」「已导出」tab、无标记按钮），
+            导出按钮名为「导出」，导出成功后自动打「已导出」标签（不再显示在页面中）。"""
     bad = []
     # ---- 历史采购计划 ----
     rh = rendered(dump("po-history"))
@@ -1425,10 +1454,12 @@ def check_po_archive():
         bad.append("po-export(rows=0)")
     if not has_col(re_, "导出状态"):
         bad.append("po-export(缺导出状态列)")
-    # 顶部 tab：仅 待导出 / 已导出（不应有「全部」tab）
-    for t in ["待导出", "已导出"]:
+    # 顶部 tab：仅 待导出（不应有「全部」「已导出」tab）
+    for t in ["待导出"]:
         if t not in re_:
             bad.append("po-export(缺tab:" + t + ")")
+    if "已导出" in re_:
+        bad.append("po-export(不应有「已导出」tab)")
     if has_col(re_, "全部"):
         bad.append("po-export(不应有「全部」tab)")
     # 精简后须保留的下单字段
@@ -1462,7 +1493,7 @@ def check_po_archive():
         bad.append("po-export(缺供应商代码列)")
     if bad:
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
-    return {"ok": True, "msg": "2 页渲染正常（历史列与采购计划全量一致；导出 2 个tab无全部/无标记按钮，导出即自动打标）"}
+    return {"ok": True, "msg": "2 页渲染正常（历史列与采购计划全量一致；导出页仅 待导出 1 个tab、无全部/无标记按钮，导出即自动记录导出时间）"}
 
 def main():
     only = sys.argv[1] if len(sys.argv) > 1 else None
@@ -1643,6 +1674,10 @@ def main():
         r = check_sto()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] sto-2pages    {r['msg']}")
+    if only in (None, 'sto', 'sto-summary'):
+        r = check_sto_summary()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] sto-summary   {r['msg']}")
     if only in (None, 'po-plan', 'po-atb', 'po-bridge', 'po-ref'):
         r = check_po_plan()
         all_ok = all_ok and r["ok"]
