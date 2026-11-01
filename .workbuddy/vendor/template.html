@@ -935,12 +935,17 @@
                     <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="指定计划员须填写原因，100 字以内" :maxlength="100"/></label>
                 </div>
 
-                <!-- 无有效采购合同：填写采购合同号 + 调整原因 -->
-                <div v-else-if="poRegEditRow.block_reason==='无有效采购合同'" class="jlrs-form-grid">
+                <!-- 无有效合同：维护有效合同（合同号 + 合同有效期，系统据此重新计算计划数量）+ 调整原因 -->
+                <div v-else-if="poRegEditRow.block_reason==='无有效合同'" class="jlrs-form-grid">
+                  <label><span>当前供应商</span>
+                    <a-input :value="poRegEditRow.cur_supplier_name || '—'" disabled/></label>
                   <label><span><b class="jlrs-req">*</b>采购合同号</span>
-                    <a-input v-model:value="poRegEditRow.contract_no" placeholder="请输入有效采购合同号"/></label>
+                    <a-input v-model:value="poRegEditRow.contract_no" placeholder="请输入已维护的有效采购合同号"/></label>
+                  <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>合同有效期</span>
+                    <a-range-picker v-model:value="poRegEditRow.contract_range" value-format="YYYY-MM-DD" style="width:320px"/></label>
+                  <a-alert type="info" show-icon style="grid-column:1 / -1; margin-bottom:8px;" :message="poRegContractCalcNote"/>
                   <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>调整原因</span>
-                    <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="补全采购合同须填写原因，100 字以内" :maxlength="100"/></label>
+                    <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="补全有效合同须填写原因，100 字以内" :maxlength="100"/></label>
                 </div>
 
                 <!-- 联合MOQ / 成套采购 凑单超量：调整计划数量 + 调整原因 -->
@@ -5002,7 +5007,7 @@ const poRegularData = Vue.reactive([]);
 // planner=true：需计划员处理（待处理）；planner=false：计划员无需处理（全部-其他拦截原因）
 const poRegBlockReasons = [
   { group:'待处理（需计划员处理）', items:[
-    '零件无计划员','无有效采购合同','多供应商',
+    '零件无计划员','无有效合同','多供应商',
     '联合MOQ凑单超量','成套采购凑单超量','活动零件'
   ]},
   { group:'全部（其他拦截原因）', items:[
@@ -5086,6 +5091,8 @@ function poRegMakeLog(r){
   }
   return log;
 }
+// 待提交行按「待提交序号」轮询分配拦截原因，保证 PRD 4.4.2.10 全部原因（含「无有效合同」）都有演示数据
+let poRegPendingSeq = 0;
 for(let i=0;i<64;i++){
   const m = matData[i % matData.length];
   const w = whData[i % whData.length];
@@ -5140,7 +5147,8 @@ for(let i=0;i<64;i++){
     isBlocked = '是';
     if(isMultiBlock) blockReason = '多供应商';
     else if(isMissingBlock) blockReason = '零件无计划员';
-    else blockReason = poRegBlockReasonAssignPool[i % poRegBlockReasonAssignPool.length];
+    else blockReason = poRegBlockReasonAssignPool[poRegPendingSeq % poRegBlockReasonAssignPool.length];
+    poRegPendingSeq++;
     multiSupplierBlock = isMultiBlock ? '是' : '否';
   } else {
     isBlocked = (isMultiBlock || isMissingBlock) ? '是' : '否';
@@ -6422,10 +6430,43 @@ const app = createApp({
         if(!copy.suppliers.find(s=>s.code===copy.cur_supplier_code)) copy.cur_supplier_code = copy.suppliers[0].code;
       }
       poRegEditRow.value = reactive(copy);
+      // 无有效合同：合同号/有效期需人工维护（不预填历史值），维护后由系统重新计算计划数量
+      if(copy.block_reason==='无有效合同'){
+        copy.contract_no = (copy.contract_no && copy.contract_no!=='—') ? copy.contract_no : '';
+        copy.contract_range = null;
+      }
       poRegEditErr.adjustQty=''; poRegEditErr.adjustReason=''; poRegEditOpen.value=true;
     }
     // 多供应商拦截场景：展示当前选定供应商及其对应 MOQ（数量不在本弹窗调整）
     const poRegEditCurSupplier = computed(()=>{ const r=poRegEditRow.value; if(!r||!r.suppliers) return null; return r.suppliers.find(s=>s.code===r.cur_supplier_code) || null; });
+    // 无有效合同：按合同有效期覆盖月数重算计划数量（月均销量 × 有效月数，按 MPQ 向上取整）
+    const poRegContractMonths = computed(()=>{
+      const r = poRegEditRow.value;
+      if(!r || r.block_reason!=='无有效合同') return 0;
+      const rg = r.contract_range;
+      if(!rg || rg.length!==2 || !rg[0] || !rg[1]) return 0;
+      const days = dayjs(rg[1]).diff(dayjs(rg[0]), 'day') + 1;
+      if(!(days > 0)) return 0;
+      return Math.max(1, Math.round(days/30));
+    });
+    const poRegContractRecalc = computed(()=>{
+      const r = poRegEditRow.value;
+      if(!r || r.block_reason!=='无有效合同') return null;
+      const m = poRegContractMonths.value; if(!m) return null;
+      const avg = Number(r.avg_3m_sales || 0);
+      const mpq = Number(r.mpq || r.cur_supplier_moq || 1) || 1;
+      const rawQty = avg * m;
+      const qty = Math.ceil(rawQty/mpq)*mpq;
+      return { months:m, avg:avg, mpq:mpq, rawQty:rawQty, qty:qty };
+    });
+    const poRegContractCalcNote = computed(()=>{
+      const r = poRegEditRow.value;
+      if(!r || r.block_reason!=='无有效合同') return '';
+      const c = poRegContractRecalc.value;
+      const curQty = (r.adjust_qty===null || r.adjust_qty===undefined) ? '—' : r.adjust_qty;
+      if(!c) return '维护合同号与合同有效期并填写调整原因后，系统按「近 3 月月均销量 × 合同有效期月数，按 MPQ 向上取整」自动重新计算调整计划数量（当前 ' + curQty + '）。';
+      return '系统重算：近 3 月月均销量 ' + c.avg + ' × 合同有效期 ' + c.months + ' 个月 = ' + c.rawQty + '，按 MPQ ' + c.mpq + ' 向上取整 = ' + c.qty + '；当前调整计划数量 ' + curQty + '，确定后由系统写回并解除拦截。';
+    });
     // 系统自动拦截（计划员无需处理）类原因 → 弹窗提示文案
     const poRegEditBlockNoteMap = {
       '非计划日':'当前为非计划日，系统自动拦截，计划员无需处理',
@@ -6447,8 +6488,10 @@ const app = createApp({
       if(reason==='零件无计划员'){
         if(!row.planner){ poRegEditErr.planner='请指定计划员'; ok=false; } else poRegEditErr.planner='';
       }
-      if(reason==='无有效采购合同'){
-        if(!row.contract_no || !row.contract_no.trim()){ poRegEditErr.contract='请填写采购合同号'; ok=false; } else poRegEditErr.contract='';
+      if(reason==='无有效合同'){
+        if(!row.contract_no || !row.contract_no.trim()){ poRegEditErr.contract='请填写采购合同号'; ok=false; }
+        else if(!row.contract_range || row.contract_range.length!==2 || !row.contract_range[0] || !row.contract_range[1]){ poRegEditErr.contract='请选择合同有效期（系统据此重新计算计划数量）'; ok=false; }
+        else poRegEditErr.contract='';
       }
       if(reason==='活动零件'){
         if(!row.activity_no || !row.activity_no.trim()){ poRegEditErr.activity='请填写活动名称/编号'; ok=false; } else poRegEditErr.activity='';
@@ -6460,6 +6503,7 @@ const app = createApp({
       const needReason = !isReadOnly;
       if(needReason && (!row.adjust_reason || !row.adjust_reason.trim())){ poRegEditErr.adjustReason='调整原因必填（100 字以内）'; ok=false; } else poRegEditErr.adjustReason='';
       if(!ok){ msg('请修正表单中的错误项','error'); return; }
+      let doneMsg = '调整已保存';
       if(poRegEditTarget.value){
         const t = poRegEditTarget.value;
         const ts = new Date().toISOString().slice(0,16).replace('T',' ');
@@ -6480,10 +6524,20 @@ const app = createApp({
           // 「指定计划员」本身不属于目录内变更类型，其净效果＝拦截解除，故仅记 解除拦截(系统)，明细写入变更原因
           upd.planner = row.planner; upd.is_blocked='否'; upd.block_reason='—';
           pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','指定计划员（'+(t.planner||'—')+' → '+row.planner+'）后拦截消除');
-        } else if(reason==='无有效采购合同'){
-          // 「补全采购合同」同理归入 解除拦截(系统)，明细写入变更原因
-          upd.contract_no = row.contract_no; upd.is_blocked='否'; upd.block_reason='—';
-          pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','补全有效采购合同（合同号 '+row.contract_no+'）后拦截消除');
+        } else if(reason==='无有效合同'){
+          // 「补全采购合同」净效果＝拦截解除；维护合同有效期后由系统按有效月数重算计划数量
+          const c = poRegContractRecalc.value;
+          const oldQty = t.adjust_qty;
+          const newQty = c ? c.qty : oldQty;
+          upd.contract_no = row.contract_no;
+          upd.contract_start = row.contract_range[0];
+          upd.contract_end = row.contract_range[1];
+          upd.adjust_qty = newQty;
+          upd.adjust_reason = row.adjust_reason;
+          upd.is_blocked='否'; upd.block_reason='—';
+          pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统',
+            '补全有效合同（合同号 '+row.contract_no+'，有效期 '+row.contract_range[0]+' ~ '+row.contract_range[1]+'）后拦截消除；系统按合同有效期 '+c.months+' 个月重算计划数量 '+oldQty+' → '+newQty);
+          doneMsg = '已维护有效合同，系统已重新计算计划数量：' + oldQty + ' → ' + newQty;
         } else if(reason==='联合MOQ凑单超量' || reason==='成套采购凑单超量'){
           upd.adjust_qty = row.adjust_qty; upd.adjust_reason = row.adjust_reason;
           upd.is_blocked='否'; upd.block_reason='—';
@@ -6502,7 +6556,7 @@ const app = createApp({
         const last = log[log.length-1]; upd.last_change_type = last.type; upd.last_change_time = last.time;
         Object.assign(t, upd);
       }
-      poRegEditOpen.value=false; msg('调整已保存','success');
+      poRegEditOpen.value=false; msg(doneMsg,'success');
     }
     // 详情
     const poRegDetailOpen = ref(false); const poRegDetailRow = ref(null);
@@ -10294,7 +10348,7 @@ const app = createApp({
       poRegCanSubmit, poRegCanApprove, poRegCanReject, poRegRowSelection, poRegCustomRow, poRegBillColor,
       poRegSubmit, poRegApproveOpen, poRegApproveRemark, poRegApproveErr, poRegApproveConfirm,
       poRegRejectOpen, poRegRejectRemark, poRegRejectErr, poRegRejectConfirm,
-      poRegEditOpen, poRegEditRow, poRegEditErr, poRegEditErrList, poRegOpenEdit, poRegSaveEdit, poRegEditCurSupplier, poRegEditBlockNote, poRegOpenDetail, poRegDetailOpen, poRegDetailRow,
+      poRegEditOpen, poRegEditRow, poRegEditErr, poRegEditErrList, poRegOpenEdit, poRegSaveEdit, poRegEditCurSupplier, poRegEditBlockNote, poRegContractMonths, poRegContractRecalc, poRegContractCalcNote, poRegOpenDetail, poRegDetailOpen, poRegDetailRow,
       poRegChgOpen, poRegChgRow, poRegOpenChgLog, poRegChgColumns, poRegChgColor,
       poRegImportOpen, poRegDoImport, poRegExportOpen, poRegExportMode, poRegExportFields, poRegToggleExportField,
       poRegExportCsv, poRegExportSource, poRegDoExport, poRegPush, poRegMoreMenu, poRegPlanTypes, poRegReceiveModes, poRegStatuses, poRegPurchaseTypes, poRegBlockReasonOptions, poRegPushStatuses,
