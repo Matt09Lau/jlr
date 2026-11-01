@@ -63,7 +63,9 @@ def dump(page_key, html_path=None, inject=None):
         tag = "</body>"
         idx = src.rfind(tag)
         src = src[:idx] + inject + "\n" + tag + src[idx + len(tag):]
-        path = os.path.join(VENDOR_DIR, "_tmp_probe.html")
+        # 必须与正式 HTML 同目录：成品页以相对路径引用 5 个外部 js（warehouse-network 等），
+        # 若写到 vendor 目录会导致 C:\...\vendor\warehouse-network.js 不存在 → window.CSPPWarehouseNetwork 未定义 → app 挂载失败
+        path = os.path.join(os.path.dirname(HTML), "_tmp_probe.html")
         with open(path, "w", encoding="utf-8") as f:
             f.write(src)
     url = file_url(path, page_key)
@@ -170,7 +172,7 @@ def check_fc_buyout_btns():
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
         return {"key":"fc-buyout-按钮","ok":False,"msg":"渲染失败/错误页"}
     r = strip_scripts(rendered(data))
-    need = ["编 辑", "生成All time buy计划", "批量调整"]
+    need = ["编 辑", "生成All time buy计划", "批量圆整"]
     miss = [k for k in need if k not in r]
     bad = [k for k in ["生成采购计划", "生成bridge buy计划", "系数调整", "保 存"] if k in r]
     ok = (not miss) and (not bad)
@@ -358,20 +360,22 @@ def check_fc_new_pred():
     has_invalid = "不在清单" in full
     has_import_msg = "已导入" in full
     has_jlr = ("LR062541" in full) and ("前制动摩擦片" in full)
+    # base 为预测结果弹窗内的合法展示列（字段来源口径）；此处只校验查询条件不含 base/配件名称，
+    # 该点由 check_fc_adjust 的 fcPredM.base / fcPredM.name 源级断言覆盖，故不再要求渲染文本无 base 列。
     has_base = has_col(full, 'base')
     no_lr = "左右标识" not in full
     no_upc = "UPC/FN号" not in full
     ok = (has_filter and not has_update and has_batch and has_tpl and has_import
           and has_valid_col and has_note and has_invalid and has_import_msg and has_jlr
-          and (not has_base) and no_lr and no_upc)
+          and no_lr and no_upc)
     detail = (f"匹配状态={has_filter} 更新按钮已移除={not has_update} 批量按钮={has_batch} 下载模板={has_tpl} "
               f"导入按钮={has_import} 校验列={has_valid_col} 说明={has_note} 越界标红={has_invalid} "
               f"导入提示={has_import_msg} JLR料号={has_jlr} "
-              f"base={has_base} 无左右标识={no_lr} 无UPC/FN={no_upc}")
+              f"base列={has_base}(合法) 无左右标识={no_lr} 无UPC/FN={no_upc}")
     return {"key":"fc-new-pred","ok":ok,"msg":detail}
 
 def check_fc_new_6m():
-    """参考零件需求预测：计划生产量应为未来 1~6 个月（列表列），预测结果应为 1~6 个月预测列。"""
+    """参考零件需求预测：计划生产量应为未来 1~12 个月（列表列），预测结果应为 1~12 个月预测列。"""
     # 探针：进入步骤7 → 统计列表里「未来N个月计划生产量」表头；再打开「预测结果」弹窗统计「N个月预测」列
     inject = ("<script>"
               "var zprod=0, zmax=0, zfc=0;"
@@ -392,17 +396,17 @@ def check_fc_new_6m():
     dump("fc-new", inject=inject)
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
-        return {"key": "fc-new-6个月", "ok": False, "msg": "渲染失败/错误页"}
+        return {"key": "fc-new-12个月", "ok": False, "msg": "渲染失败/错误页"}
     m = re.search(r"ZZPROBE6M prod=(\d+) max=(\d+) fc=(\d+)", data)
     if not m:
-        return {"key": "fc-new-6个月", "ok": False, "msg": "未取得探针"}
+        return {"key": "fc-new-12个月", "ok": False, "msg": "未取得探针"}
     prod, mx, fc = int(m.group(1)), int(m.group(2)), int(m.group(3))
-    ok = prod == 6 and mx == 6 and fc == 6
+    ok = prod == 12 and mx == 12 and fc == 12
     detail = f"计划生产量列={prod}(最大{mx}月) 预测结果列={fc}"
-    return {"key": "fc-new-6个月", "ok": ok, "msg": detail}
+    return {"key": "fc-new-12个月", "ok": ok, "msg": detail}
 
 def check_fc_new_coef():
-    """参考零件需求预测：页面步骤7「系数调整」按钮 → 弹窗内维护 1~6 月系数。"""
+    """参考零件需求预测：页面步骤7「系数调整」按钮 → 弹窗内维护 1~12 月系数。"""
     # 探针：进入步骤7 → 点击「系数调整」按钮后，统计弹窗内真实渲染的月份系数输入框
     inject = ("<script>"
               "setTimeout(function(){var steps=[].slice.call(document.querySelectorAll('.fc-step'));if(steps[6]){steps[6].click();}}, 900);"
@@ -412,7 +416,7 @@ def check_fc_new_coef():
               "setTimeout(function(){"
               "var n=0,txt=0;"
               "[].slice.call(document.querySelectorAll('.ant-modal-content')).forEach(function(c){"
-              "if(c.textContent.indexOf('预测系数调整（第 1 ~ 6 月）')>=0){txt++; n+=c.querySelectorAll('.ant-input-number').length;}});"
+              "if(c.textContent.indexOf('预测系数调整（第 1 ~ 12 月）')>=0){txt++; n+=c.querySelectorAll('.ant-input-number').length;}});"
               "var d=document.createElement('div'); d.id='zzprobe'; d.textContent='ZZPROBE btn='+bs.length+' modalWithTxt='+txt+' inputs='+n; document.body.appendChild(d);"
               "}, 800);"
               "}, 1900);</script>")
@@ -424,7 +428,7 @@ def check_fc_new_coef():
     if not m:
         return {"key":"fc-new-系数","ok":False,"msg":"未取得弹窗探针"}
     btn, mw, inp = int(m.group(1)), int(m.group(2)), int(m.group(3))
-    ok = btn >= 1 and mw >= 1 and inp >= 6
+    ok = btn >= 1 and mw >= 1 and inp >= 12
     detail = f"页面按钮={btn} 弹窗命中={mw} 弹窗内月份系数输入={inp}"
     return {"key":"fc-new-系数","ok":ok,"msg":detail}
 
@@ -673,14 +677,14 @@ def check_fc_long_trend():
 
 
 def check_fc_long_round():
-    """长周期预测报表：数值策略（圆整）能力保留——页头圆整规则说明 + 「圆整视角」开关 + 「汇总值」列 + 「批量调整」按钮。"""
+    """长周期预测报表：数值策略（圆整）能力保留——「汇总值」列 + 「批量圆整」按钮；页头圆整规则说明文案已按需求移除。"""
     dump("fc-long")
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
         return {"key": "fc-long-圆整策略", "ok": False, "msg": "渲染失败/错误页"}
     r = rendered(data)
-    # 圆整按规则默认生效：保留说明文案与汇总值列，但不再需要「圆整视角」开关
-    need = ["数值策略（长周期预测圆整规则）", "汇总值", "批量调整", "编 辑"]
+    # 圆整按规则默认生效：保留汇总值列与批量圆整按钮；页头数值策略圆整规则说明（红框提示）已移除
+    need = ["汇总值", "批量圆整", "编 辑"]
     miss = [k for k in need if k not in r]
     bad = [k for k in ["圆整视角", "关闭圆整视图"] if k in r]
     rows = r.count("ant-table-row")
@@ -690,24 +694,26 @@ def check_fc_long_round():
 
 
 def check_fc_long_import():
-    """长周期批量调整：勾选行后打开弹窗，应支持「已勾选行 / 导入配件号」两种调整范围（含粘贴框与导入文件按钮）。"""
+    """长周期批量圆整弹窗：范围固定为当前勾选行，「已勾选行 / 导入配件号」范围选择与导入框已下线；保留策略名称/策略说明/截至日期。"""
     inject = ("<script>setTimeout(function(){"
               "var cb=document.querySelector('.ant-table-tbody .ant-checkbox-input');"
               "if(cb){cb.dispatchEvent(new MouseEvent('click',{bubbles:true}));}"
               "setTimeout(function(){"
               "var btns=[].slice.call(document.querySelectorAll('button'));"
-              "var b=btns.find(function(x){var t=(x.textContent||'').replace(/\\s/g,'');return t.indexOf('批量调整')>=0;});"
+              "var b=btns.find(function(x){var t=(x.textContent||'').replace(/\\s/g,'');return t.indexOf('批量圆整')>=0;});"
               "if(b){b.dispatchEvent(new MouseEvent('click',{bubbles:true}));}"
               "}, 1200);}, 1800);</script>")
     dump("fc-long", inject=inject)
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
-        return {"key": "fc-long-批量导入", "ok": False, "msg": "渲染失败/错误页"}
-    need = ["调整范围", "已勾选行（", "导入配件号", "导入文件", "策略名称", "稀疏件圆整策略"]
+        return {"key": "fc-long-批量圆整", "ok": False, "msg": "渲染失败/错误页"}
+    need = ["策略名称", "稀疏件圆整策略", "截至日期", "本次共选中"]
+    not_want = ["选中的零件号", "导入配件号", "已勾选行"]
     miss = [k for k in need if k not in data]
-    ok = not miss
-    detail = f"缺失={miss if miss else '无'}"
-    return {"key": "fc-long-批量导入", "ok": ok, "msg": detail}
+    bad = [k for k in not_want if k in data]
+    ok = not miss and not bad
+    detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
+    return {"key": "fc-long-批量圆整", "ok": ok, "msg": detail}
 
 
 def check_fc_long_editmode():
@@ -1597,10 +1603,10 @@ def main():
         r = check_fc_new_coef()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-new-系数   {r['msg']}")
-    if only in (None, 'fc-new-6m', 'fc-new'):
+    if only in (None, 'fc-new-6m', 'fc-new-12m', 'fc-new'):
         r = check_fc_new_6m()
         all_ok = all_ok and r["ok"]
-        print(f"[{'✓' if r['ok'] else '✗'}] fc-new-6个月  {r['msg']}")
+        print(f"[{'✓' if r['ok'] else '✗'}] fc-new-12个月  {r['msg']}")
     if only in (None, 'fc-new-reason', 'fc-new', 'fc-new-pred'):
         r = check_fc_new_pred_reason()
         all_ok = all_ok and r["ok"]
@@ -1639,7 +1645,7 @@ def main():
         print(f"[{'✓' if r['ok'] else '✗'}] fc-long-圆整策略  {r['msg']}")
         r = check_fc_long_import()
         all_ok = all_ok and r["ok"]
-        print(f"[{'✓' if r['ok'] else '✗'}] fc-long-批量导入  {r['msg']}")
+        print(f"[{'✓' if r['ok'] else '✗'}] fc-long-批量圆整  {r['msg']}")
         r = check_fc_adjust_reason()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-调整原因    {r['msg']}")

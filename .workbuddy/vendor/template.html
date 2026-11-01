@@ -2277,11 +2277,6 @@
 
             <!-- 表格卡片 -->
             <div class="card" style="margin-bottom:0;">
-              <a-alert v-if="isFcLong" type="info" show-icon style="margin-bottom:12px;">
-                <template #message>
-                  <span><b>数值策略（长周期预测圆整规则）</b>：10 年汇总值 ≥ 10 时，每年预测值向上取整，汇总值 = Σ(各年取整值)；10 年汇总值 &lt; 10 时，每年预测值保留 2 位小数，汇总值 = 小数汇总后向上取整。算法输出默认保留 2 位小数。</span>
-                </template>
-              </a-alert>
               <div class="toolbar-row">
                 <a-button type="primary" @click="genExportCsv(false)">⬇ 导出</a-button>
                 <a-button :type="activeMenu.startsWith('inv-')?'primary':'link'" :style="activeMenu.startsWith('inv-')?{}:{padding:0}" @click="genExportCsv(true)">全量导出</a-button>
@@ -2290,8 +2285,8 @@
                 <a-button v-if="isFcLongBuyout && fcEditMode" type="primary" @click="fcSaveForecast">保存</a-button>
                 <a-button v-if="activeMenu==='fc-wh-regular'" @click="fcSaveForecast">保存</a-button>
                 <a-button v-if="activeMenu==='fc-buyout' || activeMenu==='fc-buyout-draft'" @click="fcAllTimeOpen=true">生成All time buy计划</a-button>
-                <a-button v-if="activeMenu==='fc-long' || activeMenu==='fc-long-draft'" @click="fcBridgeOpen=true">生成bridge buy计划</a-button>
-                <a-button v-if="fcBatchable" :disabled="!fcBatchSelIds.length" @click="fcLongBatchM.open=true">批量调整（{{ fcBatchSelIds.length }}）</a-button>
+                <a-button v-if="activeMenu==='fc-long' || activeMenu==='fc-long-draft'" :disabled="!fcLongSel.length" @click="fcBridgeOpen=true;fcBridgeDone=false">生成bridge buy计划</a-button>
+                <a-button v-if="fcBatchable" :disabled="!fcBatchSelIds.length" @click="fcLongBatchM.open=true">批量圆整（{{ fcBatchSelIds.length }}）</a-button>
                 <a-button v-if="activeMenu==='fc-regular' || activeMenu==='fc-wh-regular'" @click="fcGenRegularPo">生成采购计划</a-button>
                 <a-button v-if="activeDef.isExtension" type="default" @click="genImportOpen=true">⬆ 导入</a-button>
                 <a-button v-if="activeMenu==='part-group'" type="primary" @click="openPgModal('add')">＋ 新建分组</a-button>
@@ -2500,39 +2495,22 @@
               </div>
             </a-modal>
 
-            <!-- 长周期：批量调整 - 稀疏件圆整策略弹窗 -->
-            <a-modal v-model:open="fcLongBatchM.open" title="批量调整 · 稀疏件圆整策略" :width="580" :footer="null" :mask-closable="false">
+            <!-- 长周期：批量圆整 - 稀疏件圆整策略弹窗 -->
+            <a-modal v-model:open="fcLongBatchM.open" title="批量调整" :width="580" :footer="null" :mask-closable="false">
               <div style="margin-bottom:14px;color:#595959;font-size:13px;line-height:1.7;">
-                本次调整范围共 <b style="color:#1677ff;">{{ fcLongBatchTargets.length }}</b> 个配件。<br/>
-                <b>策略说明：</b>将 10 年预测按 <b>334</b> 拆分为 3 段（第 1-3 年 / 第 4-6 年 / 第 7-10 年），每段汇总后按年份依次轮询分布；调整后写入「调整原因」并设定「调整有效期」。
+                本次共选中 <b style="color:#1677ff;">{{ fcLongBatchTargets.length }}</b> 个配件。
               </div>
               <a-form layout="vertical">
-                <a-form-item label="调整范围">
-                  <a-radio-group v-model:value="fcLongBatchM.source">
-                    <a-radio value="selected">已勾选行（{{ fcBatchSelIds.length }}）</a-radio>
-                    <a-radio value="codes">导入配件号</a-radio>
-                  </a-radio-group>
-                </a-form-item>
-                <a-form-item v-if="fcLongBatchM.source==='codes'" label="导入配件号" required
-                  :help="'支持直接粘贴或导入 txt / csv 文件：每行一个配件号，也可用逗号、分号分隔'">
-                  <a-textarea v-model:value="fcLongBatchM.codesText" :rows="4" placeholder="例如：LR045678&#10;LR078901" />
-                  <div style="margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                    <a-upload :before-upload="fcLongBatchFile" :show-upload-list="false" accept=".txt,.csv">
-                      <a-button size="small">⬆ 导入文件</a-button>
-                    </a-upload>
-                    <span style="color:#8c8c8c;font-size:12px;">已匹配 <b>{{ fcLongBatchTargets.length }}</b> 条，未匹配 {{ fcLongBatchUnmatched.length }} 条</span>
-                  </div>
-                  <div v-if="fcLongBatchUnmatched.length" style="margin-top:4px;color:#cf1322;font-size:12px;">
-                    未匹配配件号：{{ fcLongBatchUnmatched.slice(0,10).join('、') }}{{ fcLongBatchUnmatched.length > 10 ? ' 等 ' + fcLongBatchUnmatched.length + ' 个' : '' }}
-                  </div>
-                </a-form-item>
                 <a-form-item label="策略名称" required>
                   <a-select v-model:value="fcLongBatchM.strategy" style="width:100%"
                     :options="[{ value:'sparse', label:'稀疏件圆整策略' }]"/>
                 </a-form-item>
-                <a-form-item label="调整有效期（月）" required
-                  :help="'设置后，该期限内系统自动预测不再覆盖本次人工调整值'">
-                  <a-input-number v-model:value="fcLongBatchM.validMonths" :min="1" :max="120" style="width:180px"/>
+                <div style="margin:2px 0 14px;color:#595959;font-size:13px;line-height:1.7;">
+                  <b>策略说明：</b>将 10 年预测按 <b>334</b> 拆分为 3 段（第 1-3 年 / 第 4-6 年 / 第 7-10 年），每段汇总后按年份依次轮询分布；调整后写入「调整原因」并设定「截至日期」。
+                </div>
+                <a-form-item label="截至日期" required
+                  :help="'设置后，截至该日期系统自动预测不再覆盖本次人工调整值'">
+                  <a-date-picker v-model:value="fcLongBatchM.validUntil" value-format="YYYY-MM-DD" style="width:180px"/>
                 </a-form-item>
               </a-form>
               <div style="text-align:right;margin-top:8px;">
@@ -2560,16 +2538,17 @@
             <a-modal v-model:open="fcBridgeOpen" title="生成 bridge buy 计划" :width="1200" :footer="null" :mask-closable="false">
               <template v-if="!fcBridgeDone">
                 <a-alert type="info" :show-icon="true" style="margin-bottom:14px;">
-                  <template #message>已选择 <b>{{ fcLongSel.length }}</b> 个配件（来自长周期预测报表勾选行）。请选择 bridge buy 年份，下方按配件维度展示该年份及以前各年的预测需求与合计。</template>
+                  <template #message>已选择 <b>{{ fcLongSel.length }}</b> 个配件（来自长周期预测报表勾选行）。请选择 bridge buy 买断年数，下方按配件维度展示所选年数对应年份区间（首年~末年）的各年预测需求与合计。</template>
                 </a-alert>
                 <a-form layout="vertical">
-                  <a-form-item label="bridge buy 年份" required>
-                    <a-select v-model:value="fcBridgeYear" style="width:260px"
-                      :options="fcLongFctYears.map(v=>({value:v,label:v+' 年（第 '+(fcLongFctYears.indexOf(v)+1)+' 年预测）'}))"/>
+                  <a-form-item label="bridge buy买断年数" required>
+                    <a-select v-model:value="fcBridgeYearsN" style="width:180px"
+                      :options="Array.from({length:fcLongFctYears.length},(_,k)=>k+1).map(n=>({value:n,label:n+' 年'}))"/>
+                    <span style="margin-left:14px;color:#1677ff;font-weight:600;">买断周期：{{ fcBridgeYearRange }}</span>
                   </a-form-item>
                 </a-form>
 
-                <div class="bt-sec-t" style="margin:6px 0 10px;">所选配件明细<span class="bt-sec-sub">仅展示所选年份及以前年份；末列与末行为区间合计，所选年份列头高亮</span></div>
+                <div class="bt-sec-t" style="margin:6px 0 10px;">所选配件明细<span class="bt-sec-sub">仅展示买断年数对应的首年~末年区间；末列与末行为区间合计，末年列头高亮</span></div>
                 <a-table :columns="fcBridgeDetailCols" :data-source="fcBridgeDetailRows" row-key="id"
                   :pagination="false" size="small" bordered :row-class-name="fcBridgeDetailRowClass"
                   :scroll="{ x: fcBridgeScrollX }" :locale="{emptyText:'请先在长周期预测报表中勾选配件'}"/>
@@ -2581,7 +2560,7 @@
               </template>
               <template v-else>
                 <a-alert type="success" :show-icon="true" style="margin-bottom:14px;">
-                  <template #message>已生成 <b>{{ fcBridgeData.length }}</b> 条 bridge buy 计划（年份 {{ fcBridgeYear }}，合计数量 <b>{{ fcBridgeGenSum }}</b>）。</template>
+                  <template #message>已生成 <b>{{ fcBridgeData.length }}</b> 条 bridge buy 计划（买断周期 {{ fcBridgeYearRange }}，合计数量 <b>{{ fcBridgeGenSum }}</b>）。</template>
                 </a-alert>
                 <a-table :columns="fcBridgeCols" :data-source="fcBridgeData" row-key="id"
                   :pagination="{pageSize:8}" size="small" bordered/>
@@ -3294,7 +3273,7 @@
                         <span title="全屏" @click="toggleFull">⛶</span>
                       </div>
                     </div>
-                    <a-table :columns="fcNewColumns" :data-source="fcNewPaged" :pagination="false" :size="tableSize" :row-key="r=>r.code" :row-selection="{ selectedRowKeys: fcNewSel, onChange: k => fcNewSel = k }" :scroll="{x:1460}">
+                    <a-table :columns="fcNewColumns" :data-source="fcNewPaged" :pagination="false" :size="tableSize" :row-key="r=>r.code" :row-selection="{ selectedRowKeys: fcNewSel, onChange: k => fcNewSel = k }" :scroll="{x:2300}">
                       <template #bodyCell="{ column, record }">
                         <template v-if="column.key==='act'">
                           <span class="link-btn" @click.stop="fcOpenParts(record)">配件清单</span>
@@ -3382,11 +3361,17 @@
                   <a-col :span="12"><a-form-item label="未来4个月计划生产量" required><a-input-number v-model:value="fcNewModal.form.p4" style="width:100%" :min="0" placeholder="未来4个月计划生产量"/></a-form-item></a-col>
                   <a-col :span="12"><a-form-item label="未来5个月计划生产量" required><a-input-number v-model:value="fcNewModal.form.p5" style="width:100%" :min="0" placeholder="未来5个月计划生产量"/></a-form-item></a-col>
                   <a-col :span="12"><a-form-item label="未来6个月计划生产量" required><a-input-number v-model:value="fcNewModal.form.p6" style="width:100%" :min="0" placeholder="未来6个月计划生产量"/></a-form-item></a-col>
+                  <a-col :span="12"><a-form-item label="未来7个月计划生产量" required><a-input-number v-model:value="fcNewModal.form.p7" style="width:100%" :min="0" placeholder="未来7个月计划生产量"/></a-form-item></a-col>
+                  <a-col :span="12"><a-form-item label="未来8个月计划生产量" required><a-input-number v-model:value="fcNewModal.form.p8" style="width:100%" :min="0" placeholder="未来8个月计划生产量"/></a-form-item></a-col>
+                  <a-col :span="12"><a-form-item label="未来9个月计划生产量" required><a-input-number v-model:value="fcNewModal.form.p9" style="width:100%" :min="0" placeholder="未来9个月计划生产量"/></a-form-item></a-col>
+                  <a-col :span="12"><a-form-item label="未来10个月计划生产量" required><a-input-number v-model:value="fcNewModal.form.p10" style="width:100%" :min="0" placeholder="未来10个月计划生产量"/></a-form-item></a-col>
+                  <a-col :span="12"><a-form-item label="未来11个月计划生产量" required><a-input-number v-model:value="fcNewModal.form.p11" style="width:100%" :min="0" placeholder="未来11个月计划生产量"/></a-form-item></a-col>
+                  <a-col :span="12"><a-form-item label="未来12个月计划生产量" required><a-input-number v-model:value="fcNewModal.form.p12" style="width:100%" :min="0" placeholder="未来12个月计划生产量"/></a-form-item></a-col>
                   <a-col :span="12"><a-form-item label="配件清单" required><a-textarea v-model:value="fcNewModal.form.parts" :rows="1" placeholder="配件清单"/></a-form-item></a-col>
                 </a-row>
               </a-form>
               <a-alert type="info" show-icon style="margin-top:4px;"
-                message="创建后进入步骤2清单：系统按参考车型代码自动匹配车型配件，并按未来6个月计划生产量 × 参考订购率生成预测（设计稿示意）。"/>
+                message="创建后进入步骤2清单：系统按参考车型代码自动匹配车型配件，并按未来12个月计划生产量 × 参考订购率生成预测（设计稿示意）。"/>
             </a-modal>
 
             <!-- 二次弹窗②：配件清单 -->
@@ -3422,8 +3407,8 @@
                 <a-button v-if="activeMenu==='fc-new'" type="primary" style="margin-left:8px;" @click="fcSavePred">保存</a-button>
               </div>
               <a-alert v-if="activeMenu==='fc-new' && fcPredM.match==='unmatched'" type="warning" show-icon style="margin-bottom:12px;"
-                message="未匹配参考配件的配件：参考配件号为空且未来3个月预测值均为空，可在下方「参考配件号」列从参考车型配件清单中选取参考配件。"/>
-              <a-table :columns="fcPredCols" :data-source="fcPredFiltered" :pagination="{ pageSize:8, size:'small', showTotal:t=>'共 '+t+' 条' }" size="small" row-key="id" :row-selection="{ selectedRowKeys: fcPredSel, onChange: k => fcPredSel = k }" :scroll="{x:1420}">
+                message="未匹配参考配件的配件：参考配件号为空且未来12个月预测值均为空，可在下方「参考配件号」列从参考车型配件清单中选取参考配件。"/>
+              <a-table :columns="fcPredCols" :data-source="fcPredFiltered" :pagination="{ pageSize:8, size:'small', showTotal:t=>'共 '+t+' 条' }" size="small" row-key="id" :row-selection="{ selectedRowKeys: fcPredSel, onChange: k => fcPredSel = k }" :scroll="{x:2500}">
                 <template #bodyCell="{ column, record }">
                   <!-- 调整原因：预测值调整后必填（草稿页只读） -->
                   <template v-if="column.render==='edittext' && !isFcNewDraft">
@@ -3452,11 +3437,11 @@
               <!-- 系数调整已移至页面工具栏的「系数调整」按钮弹窗 -->
             </a-modal>
 
-            <!-- 系数调整弹窗（仅参考零件需求预测草稿页：第 1 ~ 6 月） -->
-            <a-modal v-model:open="fcCoefOpen" title="系数调整" :width="560" :footer="null">
-              <div class="bt-sec-t" style="margin-bottom:14px;">预测系数调整（第 1 ~ 6 月）<span class="bt-sec-sub">按月应用调整系数（正数、支持小数）；应用后第 1~6 月预测值 = 原预测值 × 对应月系数</span></div>
-              <div class="gp-coef-grid" style="grid-template-columns:repeat(3,1fr);">
-                <div class="gp-coef-item" v-for="n in 6" :key="n">
+            <!-- 系数调整弹窗（仅参考零件需求预测草稿页：第 1 ~ 12 月） -->
+            <a-modal v-model:open="fcCoefOpen" title="系数调整" :width="760" :footer="null">
+              <div class="bt-sec-t" style="margin-bottom:14px;">预测系数调整（第 1 ~ 12 月）<span class="bt-sec-sub">按月应用调整系数（正数、支持小数）；应用后第 1~12 月预测值 = 原预测值 × 对应月系数</span></div>
+              <div class="gp-coef-grid" style="grid-template-columns:repeat(4,1fr);">
+                <div class="gp-coef-item" v-for="n in 12" :key="n">
                   <span class="gp-coef-lab">第 {{ n }} 月</span>
                   <a-input-number v-model:value="fcNewCoeffs[n-1]" :min="0" :step="0.01" :precision="4" style="width:100%" placeholder="正数，可含小数"/>
                 </div>
@@ -3469,13 +3454,18 @@
             </a-modal>
 
             <!-- 生成采购计划预览弹窗（同长周期生成预览交互）：预览待生成明细 → 确认生成常规采购计划草稿 -->
-            <a-modal v-model:open="fcGenPoOpen" title="生成采购计划" :width="980" :footer="null" :mask-closable="false">
+            <a-modal v-model:open="fcGenPoOpen" title="生成采购计划" :width="1180" :footer="null" :mask-closable="false">
               <template v-if="!fcGenPoDone">
-                <a-alert type="info" :show-icon="true" style="margin-bottom:14px;">
-                  <template #message>将把以下 <b>{{ fcGenPoPreview.length }}</b> 个配件的未来 6 个月预测结果生成采购计划草稿（未匹配参考配件且无预测值的行不参与生成）；确认无误后点击「生成采购计划」。</template>
-                </a-alert>
+                <!-- 采购区间选择：参与生成的预测月份范围 -->
+                <div class="fc-po-range" style="margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                  <span class="lab" style="color:#333;font-weight:600;">采购区间</span>
+                  <a-select v-model:value="fcPoRangeStart" style="width:150px" :options="fcPoMonthOptions" @change="fcPoRangeStart=Math.min(fcPoRangeStart,fcPoRangeEnd)"/>
+                  <span style="color:#8c8c8c;">~</span>
+                  <a-select v-model:value="fcPoRangeEnd" style="width:150px" :options="fcPoMonthOptions" @change="fcPoRangeEnd=Math.max(fcPoRangeStart,fcPoRangeEnd)"/>
+                  <span style="color:#8c8c8c;font-size:12px;">选择参与生成的预测月份范围（默认未来 1~12 个月）</span>
+                </div>
                 <a-table :columns="fcGenPoCols" :data-source="fcGenPoPreview" row-key="id"
-                  :pagination="false" size="small" bordered
+                  :pagination="false" size="small" bordered :scroll="{x: fcGenPoScrollX}"
                   :locale="{emptyText:'暂无可生成的配件（均已生成或无预测值）'}"/>
                 <div class="jlrs-modal-footer">
                   <a-button @click="fcGenPoOpen=false">取 消</a-button>
@@ -8777,10 +8767,10 @@ const app = createApp({
 
     /* 步骤2：生成参考车型配件清单 —— 预测新车型维护 + 二次弹窗 */
     const fcNewRows = reactive([
-      { id:1, code:'L460', ref:'L405', p1:1200, p2:1350, p3:1500, p4:1620, p5:1750, p6:1880 },
-      { id:2, code:'L461', ref:'L494', p1:900, p2:1000, p3:1100, p4:1180, p5:1260, p6:1340 },
-      { id:3, code:'L551', ref:'L538', p1:1500, p2:1600, p3:1700, p4:1820, p5:1940, p6:2060 },
-      { id:4, code:'L663', ref:'L316', p1:780, p2:820, p3:880, p4:930, p5:980, p6:1040 },
+      { id:1, code:'L460', ref:'L405', p1:1200, p2:1350, p3:1500, p4:1620, p5:1750, p6:1880, p7:2010, p8:2140, p9:2270, p10:2400, p11:2530, p12:2660 },
+      { id:2, code:'L461', ref:'L494', p1:900, p2:1000, p3:1100, p4:1180, p5:1260, p6:1340, p7:1420, p8:1500, p9:1580, p10:1660, p11:1740, p12:1820 },
+      { id:3, code:'L551', ref:'L538', p1:1500, p2:1600, p3:1700, p4:1820, p5:1940, p6:2060, p7:2180, p8:2300, p9:2420, p10:2540, p11:2660, p12:2780 },
+      { id:4, code:'L663', ref:'L316', p1:780, p2:820, p3:880, p4:930, p5:980, p6:1040, p7:1100, p8:1160, p9:1220, p10:1280, p11:1340, p12:1400 },
     ]);
     const fcNewPage = reactive({ current:1, size:15 });
     const fcNewPaged = computed(()=>{ const s=(fcNewPage.current-1)*fcNewPage.size; return fcNewRows.slice(s, s+fcNewPage.size); });
@@ -8788,20 +8778,26 @@ const app = createApp({
     const fcNewColumns = [
       { title:'车型编码', key:'code', dataIndex:'code', width:120, sorter:(a,b)=>a.code.localeCompare(b.code) },
       { title:'参考车型编码', key:'ref', dataIndex:'ref', width:130, sorter:(a,b)=>a.ref.localeCompare(b.ref) },
-      { title:'未来1个月计划生产量', key:'p1', dataIndex:'p1', width:160, sorter:(a,b)=>a.p1-b.p1 },
-      { title:'未来2个月计划生产量', key:'p2', dataIndex:'p2', width:160, sorter:(a,b)=>a.p2-b.p2 },
-      { title:'未来3个月计划生产量', key:'p3', dataIndex:'p3', width:160, sorter:(a,b)=>a.p3-b.p3 },
-      { title:'未来4个月计划生产量', key:'p4', dataIndex:'p4', width:160, sorter:(a,b)=>a.p4-b.p4 },
-      { title:'未来5个月计划生产量', key:'p5', dataIndex:'p5', width:160, sorter:(a,b)=>a.p5-b.p5 },
-      { title:'未来6个月计划生产量', key:'p6', dataIndex:'p6', width:160, sorter:(a,b)=>a.p6-b.p6 },
+      { title:'未来1个月计划生产量', key:'p1', dataIndex:'p1', width:150, sorter:(a,b)=>a.p1-b.p1 },
+      { title:'未来2个月计划生产量', key:'p2', dataIndex:'p2', width:150, sorter:(a,b)=>a.p2-b.p2 },
+      { title:'未来3个月计划生产量', key:'p3', dataIndex:'p3', width:150, sorter:(a,b)=>a.p3-b.p3 },
+      { title:'未来4个月计划生产量', key:'p4', dataIndex:'p4', width:150, sorter:(a,b)=>a.p4-b.p4 },
+      { title:'未来5个月计划生产量', key:'p5', dataIndex:'p5', width:150, sorter:(a,b)=>a.p5-b.p5 },
+      { title:'未来6个月计划生产量', key:'p6', dataIndex:'p6', width:150, sorter:(a,b)=>a.p6-b.p6 },
+      { title:'未来7个月计划生产量', key:'p7', dataIndex:'p7', width:150, sorter:(a,b)=>a.p7-b.p7 },
+      { title:'未来8个月计划生产量', key:'p8', dataIndex:'p8', width:150, sorter:(a,b)=>a.p8-b.p8 },
+      { title:'未来9个月计划生产量', key:'p9', dataIndex:'p9', width:150, sorter:(a,b)=>a.p9-b.p9 },
+      { title:'未来10个月计划生产量', key:'p10', dataIndex:'p10', width:150, sorter:(a,b)=>a.p10-b.p10 },
+      { title:'未来11个月计划生产量', key:'p11', dataIndex:'p11', width:150, sorter:(a,b)=>a.p11-b.p11 },
+      { title:'未来12个月计划生产量', key:'p12', dataIndex:'p12', width:150, sorter:(a,b)=>a.p12-b.p12 },
       { title:'操作', key:'act', width:220, fixed:'right' },
     ];
-    const fcNewModal = reactive({ open:false, form:{ code:'', ref:'', p1:undefined, p2:undefined, p3:undefined, p4:undefined, p5:undefined, p6:undefined, parts:'' } });
-    function fcOpenNewModal(){ Object.assign(fcNewModal.form, { code:'', ref:'', p1:undefined, p2:undefined, p3:undefined, p4:undefined, p5:undefined, p6:undefined, parts:'' }); fcNewModal.open = true; }
+    const fcNewModal = reactive({ open:false, form:{ code:'', ref:'', p1:undefined, p2:undefined, p3:undefined, p4:undefined, p5:undefined, p6:undefined, p7:undefined, p8:undefined, p9:undefined, p10:undefined, p11:undefined, p12:undefined, parts:'' } });
+    function fcOpenNewModal(){ Object.assign(fcNewModal.form, { code:'', ref:'', p1:undefined, p2:undefined, p3:undefined, p4:undefined, p5:undefined, p6:undefined, p7:undefined, p8:undefined, p9:undefined, p10:undefined, p11:undefined, p12:undefined, parts:'' }); fcNewModal.open = true; }
     function fcSaveNew(){
       const f = fcNewModal.form;
       if(!f.code || !f.ref){ antd.message.warning('请填写车型编码与参考车型编码'); return; }
-      fcNewRows.push({ id:Date.now(), code:f.code, ref:f.ref, p1:f.p1||0, p2:f.p2||0, p3:f.p3||0, p4:f.p4||0, p5:f.p5||0, p6:f.p6||0 });
+      fcNewRows.push({ id:Date.now(), code:f.code, ref:f.ref, p1:f.p1||0, p2:f.p2||0, p3:f.p3||0, p4:f.p4||0, p5:f.p5||0, p6:f.p6||0, p7:f.p7||0, p8:f.p8||0, p9:f.p9||0, p10:f.p10||0, p11:f.p11||0, p12:f.p12||0 });
       fcNewModal.open = false;
       antd.message.success('预测新车型已创建（设计稿示意），已生成参考车型配件清单');
     }
@@ -8857,11 +8853,11 @@ const app = createApp({
       { title:'参考车型', dataIndex:'ref', key:'ref', width:100 },
       { title:'参考配件号', dataIndex:'refcode', key:'refcode', width:120 },
       { title:'参考配件名', dataIndex:'refname', key:'refname', width:155 },
-      Object.assign(fcNumCol('1个月预测','f1',100),{render:'editnum'}), Object.assign(fcNumCol('2个月预测','f2',100),{render:'editnum'}), Object.assign(fcNumCol('3个月预测','f3',100),{render:'editnum'}), Object.assign(fcNumCol('4个月预测','f4',100),{render:'editnum'}), Object.assign(fcNumCol('5个月预测','f5',100),{render:'editnum'}), Object.assign(fcNumCol('6个月预测','f6',100),{render:'editnum'}),
+      Object.assign(fcNumCol('1个月预测','f1',100),{render:'editnum'}), Object.assign(fcNumCol('2个月预测','f2',100),{render:'editnum'}), Object.assign(fcNumCol('3个月预测','f3',100),{render:'editnum'}), Object.assign(fcNumCol('4个月预测','f4',100),{render:'editnum'}), Object.assign(fcNumCol('5个月预测','f5',100),{render:'editnum'}), Object.assign(fcNumCol('6个月预测','f6',100),{render:'editnum'}), Object.assign(fcNumCol('7个月预测','f7',100),{render:'editnum'}), Object.assign(fcNumCol('8个月预测','f8',100),{render:'editnum'}), Object.assign(fcNumCol('9个月预测','f9',100),{render:'editnum'}), Object.assign(fcNumCol('10个月预测','f10',100),{render:'editnum'}), Object.assign(fcNumCol('11个月预测','f11',100),{render:'editnum'}), Object.assign(fcNumCol('12个月预测','f12',100),{render:'editnum'}),
       Object.assign({ title:'调整原因 *', dataIndex:'adj_reason', key:'adj_reason', width:170 }, {render:'edittext'}),
     ];
     const fcPredRows = ref([]);
-    function fcPredUnmatched(r){ return !r.refcode && !(r.f1||r.f2||r.f3||r.f4||r.f5||r.f6); }
+    function fcPredUnmatched(r){ return !r.refcode && !(r.f1||r.f2||r.f3||r.f4||r.f5||r.f6||r.f7||r.f8||r.f9||r.f10||r.f11||r.f12); }
     const fcPredFiltered = computed(()=> fcPredRows.value.filter(r=>{
       if(fcPredM.code && !r.code.includes(fcPredM.code)) return false;
       if(fcPredM.status && r.status!==fcPredM.status) return false;
@@ -8872,18 +8868,18 @@ const app = createApp({
     function fcOpenPred(row){
       fcPredM.row = row; fcPredM.code = ''; fcPredM.status = undefined; fcPredM.match = undefined; fcPredSel.value = [];
       const base = [
-        { code:'LR062541', name:'前制动摩擦片', base:fcb('LR062541'), refcode:'LR031664', refname:'前制动摩擦片', f1:5, f2:8, f3:12, f4:16, f5:21, f6:26, status:'未生成' },
-        { code:'LR011123', name:'机油滤清器总成', base:fcb('LR011123'), refcode:'LR001327', refname:'机油滤清器总成', f1:0, f2:0, f3:0, f4:0, f5:0, f6:0, status:'未生成' },
-        { code:'LR028470', name:'空气滤清器滤芯', base:fcb('LR028470'), refcode:'LR011593', refname:'空气滤清器滤芯', f1:10, f2:16, f3:22, f4:28, f5:35, f6:43, status:'已生成采购计划' },
-        { code:'LR089221', name:'空调滤清器滤芯', base:fcb('LR089221'), refcode:'LR032235', refname:'空调滤清器滤芯', f1:6, f2:9, f3:15, f4:20, f5:26, f6:32, status:'未生成' },
+        { code:'LR062541', name:'前制动摩擦片', base:fcb('LR062541'), refcode:'LR031664', refname:'前制动摩擦片', f1:5, f2:8, f3:12, f4:16, f5:21, f6:26, f7:31, f8:37, f9:43, f10:49, f11:55, f12:61, status:'未生成' },
+        { code:'LR011123', name:'机油滤清器总成', base:fcb('LR011123'), refcode:'LR001327', refname:'机油滤清器总成', f1:0, f2:0, f3:0, f4:0, f5:0, f6:0, f7:0, f8:0, f9:0, f10:0, f11:0, f12:0, status:'未生成' },
+        { code:'LR028470', name:'空气滤清器滤芯', base:fcb('LR028470'), refcode:'LR011593', refname:'空气滤清器滤芯', f1:10, f2:16, f3:22, f4:28, f5:35, f6:43, f7:51, f8:59, f9:67, f10:75, f11:83, f12:91, status:'已生成采购计划' },
+        { code:'LR089221', name:'空调滤清器滤芯', base:fcb('LR089221'), refcode:'LR032235', refname:'空调滤清器滤芯', f1:6, f2:9, f3:15, f4:20, f5:26, f6:32, f7:38, f8:44, f9:50, f10:56, f11:62, f12:68, status:'未生成' },
       ];
       if(activeMenu.value==='fc-new'){
-        base.push({ code:'LR061638', name:'后视镜总成（右）', base:fcb('LR061638'), refcode:'', refname:'', f1:null, f2:null, f3:null, f4:null, f5:null, f6:null, status:'未生成' });
+        base.push({ code:'LR061638', name:'后视镜总成（右）', base:fcb('LR061638'), refcode:'', refname:'', f1:null, f2:null, f3:null, f4:null, f5:null, f6:null, f7:null, f8:null, f9:null, f10:null, f11:null, f12:null, status:'未生成' });
       }
-      // 每行记录系统预测原值快照（f1~f6），用于识别人工调整并校验「调整原因」必填
+      // 每行记录系统预测原值快照（f1~f12），用于识别人工调整并校验「调整原因」必填
       fcPredRows.value = base.map((b,i)=> Object.assign({ id:i+1, dd:'2025年12月05日', veh:row.code, ref:row.ref, adj_reason:'' }, b));
       fcPredRows.value.forEach(function(r){
-        const o = {}; for(let k=1;k<=6;k++){ o['f'+k] = r['f'+k]; }
+        const o = {}; for(let k=1;k<=12;k++){ o['f'+k] = r['f'+k]; }
         r._orig = o;
       });
       fcPredM.open = true;
@@ -8891,7 +8887,7 @@ const app = createApp({
     function fcRecompute(r){
       if(r.refcode){
         const seed = ((r.refcode.charCodeAt(r.refcode.length-1)||65) + r.refcode.length*7) % 18 + 2;
-        r.f1 = seed; r.f2 = Math.round(seed*1.55); r.f3 = Math.round(seed*2.3); r.f4 = Math.round(seed*3.15); r.f5 = Math.round(seed*3.95); r.f6 = Math.round(seed*4.85);
+        r.f1 = seed; r.f2 = Math.round(seed*1.55); r.f3 = Math.round(seed*2.3); r.f4 = Math.round(seed*3.15); r.f5 = Math.round(seed*3.95); r.f6 = Math.round(seed*4.85); r.f7 = Math.round(seed*5.75); r.f8 = Math.round(seed*6.65); r.f9 = Math.round(seed*7.55); r.f10 = Math.round(seed*8.45); r.f11 = Math.round(seed*9.35); r.f12 = Math.round(seed*10.25);
         if(!r.status || r.status==='未生成') r.status = '未生成';
       }
     }
@@ -8905,14 +8901,14 @@ const app = createApp({
     }
     const fcCoefOpen = ref(false);
     function fcOpenCoeffModal(){ fcCoefOpen.value = true; }
-    const fcNewCoeffs = reactive([1,1,1,1,1,1]);
+    const fcNewCoeffs = reactive([1,1,1,1,1,1,1,1,1,1,1,1]);
     function fcApplyCoeffs(){
       const bad = [];
-      for(let i=0;i<6;i++){ const v = fcNewCoeffs[i]; if(v===undefined||v===null||isNaN(Number(v))||Number(v)<=0){ bad.push(i+1); } }
+      for(let i=0;i<12;i++){ const v = fcNewCoeffs[i]; if(v===undefined||v===null||isNaN(Number(v))||Number(v)<=0){ bad.push(i+1); } }
       if(bad.length){ antd.message.error('第 ' + bad.join('、') + ' 月调整系数须为正数（支持小数），请修正后应用'); return; }
-      fcPredRows.value.forEach(r=>{ if(r.f1!=null) r.f1 = Math.round(r.f1 * fcNewCoeffs[0] * 100)/100; if(r.f2!=null) r.f2 = Math.round(r.f2 * fcNewCoeffs[1] * 100)/100; if(r.f3!=null) r.f3 = Math.round(r.f3 * fcNewCoeffs[2] * 100)/100; if(r.f4!=null) r.f4 = Math.round(r.f4 * fcNewCoeffs[3] * 100)/100; if(r.f5!=null) r.f5 = Math.round(r.f5 * fcNewCoeffs[4] * 100)/100; if(r.f6!=null) r.f6 = Math.round(r.f6 * fcNewCoeffs[5] * 100)/100; });
+      fcPredRows.value.forEach(r=>{ for(let k=1;k<=12;k++){ const v = r['f'+k]; if(v!=null) r['f'+k] = Math.round(v * fcNewCoeffs[k-1] * 100)/100; } });
       fcCoefOpen.value = false;
-      antd.message.success('已按 1~6 月系数重算预测值（设计稿示意）');
+      antd.message.success('已按 1~12 月系数重算预测值（设计稿示意）');
     }
     function fcResetNewCoeffs(){ for(let i=0;i<6;i++){ fcNewCoeffs[i]=1; } antd.message.info('系数已重置为 1'); }
     const fcBatchM = reactive({ open:false });
@@ -9016,48 +9012,29 @@ const app = createApp({
     const fcBuyoutSel = ref([]);
     const fcBatchSelIds = computed(()=> isFcBuyoutOnly.value ? fcBuyoutSel.value : fcLongSel.value);
     const fcBatchData = computed(()=> isFcBuyoutOnly.value ? fcBuyoutData : fcLongData);
-    const fcLongBatchM = reactive({ open:false, strategy:'sparse', validMonths:12, source:'selected', codesText:'' });
-    /* 批量调整支持两种范围：①已勾选行 ②导入配件号（粘贴文本或 txt/csv 文件），按配件号匹配 */
-    const fcLongBatchTargets = computed(()=>{
-      if(fcLongBatchM.source === 'selected') return fcBatchData.value.filter(r=> fcBatchSelIds.value.indexOf(r.id) >= 0);
-      const codes = String(fcLongBatchM.codesText || '').split(/[\s,;，、]+/).map(x=> x.trim()).filter(Boolean);
-      if(!codes.length) return [];
-      const set = {}; codes.forEach(c=> { set[c] = true; });
-      return fcBatchData.value.filter(r=> set[r.part_code]);
-    });
-    const fcLongBatchUnmatched = computed(()=>{
-      if(fcLongBatchM.source !== 'codes') return [];
-      const hit = {}; fcLongBatchTargets.value.forEach(r=> { hit[r.part_code] = true; });
-      const codes = String(fcLongBatchM.codesText || '').split(/[\s,;，、]+/).map(x=> x.trim()).filter(Boolean);
-      return codes.filter(c=> !hit[c]);
-    });
-    /* 读取本地 txt / csv 文本追加到配件号输入框（设计稿示意，不真实上传） */
-    function fcLongBatchFile(file){
-      try{
-        const fr = new FileReader();
-        fr.onload = function(){
-          const txt = String(fr.result || '').replace(/\s+$/, '');
-          const cur = String(fcLongBatchM.codesText || '').replace(/\s+$/, '');
-          fcLongBatchM.codesText = cur ? (cur + '\n' + txt) : txt;
-          antd.message.success('已读取文件：' + ((file && file.name) || ''));
-        };
-        fr.readAsText(file);
-      }catch(e){ antd.message.error('文件读取失败（设计稿示意）'); }
-      return false;
-    }
+    const fcLongBatchM = reactive({ open:false, strategy:'sparse', validUntil: dayjs().add(12,'month').format('YYYY-MM-DD') });
+    /* 批量圆整范围固定为「当前勾选的行」（范围切换入口已按用户要求下线） */
+    const fcLongBatchTargets = computed(()=> fcBatchData.value.filter(r=> fcBatchSelIds.value.indexOf(r.id) >= 0));
     /* 稀疏件圆整策略：将 10 年按 334 拆分为 3 段（1-3 / 4-6 / 7-10 年），
        每段汇总后按年份依次轮询分布；同时写入调整原因与调整有效期 */
     function fcLongBatchApply(){
       const targets = fcLongBatchTargets.value;
       if(!targets.length){
-        antd.message.warning(fcLongBatchM.source === 'codes'
-          ? '导入的配件号未匹配到数据，请检查配件号是否正确'
-          : '请先勾选需要调整的配件');
+        antd.message.warning('请先勾选需要调整的配件');
         return;
       }
-      if(!fcLongBatchM.validMonths || Number(fcLongBatchM.validMonths) < 1){ antd.message.warning('请填写调整有效期（月）'); return; }
-      const months = Number(fcLongBatchM.validMonths);
-      const until = dayjs().add(months, 'month').format('YYYY-MM-DD');
+      // 圆整前置校验：批量圆整仅可作用于结果含小数的配件；若所选配件结果均已为整数（无需圆整），则报错提示
+      const intParts = [];
+      targets.forEach(function(r){
+        const hasDec = fcLongKeys.some(function(k){ const v = Number(r[k]); return Number.isFinite(v) && !Number.isInteger(v); });
+        if(!hasDec) intParts.push(r.part_code);
+      });
+      if(intParts.length){
+        antd.message.warning('所选配件结果已为整数、无需圆整：' + intParts.slice(0,8).join('、') + (intParts.length > 8 ? ' 等 ' + intParts.length + ' 个' : '') + '。请仅选择结果含小数的配件');
+        return;
+      }
+      if(!fcLongBatchM.validUntil){ antd.message.warning('请选择截至日期'); return; }
+      const until = fcLongBatchM.validUntil;
       const segs = [[0,1,2],[3,4,5],[6,7,8,9]];
       let n = 0;
       targets.forEach(function(r){
@@ -9079,10 +9056,8 @@ const app = createApp({
       });
       fcLongSel.value = [];
       fcBuyoutSel.value = [];
-      fcLongBatchM.codesText = '';
-      fcLongBatchM.source = 'selected';
       fcLongBatchM.open = false;
-      antd.message.success('已对 ' + n + ' 个配件执行稀疏件圆整策略，调整有效期至 ' + until);
+      antd.message.success('已对 ' + n + ' 个配件执行稀疏件圆整策略，截至日期 ' + until);
     }
     /* 仅长周期/一次买断结果页与配件组管理页展示行勾选框（供批量操作），其余页面不启用 */
     const genRowSelection = computed(()=>{
@@ -9299,17 +9274,38 @@ const app = createApp({
     /* 预测结果 → 采购计划：先弹预览（同长周期生成预览交互），确认后生成草稿 */
     const fcGenPoOpen = ref(false);
     const fcGenPoDone = ref(false);
-    const fcGenPoPreview = ref([]);
+    const fcGenPoRaw = ref([]);              // 原始预览行：含 f1~f12 与 bridge buy 参考 bb
     const fcGenPoResult = Vue.reactive([]);
     const fcGenPoSum = ref(0);
-    const fcGenPoCols = [
-      { title:'配件编码', dataIndex:'code', key:'code', width:110 },
-      { title:'配件名称', dataIndex:'name', key:'name', width:160, ellipsis:true },
-      { title:'base', dataIndex:'base', key:'base', width:150 },
-      { title:'参考配件号', dataIndex:'refcode', key:'refcode', width:120 },
-      { title:'未来 6 个月预测合计', key:'fsum', dataIndex:'fsum', width:170 },
-      { title:'建议采购计划数量', key:'qty', dataIndex:'qty', width:150 },
-    ];
+    /* 生成采购计划：采购区间（起始月~结束月，1~12）、区间内逐月列 + 区间合计（bridge buy 抵扣仅参与生成数量计算，不在表内展示） */
+    const fcPoRangeStart = ref(1);
+    const fcPoRangeEnd = ref(12);
+    const fcPoMonthOptions = computed(function(){ return Array.from({length:12}, function(_,i){ return { value:i+1, label:'未来'+(i+1)+'个月' }; }); });
+    const fcPoRange = computed(function(){ const a=fcPoRangeStart.value, b=fcPoRangeEnd.value; return [Math.min(a,b), Math.max(a,b)]; });
+    const fcGenPoCols = computed(function(){
+      const cols = [
+        { title:'配件编码', dataIndex:'code', key:'code', width:110 },
+        { title:'配件名称', dataIndex:'name', key:'name', width:150, ellipsis:true },
+        { title:'base', dataIndex:'base', key:'base', width:140 },
+        { title:'参考配件号', dataIndex:'refcode', key:'refcode', width:110 },
+      ];
+      const s = fcPoRange.value[0], e = fcPoRange.value[1];
+      for(let k=s;k<=e;k++){ cols.push({ title:'未来'+k+'个月', key:'f'+k, dataIndex:'f'+k, width:92, align:'right' }); }
+      cols.push({ title:'区间合计', key:'fsum', dataIndex:'fsum', width:110, align:'right' });
+      return cols;
+    });
+    const fcGenPoScrollX = computed(function(){ return fcGenPoCols.value.reduce(function(s,c){ return s + (c.width||90); }, 0); });
+    /* 预览行随「采购区间」实时重算：区间合计 = Σ 区间内各月，建议采购数量 = 区间合计 − bridge buy 参考 */
+    const fcGenPoPreview = computed(function(){
+      const s = fcPoRange.value[0], e = fcPoRange.value[1];
+      return fcGenPoRaw.value.map(function(r){
+        let fsum = 0; for(let k=s;k<=e;k++){ fsum += Number(r['f'+k]||0); }
+        fsum = Math.round(fsum*100)/100;
+        const bb = r.bb || 0;
+        const qty = Math.max(0, Math.round(fsum - bb));
+        return Object.assign({}, r, { fsum:fsum, qty:qty });
+      });
+    });
     const fcGenPoResultCols = [
       { title:'计划编号', dataIndex:'plan_no', key:'plan_no', width:140 },
       { title:'配件号', dataIndex:'code', key:'code', width:110 },
@@ -9319,11 +9315,14 @@ const app = createApp({
       { title:'单据状态', dataIndex:'status', key:'status', width:90 },
     ];
     function fcGenPurchase(){
-      const rows = (fcPredRows.value || []).filter(r=> r.status!=='已生成采购计划' && (r.f1!=null || r.f2!=null || r.f3!=null || r.f4!=null || r.f5!=null || r.f6!=null));
-      fcGenPoPreview.value = rows.map(function(r, i){
-        const fsum = Math.round(((r.f1||0)+(r.f2||0)+(r.f3||0)+(r.f4||0)+(r.f5||0)+(r.f6||0)) * 100)/100;
-        const qty = Math.max(1, Math.round(fsum * (0.85 + (i % 6) * 0.05)));
-        return { id:r.id, code:r.code, name:r.name, base:r.base, refcode:r.refcode||'—', fsum:fsum, qty:qty };
+      const rows = (fcPredRows.value || []).filter(r=> r.status!=='已生成采购计划' && [1,2,3,4,5,6,7,8,9,10,11,12].some(function(k){ return r['f'+k]!=null && r['f'+k]!==''; }));
+      // bridge buy 参考：按配件号汇总已生成的 bridge buy 计划数量（生成采购计划时抵扣相应需求）
+      const bbMap = {};
+      fcBridgeData.forEach(function(b){ bbMap[b.part_code] = (bbMap[b.part_code]||0) + Number(b.qty||0); });
+      fcGenPoRaw.value = rows.map(function(r){
+        const row = { id:r.id, code:r.code, name:r.name, base:r.base, refcode:r.refcode||'—', bb:(bbMap[r.code]||0) };
+        for(let k=1;k<=12;k++){ row['f'+k] = (r['f'+k]!=null && r['f'+k]!=='') ? r['f'+k] : 0; }
+        return row;
       });
       fcGenPoDone.value = false;
       fcGenPoOpen.value = true;
@@ -9430,16 +9429,17 @@ const app = createApp({
     }
     /* ===== 生成 bridge buy 计划：勾选配件 → 选年份 → 配件×各年需求宽表 → 生成计划 ===== */
     const fcBridgeOpen = ref(false);
-    const fcBridgeYear = ref(fcLongFctYears[0]);
+    const fcBridgeYearsN = ref(1);
+    const fcBridgeYear = computed(()=> fcLongFctYears[Math.min(fcBridgeYearsN.value - 1, fcLongFctYears.length - 1)]);
+    const fcBridgeYearRange = computed(()=> fcLongFctYears[0] + ' ~ ' + fcBridgeYear.value);
     const fcBridgeDone = ref(false);
     const fcBridgeData = Vue.reactive([]);
     const fcBridgeGenSum = ref(0);
 
     // 已勾选配件（跨行取最新预测值）
     const fcBridgeSelRowsRaw = computed(()=> fcLongData.filter(r=> fcLongSel.value.indexOf(r.id) >= 0));
-    // 展示范围：从首年（2027）到所选年份（含），之后年份不展示
-    const fcBridgeYearIdx = computed(()=> Math.max(0, fcLongFctYears.indexOf(fcBridgeYear.value)));
-    const fcBridgeActiveYears = computed(()=> fcLongFctYears.slice(0, fcBridgeYearIdx.value + 1));
+    // 展示范围：从首年（2027）到买断年数对应的末年（含），之后年份不展示
+    const fcBridgeActiveYears = computed(()=> fcLongFctYears.slice(0, fcBridgeYearsN.value));
     // 宽表列：配件号 / 配件名称 + 首年~所选年份各一列 + 合计列（所选年份列头高亮）
     const fcBridgeDetailCols = computed(()=>{
       const cols = [
@@ -9497,7 +9497,7 @@ const app = createApp({
     const fcBridgeCols = [
       { title:'配件号', dataIndex:'part_code', width:180 },
       { title:'配件名称', dataIndex:'part_name', width:360, ellipsis:true },
-      { title:'年份', dataIndex:'year', width:110 },
+      { title:'买断周期', dataIndex:'year', width:160 },
       { title:'数量数据', dataIndex:'qty', width:140, align:'right' },
     ];
     /* 圆整校验：检查所选配件在指定年份（y1..yN）是否均已圆整（整数），返回未圆整的配件+年份清单 */
@@ -9514,10 +9514,8 @@ const app = createApp({
     function fcBridgeGenerate(){
       const sel = fcBridgeSelRows.value;
       if(!sel.length){ antd.message.warning('请先在长周期预测报表中勾选配件'); return; }
-      // 圆整校验：所选年份（首年~所选年）必须均已圆整为整数，否则提示先圆整再生成
-      const years = fcBridgeActiveYears.value;
-      const keys = years.map(function(y){ return 'y' + (fcLongFctYears.indexOf(y) + 1); });
-      const bad = fcGenRoundedBad(fcBridgeSelRowsRaw.value, keys);
+      // 圆整校验：所选配件必须整体已圆整（10 年预测均为整数），否则提示先圆整再生成
+      const bad = fcGenRoundedBad(fcBridgeSelRowsRaw.value, fcLongKeys);
       if(bad.length){
         antd.message.warning('所选配件存在未圆整（含小数）的年份，请先对选中的配件执行「圆整」处理后再生成 bridge buy 计划：' + bad.slice(0,5).join('、') + (bad.length > 5 ? ' 等' : ''));
         return;
@@ -9525,11 +9523,11 @@ const app = createApp({
       fcBridgeData.length = 0;
       let n = 0, sum = 0;
       sel.forEach(function(r){
-        const qty = Math.ceil(Number(r.total) || 0);   // 数量＝首年~所选年份的汇总需求（取整）
+        const qty = Math.ceil(Number(r.total) || 0);   // 数量＝首年~末年区间的汇总需求（取整）
         sum += qty;
         fcBridgeData.push({
           id:'BR' + Date.now() + '_' + n, part_code:r.part_code, part_name:r.part_name,
-          year:fcBridgeYear.value, qty:qty,
+          year:fcBridgeYearRange.value, qty:qty,
         });
         n++;
       });
@@ -10386,12 +10384,12 @@ const app = createApp({
       fcAllTimeOpen, fcAllTimeDone, fcAllTimeData, fcAllTimeGenSum, fcAllTimeCols, fcAllTimeRows,
       fcAllTimeRowClass, fcAllTimeResultCols, fcAllTimeGenerate,
       fcBatchable, fcBuyoutSel, fcBatchSelIds,
-      fcBridgeOpen, fcBridgeYear, fcBridgeDone, fcBridgeData, fcBridgeDetailCols, fcBridgeDetailRows, fcBridgeScrollX,
+      fcBridgeOpen, fcBridgeYear, fcBridgeYearsN, fcBridgeYearRange, fcBridgeDone, fcBridgeData, fcBridgeDetailCols, fcBridgeDetailRows, fcBridgeScrollX,
       fcBridgeDetailRowClass, fcBridgeGenSum, fcBridgeCols, fcBridgeGenerate, fcLongFctYears,
       fcLongTotal, fcLongYearVal, isFcLong, fcLongSel, fcLongBatchM, fcLongBatchApply, genRowSelection,
-      fcLongBatchTargets, fcLongBatchUnmatched, fcLongBatchFile,
+      fcLongBatchTargets,
       fcNewRows, fcNewPage, fcNewPaged, fcNewSel, fcNewColumns, fcNewModal, fcOpenNewModal, fcSaveNew, fcDelNew,
-      fcStatusOptions, fcPartsM, fcPartsSel, fcPartsCols, fcPartsFiltered, fcOpenParts, fcPredM, fcPredSel, fcPredCols, fcPredFiltered, fcOpenPred, fcUpdatePred, fcPredUnmatched, fcPredRefParts, fcPredRefNameMap, fcBatchM, fcBatchRows, fcBatchCols, fcBatchStatus, fcBatchValid, fcBatchInvalidCount, fcOpenBatch, fcBatchRowChange, fcDownloadTpl, fcImportRef, fcBatchSave, fcPredRefChange, fcNewCoeffs, fcApplyCoeffs, fcResetNewCoeffs, fcCoefOpen, fcOpenCoeffModal, isFcLongBuyoutDraft, isFcNewDraft, fcSaveLongBuyout, fcSavePred, fcGenPoOpen, fcGenPoDone, fcGenPoPreview, fcGenPoResult, fcGenPoSum, fcGenPoCols, fcGenPoResultCols, fcGenPoConfirm, fcGenPoGo,
+      fcStatusOptions, fcPartsM, fcPartsSel, fcPartsCols, fcPartsFiltered, fcOpenParts, fcPredM, fcPredSel, fcPredCols, fcPredFiltered, fcOpenPred, fcUpdatePred, fcPredUnmatched, fcPredRefParts, fcPredRefNameMap, fcBatchM, fcBatchRows, fcBatchCols, fcBatchStatus, fcBatchValid, fcBatchInvalidCount, fcOpenBatch, fcBatchRowChange, fcDownloadTpl, fcImportRef, fcBatchSave, fcPredRefChange, fcNewCoeffs, fcApplyCoeffs, fcResetNewCoeffs, fcCoefOpen, fcOpenCoeffModal, isFcLongBuyoutDraft, isFcNewDraft, fcSaveLongBuyout, fcSavePred, fcPoRangeStart, fcPoRangeEnd, fcPoMonthOptions, fcPoRange, fcGenPoScrollX, fcGenPoOpen, fcGenPoDone, fcGenPoPreview, fcGenPoResult, fcGenPoSum, fcGenPoCols, fcGenPoResultCols, fcGenPoConfirm, fcGenPoGo,
       fcABCs, fcPlanners,
       btGranOpts, btPartCols, btPartRows, btPoolCols, btPoolFiltered, btPicker,
       btOpenPicker, btPickerChange, btPickerOk, btRemovePart, btClearParts, btDownloadTpl, btImportParts,
