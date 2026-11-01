@@ -935,15 +935,10 @@
                     <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="指定计划员须填写原因，100 字以内" :maxlength="100"/></label>
                 </div>
 
-                <!-- 无有效合同：维护有效合同（合同号 + 合同有效期，系统据此重新计算计划数量）+ 调整原因 -->
+                <!-- 无有效合同：确认已维护好合同（单选项）后由系统解除拦截 + 调整原因 -->
                 <div v-else-if="poRegEditRow.block_reason==='无有效合同'" class="jlrs-form-grid">
-                  <label><span>当前供应商</span>
-                    <a-input :value="poRegEditRow.cur_supplier_name || '—'" disabled/></label>
-                  <label><span><b class="jlrs-req">*</b>采购合同号</span>
-                    <a-input v-model:value="poRegEditRow.contract_no" placeholder="请输入已维护的有效采购合同号"/></label>
-                  <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>合同有效期</span>
-                    <a-range-picker v-model:value="poRegEditRow.contract_range" value-format="YYYY-MM-DD" style="width:320px"/></label>
-                  <a-alert type="info" show-icon style="grid-column:1 / -1; margin-bottom:8px;" :message="poRegContractCalcNote"/>
+                  <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>合同维护确认</span>
+                    <a-checkbox v-model:checked="poRegEditRow.contract_confirmed" @change="poRegEditErr.contract=''">确认已维护好有效合同（合同信息已在合同系统中补全）</a-checkbox></label>
                   <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>调整原因</span>
                     <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="补全有效合同须填写原因，100 字以内" :maxlength="100"/></label>
                 </div>
@@ -1949,18 +1944,6 @@
               <a-tab-pane v-for="n in stoNetworks" :key="n" :tab="n + ' 仓网（' + stoSumNetCount(n) + '）'"/>
             </a-tabs>
 
-            <!-- 汇总统计条（随仓网与筛选联动） -->
-            <div class="card" style="margin-bottom:12px;">
-              <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:center;">
-                <div><span style="color:#888;font-size:12px;margin-right:6px;">配件行数</span><b style="font-size:16px;color:#1f2d3d;">{{ stoSumStats.lines }}</b></div>
-                <div><span style="color:#888;font-size:12px;margin-right:6px;">调拨总数量</span><b style="font-size:16px;color:#c0501e;">{{ stoSumFmt(stoSumStats.qty) }}</b></div>
-                <div><span style="color:#888;font-size:12px;margin-right:6px;">中心仓库存</span><b style="font-size:16px;color:#1f2d3d;">{{ stoSumFmt(stoSumStats.centerStock) }}</b></div>
-                <div><span style="color:#888;font-size:12px;margin-right:6px;">调拨后未分配量</span><b style="font-size:16px;color:#1f2d3d;">{{ stoSumFmt(stoSumStats.unalloc) }}</b></div>
-                <div><span style="color:#888;font-size:12px;margin-right:6px;">全网总需求</span><b style="font-size:16px;color:#1f2d3d;">{{ stoSumFmt(stoSumStats.demand) }}</b></div>
-                <div><span style="color:#888;font-size:12px;margin-right:6px;">涉及配件数</span><b style="font-size:16px;color:#1f2d3d;">{{ stoSumStats.parts }}</b></div>
-              </div>
-            </div>
-
             <!-- 筛选卡片（仅查询，不改数；导出后即已执行计划，页面只读） -->
             <div class="card">
               <div class="filter-row">
@@ -2001,7 +1984,6 @@
             <div class="card" style="margin-bottom:0;">
               <div class="toolbar-row">
                 <a-button type="primary" @click="stoSumExportOpen=true">导出</a-button>
-                <span style="margin-left:8px;color:#888;font-size:12px;">当前仓网：{{ stoSumTab }}（中心仓 {{ stoSumCenter }} → 区域仓 {{ stoSumRegions.join('、') }}）· 共 {{ stoSumFiltered.length }} 行</span>
                 <div class="toolbar-icons">
                   <a-dropdown>
                     <span title="密度" @click.stop="() => {}">↕</span>
@@ -6430,43 +6412,14 @@ const app = createApp({
         if(!copy.suppliers.find(s=>s.code===copy.cur_supplier_code)) copy.cur_supplier_code = copy.suppliers[0].code;
       }
       poRegEditRow.value = reactive(copy);
-      // 无有效合同：合同号/有效期需人工维护（不预填历史值），维护后由系统重新计算计划数量
+      // 无有效合同：以「确认已维护好合同」单选项判定，每次打开默认未勾选
       if(copy.block_reason==='无有效合同'){
-        copy.contract_no = (copy.contract_no && copy.contract_no!=='—') ? copy.contract_no : '';
-        copy.contract_range = null;
+        copy.contract_confirmed = false;
       }
       poRegEditErr.adjustQty=''; poRegEditErr.adjustReason=''; poRegEditOpen.value=true;
     }
     // 多供应商拦截场景：展示当前选定供应商及其对应 MOQ（数量不在本弹窗调整）
     const poRegEditCurSupplier = computed(()=>{ const r=poRegEditRow.value; if(!r||!r.suppliers) return null; return r.suppliers.find(s=>s.code===r.cur_supplier_code) || null; });
-    // 无有效合同：按合同有效期覆盖月数重算计划数量（月均销量 × 有效月数，按 MPQ 向上取整）
-    const poRegContractMonths = computed(()=>{
-      const r = poRegEditRow.value;
-      if(!r || r.block_reason!=='无有效合同') return 0;
-      const rg = r.contract_range;
-      if(!rg || rg.length!==2 || !rg[0] || !rg[1]) return 0;
-      const days = dayjs(rg[1]).diff(dayjs(rg[0]), 'day') + 1;
-      if(!(days > 0)) return 0;
-      return Math.max(1, Math.round(days/30));
-    });
-    const poRegContractRecalc = computed(()=>{
-      const r = poRegEditRow.value;
-      if(!r || r.block_reason!=='无有效合同') return null;
-      const m = poRegContractMonths.value; if(!m) return null;
-      const avg = Number(r.avg_3m_sales || 0);
-      const mpq = Number(r.mpq || r.cur_supplier_moq || 1) || 1;
-      const rawQty = avg * m;
-      const qty = Math.ceil(rawQty/mpq)*mpq;
-      return { months:m, avg:avg, mpq:mpq, rawQty:rawQty, qty:qty };
-    });
-    const poRegContractCalcNote = computed(()=>{
-      const r = poRegEditRow.value;
-      if(!r || r.block_reason!=='无有效合同') return '';
-      const c = poRegContractRecalc.value;
-      const curQty = (r.adjust_qty===null || r.adjust_qty===undefined) ? '—' : r.adjust_qty;
-      if(!c) return '维护合同号与合同有效期并填写调整原因后，系统按「近 3 月月均销量 × 合同有效期月数，按 MPQ 向上取整」自动重新计算调整计划数量（当前 ' + curQty + '）。';
-      return '系统重算：近 3 月月均销量 ' + c.avg + ' × 合同有效期 ' + c.months + ' 个月 = ' + c.rawQty + '，按 MPQ ' + c.mpq + ' 向上取整 = ' + c.qty + '；当前调整计划数量 ' + curQty + '，确定后由系统写回并解除拦截。';
-    });
     // 系统自动拦截（计划员无需处理）类原因 → 弹窗提示文案
     const poRegEditBlockNoteMap = {
       '非计划日':'当前为非计划日，系统自动拦截，计划员无需处理',
@@ -6489,8 +6442,7 @@ const app = createApp({
         if(!row.planner){ poRegEditErr.planner='请指定计划员'; ok=false; } else poRegEditErr.planner='';
       }
       if(reason==='无有效合同'){
-        if(!row.contract_no || !row.contract_no.trim()){ poRegEditErr.contract='请填写采购合同号'; ok=false; }
-        else if(!row.contract_range || row.contract_range.length!==2 || !row.contract_range[0] || !row.contract_range[1]){ poRegEditErr.contract='请选择合同有效期（系统据此重新计算计划数量）'; ok=false; }
+        if(!row.contract_confirmed){ poRegEditErr.contract='请勾选「确认已维护好有效合同」'; ok=false; }
         else poRegEditErr.contract='';
       }
       if(reason==='活动零件'){
@@ -6525,19 +6477,11 @@ const app = createApp({
           upd.planner = row.planner; upd.is_blocked='否'; upd.block_reason='—';
           pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','指定计划员（'+(t.planner||'—')+' → '+row.planner+'）后拦截消除');
         } else if(reason==='无有效合同'){
-          // 「补全采购合同」净效果＝拦截解除；维护合同有效期后由系统按有效月数重算计划数量
-          const c = poRegContractRecalc.value;
-          const oldQty = t.adjust_qty;
-          const newQty = c ? c.qty : oldQty;
-          upd.contract_no = row.contract_no;
-          upd.contract_start = row.contract_range[0];
-          upd.contract_end = row.contract_range[1];
-          upd.adjust_qty = newQty;
+          // 「补全采购合同」净效果＝拦截解除；确认已维护好合同后由系统重新计算计划数量
           upd.adjust_reason = row.adjust_reason;
           upd.is_blocked='否'; upd.block_reason='—';
-          pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统',
-            '补全有效合同（合同号 '+row.contract_no+'，有效期 '+row.contract_range[0]+' ~ '+row.contract_range[1]+'）后拦截消除；系统按合同有效期 '+c.months+' 个月重算计划数量 '+oldQty+' → '+newQty);
-          doneMsg = '已维护有效合同，系统已重新计算计划数量：' + oldQty + ' → ' + newQty;
+          pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','确认已维护好有效合同后拦截消除，系统重新计算计划数量');
+          doneMsg = '已确认维护好合同，拦截已解除，系统将重新计算计划数量';
         } else if(reason==='联合MOQ凑单超量' || reason==='成套采购凑单超量'){
           upd.adjust_qty = row.adjust_qty; upd.adjust_reason = row.adjust_reason;
           upd.is_blocked='否'; upd.block_reason='—';
@@ -7086,8 +7030,6 @@ const app = createApp({
     })();
 
     const stoSumTab = ref('CJLR');
-    const stoSumCenter = computed(()=> stoSumNetMap[stoSumTab.value].center);
-    const stoSumRegions = computed(()=> stoSumNetMap[stoSumTab.value].regions);
     const stoSumColumns = computed(function(){
       const net = stoSumTab.value, meta = stoSumNetMap[net], out = [];
       out.push({ title:'数据快照日期', key:'snapshot_date', dataIndex:'snapshot_date', width:118, fixed:'left' });
@@ -7142,14 +7084,6 @@ const app = createApp({
       return true;
     }));
     const stoSumPaged = computed(()=>{ const s=(stoSumPage.current-1)*stoSumPage.size; return stoSumFiltered.value.slice(s, s+stoSumPage.size); });
-    const stoSumStats = computed(function(){
-      const rows = stoSumFiltered.value; let qty=0, cs=0, un=0, dm=0; const parts={};
-      rows.forEach(function(r){
-        qty += Number(r.total_alloc)||0; cs += Number(r.center_stock)||0;
-        un  += Number(r.unalloc_qty)||0; dm += Number(r.total_demand)||0; parts[r.part_code]=1;
-      });
-      return { lines: rows.length, qty:qty, centerStock:cs, unalloc:un, demand:dm, parts: Object.keys(parts).length };
-    });
     function stoSumCustomRow(){ return { style:{cursor:'default'} }; }
 
     const stoSumExportOpen = ref(false);
@@ -10348,7 +10282,7 @@ const app = createApp({
       poRegCanSubmit, poRegCanApprove, poRegCanReject, poRegRowSelection, poRegCustomRow, poRegBillColor,
       poRegSubmit, poRegApproveOpen, poRegApproveRemark, poRegApproveErr, poRegApproveConfirm,
       poRegRejectOpen, poRegRejectRemark, poRegRejectErr, poRegRejectConfirm,
-      poRegEditOpen, poRegEditRow, poRegEditErr, poRegEditErrList, poRegOpenEdit, poRegSaveEdit, poRegEditCurSupplier, poRegEditBlockNote, poRegContractMonths, poRegContractRecalc, poRegContractCalcNote, poRegOpenDetail, poRegDetailOpen, poRegDetailRow,
+      poRegEditOpen, poRegEditRow, poRegEditErr, poRegEditErrList, poRegOpenEdit, poRegSaveEdit, poRegEditCurSupplier, poRegEditBlockNote, poRegOpenDetail, poRegDetailOpen, poRegDetailRow,
       poRegChgOpen, poRegChgRow, poRegOpenChgLog, poRegChgColumns, poRegChgColor,
       poRegImportOpen, poRegDoImport, poRegExportOpen, poRegExportMode, poRegExportFields, poRegToggleExportField,
       poRegExportCsv, poRegExportSource, poRegDoExport, poRegPush, poRegMoreMenu, poRegPlanTypes, poRegReceiveModes, poRegStatuses, poRegPurchaseTypes, poRegBlockReasonOptions, poRegPushStatuses,
@@ -10385,9 +10319,9 @@ const app = createApp({
       stoExpSelected, stoExpRowSelection, stoExpCustomRow, stoExpCanExport, stoExpDoExport,
       stoExpDetailOpen, stoExpDetailRow, stoExpOpenDetail,
       stoSumTab, stoSumColumns, stoSumHiddenCols, stoSumVisibleColumns, stoSumScrollX, stoSumToggleCol,
-      stoSumCenter, stoSumRegions, stoSumFmt,
+      stoSumFmt,
       stoSumFilters, stoSumFilterExpanded, stoSumFav, stoSumPage, stoSumNetCount,
-      stoSumFiltered, stoSumPaged, stoSumStats, stoSumCustomRow,
+      stoSumFiltered, stoSumPaged, stoSumCustomRow,
       stoSumDoSearch, stoSumResetFilters, stoSumToggleFav,
       stoSumExportOpen, stoSumExportFields, stoSumToggleExportField, stoSumDoExport,
       rollDataDate, rollBaseMonth, rollMonthLabels, rollSyncStatuses, rollColumns, rollScrollX, rollPlanData,
