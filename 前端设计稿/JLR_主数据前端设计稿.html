@@ -1934,8 +1934,8 @@ mark {
                   <template v-if="column.key==='part_code'">
                     <a @click.stop="stoOpenDetail(record)">{{ record.part_code }}</a>
                   </template>
-                  <template v-else-if="column.key==='plan_type'">
-                    <a-tag :color="record.plan_type==='紧急调拨计划'?'orange':'blue'" style="margin:0;">{{ record.plan_type }}</a-tag>
+                  <template v-else-if="column.key==='export_status'">
+                    <a-tag :color="record.export_status==='已导出'?'green':'orange'" style="margin:0;">{{ record.export_status }}</a-tag>
                   </template>
                   <template v-else-if="column.key==='action'">
                     <span class="link-btn" @click.stop="stoOpenDetail(record)">详情</span>
@@ -1964,32 +1964,42 @@ mark {
                 <a-descriptions bordered size="small" :column="2">
                   <a-descriptions-item label="数据生成日期">{{ stoDetailRow.data_gen_date }}</a-descriptions-item>
                   <a-descriptions-item label="计划类型">{{ stoDetailRow.plan_type }}</a-descriptions-item>
-                  <a-descriptions-item label="计划批次">{{ stoDetailRow.plan_batch }}</a-descriptions-item>
-                  <a-descriptions-item label="计划行">{{ stoDetailRow.plan_line }}</a-descriptions-item>
                   <a-descriptions-item label="配件号">{{ stoDetailRow.part_code }}</a-descriptions-item>
                   <a-descriptions-item label="配件名称">{{ stoDetailRow.part_name }}</a-descriptions-item>
                   <a-descriptions-item label="发货仓">{{ stoDetailRow.from_wh }}</a-descriptions-item>
                   <a-descriptions-item label="收货仓">{{ stoDetailRow.to_wh }}</a-descriptions-item>
                   <a-descriptions-item label="收货仓最低风控线">{{ stoDetailRow.safety_stock }}</a-descriptions-item>
                   <a-descriptions-item label="收货仓目标库存">{{ stoDetailRow.target_stock }}</a-descriptions-item>
-                  <a-descriptions-item label="是否出计划日">{{ stoDetailRow.is_plan_day }}</a-descriptions-item>
                   <a-descriptions-item label="ABC分类">{{ stoDetailRow.abc_class }}</a-descriptions-item>
                   <a-descriptions-item label="车型代码">{{ stoDetailRow.vehicle_code }}</a-descriptions-item>
                   <a-descriptions-item label="计划员">{{ stoDetailRow.planner }}</a-descriptions-item>
-                  <a-descriptions-item label="预期库存">{{ stoDetailRow.expected_stock }}</a-descriptions-item>
-                  <a-descriptions-item label="可用库存数量">{{ stoDetailRow.avail_qty }}</a-descriptions-item>
-                  <a-descriptions-item label="欠交数量">{{ stoDetailRow.owed_qty }}</a-descriptions-item>
-                  <a-descriptions-item label="库间在途数量">{{ stoDetailRow.transit_qty }}</a-descriptions-item>
-                  <a-descriptions-item label="缺货数量">{{ stoDetailRow.shortage_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="计划批次">{{ stoDetailRow.plan_batch }}</a-descriptions-item>
+                  <a-descriptions-item label="计划行">{{ stoDetailRow.plan_line }}</a-descriptions-item>
+                  <a-descriptions-item label="预期库存（发货仓）">{{ stoDetailRow.expected_stock_from }}</a-descriptions-item>
+                  <a-descriptions-item label="可用库存数量（发货仓）">{{ stoDetailRow.avail_qty_from }}</a-descriptions-item>
+                  <a-descriptions-item label="欠交数量（发货仓）">{{ stoDetailRow.owed_qty_from }}</a-descriptions-item>
+                  <a-descriptions-item label="库间在途数量（发货仓）">{{ stoDetailRow.transit_qty_from }}</a-descriptions-item>
+                  <a-descriptions-item label="缺货数量（发货仓）">{{ stoDetailRow.shortage_qty_from }}</a-descriptions-item>
+                  <a-descriptions-item label="预期库存（收货仓）">{{ stoDetailRow.expected_stock }}</a-descriptions-item>
+                  <a-descriptions-item label="可用库存数量（收货仓）">{{ stoDetailRow.avail_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="欠交数量（收货仓）">{{ stoDetailRow.owed_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="库间在途数量（收货仓）">{{ stoDetailRow.transit_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="缺货数量（收货仓）">{{ stoDetailRow.shortage_qty }}</a-descriptions-item>
                   <a-descriptions-item label="近3个月月均销量">{{ stoDetailRow.avg3m_qty }}</a-descriptions-item>
                   <a-descriptions-item label="当前可用天数">{{ stoDetailRow.avail_days }}</a-descriptions-item>
                   <a-descriptions-item label="库间LT（天）">{{ stoDetailRow.transfer_lt }}</a-descriptions-item>
                   <a-descriptions-item label="要求到货日期">{{ stoDetailRow.required_arrival_date }}</a-descriptions-item>
                   <a-descriptions-item label="推荐计划数量（取整前）">{{ stoDetailRow.raw_qty }}</a-descriptions-item>
                   <a-descriptions-item label="推荐计划数量（分配后）">{{ stoDetailRow.alloc_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="推荐计划数量(MPQ取整后)">{{ stoDetailRow.mpq_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="推荐计划数量">{{ stoDetailRow.rec_qty }}</a-descriptions-item>
                   <a-descriptions-item label="体积">{{ stoDetailRow.unit_volume }}</a-descriptions-item>
                   <a-descriptions-item label="体积单位">{{ stoDetailRow.volume_unit }}</a-descriptions-item>
                   <a-descriptions-item label="预计调拨体积">{{ stoDetailRow.est_volume }}</a-descriptions-item>
+                  <a-descriptions-item label="导出状态">
+                    <a-tag :color="stoDetailRow.export_status==='已导出'?'green':'orange'" style="margin:0;">{{ stoDetailRow.export_status }}</a-tag>
+                  </a-descriptions-item>
+                  <a-descriptions-item label="是否下单">{{ stoDetailRow.is_placed }}</a-descriptions-item>
                 </a-descriptions>
 
                 <div class="bt-sec-t" style="margin:18px 0 10px;">备注<span class="bt-sec-sub">可在本弹窗内编辑并保存，保存后同步至列表</span></div>
@@ -2006,7 +2016,7 @@ mark {
             <a-modal v-model:open="stoExportOpen" title="导出调拨计划" :width="600" :footer="null" :mask-closable="false">
               <div style="font-weight:600;margin-bottom:8px;">选择导出字段</div>
               <div style="max-height:320px;overflow:auto;border:1px solid #eee;padding:8px 12px;border-radius:6px;">
-                <a-checkbox v-for="c in stoColumns.filter(x=>x.key!=='action')" :key="c.key"
+                <a-checkbox v-for="c in stoExpColumns.filter(x=>x.key!=='action' && x.key!=='exported_time')" :key="c.key"
                   :checked="stoExportFields.includes(c.key)" @change="stoToggleExportField(c.key)" style="display:block;margin:4px 0;">
                   {{ c.title }}
                 </a-checkbox>
@@ -2025,10 +2035,6 @@ mark {
             <a-tabs v-model:activeKey="stoExpTab" type="card" style="margin-bottom:12px;">
               <a-tab-pane v-for="t in stoExpTabs" :key="t.key" :tab="t.label + '（'+stoExpTabCount(t.key)+'）'"/>
             </a-tabs>
-
-            <a-alert type="info" :show-icon="true" style="margin-bottom:12px;">
-              <template #message>导出范围＝当前筛选命中的全部记录（勾选行时仅导出已勾选行）；导出后自动标记为「已导出」并记录导出时间。调拨计划导出结果可上传 IPOS 生成 STO 调拨单，并回写 STO 单号、发运状态与收货状态（见 5.4.4.1）。</template>
-            </a-alert>
 
             <!-- 筛选卡片 -->
             <div class="card">
@@ -2120,9 +2126,6 @@ mark {
                   <template v-if="column.key==='part_code'">
                     <a @click.stop="stoExpOpenDetail(record)">{{ record.part_code }}</a>
                   </template>
-                  <template v-else-if="column.key==='plan_type'">
-                    <a-tag :color="record.plan_type==='紧急调拨计划'?'orange':'blue'" style="margin:0;">{{ record.plan_type }}</a-tag>
-                  </template>
                   <template v-else-if="column.key==='export_status'">
                     <a-tag :color="record.export_status==='已导出'?'green':'orange'" style="margin:0;">{{ record.export_status }}</a-tag>
                   </template>
@@ -2153,34 +2156,27 @@ mark {
                 <div class="bt-sec-t" style="margin:0 0 10px;">计划信息</div>
                 <a-descriptions bordered :column="2" size="small" style="margin-bottom:20px;">
                   <a-descriptions-item label="数据生成日期">{{ stoExpDetailRow.data_gen_date }}</a-descriptions-item>
-                  <a-descriptions-item label="计划批次">{{ stoExpDetailRow.plan_batch }}</a-descriptions-item>
-                  <a-descriptions-item label="计划行">{{ stoExpDetailRow.plan_line }}</a-descriptions-item>
                   <a-descriptions-item label="计划类型">{{ stoExpDetailRow.plan_type }}</a-descriptions-item>
                   <a-descriptions-item label="配件号">{{ stoExpDetailRow.part_code }}</a-descriptions-item>
                   <a-descriptions-item label="配件名称">{{ stoExpDetailRow.part_name }}</a-descriptions-item>
                   <a-descriptions-item label="发货仓">{{ stoExpDetailRow.from_wh }}</a-descriptions-item>
                   <a-descriptions-item label="收货仓">{{ stoExpDetailRow.to_wh }}</a-descriptions-item>
-                  <a-descriptions-item label="推荐计划数量(分配后)"><b>{{ stoExpDetailRow.alloc_qty }}</b></a-descriptions-item>
-                  <a-descriptions-item label="推荐计划数量(取整前)">{{ stoExpDetailRow.raw_qty }}</a-descriptions-item>
                   <a-descriptions-item label="收货仓最低风控线">{{ stoExpDetailRow.safety_stock }}</a-descriptions-item>
                   <a-descriptions-item label="收货仓目标库存">{{ stoExpDetailRow.target_stock }}</a-descriptions-item>
-                  <a-descriptions-item label="预期库存">{{ stoExpDetailRow.expected_stock }}</a-descriptions-item>
-                  <a-descriptions-item label="可用库存数量">{{ stoExpDetailRow.avail_qty }}</a-descriptions-item>
-                  <a-descriptions-item label="欠交数量">{{ stoExpDetailRow.owed_qty }}</a-descriptions-item>
-                  <a-descriptions-item label="库间在途数量">{{ stoExpDetailRow.transit_qty }}</a-descriptions-item>
-                  <a-descriptions-item label="缺货数量">{{ stoExpDetailRow.shortage_qty }}</a-descriptions-item>
-                  <a-descriptions-item label="近3个月月均销量">{{ stoExpDetailRow.avg3m_qty }}</a-descriptions-item>
-                  <a-descriptions-item label="当前可用天数">{{ stoExpDetailRow.avail_days }}</a-descriptions-item>
-                  <a-descriptions-item label="库间LT">{{ stoExpDetailRow.transfer_lt }}</a-descriptions-item>
-                  <a-descriptions-item label="要求到货日期">{{ stoExpDetailRow.required_arrival_date }}</a-descriptions-item>
-                  <a-descriptions-item label="预计调拨体积">{{ stoExpDetailRow.est_volume }}</a-descriptions-item>
-                  <a-descriptions-item label="体积">{{ stoExpDetailRow.unit_volume }}</a-descriptions-item>
-                  <a-descriptions-item label="体积单位">{{ stoExpDetailRow.volume_unit }}</a-descriptions-item>
-                  <a-descriptions-item label="是否出计划日">{{ stoExpDetailRow.is_plan_day }}</a-descriptions-item>
                   <a-descriptions-item label="ABC分类">{{ stoExpDetailRow.abc_class }}</a-descriptions-item>
                   <a-descriptions-item label="车型代码">{{ stoExpDetailRow.vehicle_code }}</a-descriptions-item>
                   <a-descriptions-item label="计划员">{{ stoExpDetailRow.planner }}</a-descriptions-item>
-                  <a-descriptions-item label="备注" :span="2">{{ stoExpDetailRow.remark || '—' }}</a-descriptions-item>
+                  <a-descriptions-item label="计划批次">{{ stoExpDetailRow.plan_batch }}</a-descriptions-item>
+                  <a-descriptions-item label="计划行">{{ stoExpDetailRow.plan_line }}</a-descriptions-item>
+                  <a-descriptions-item label="推荐计划数量(分配后)"><b>{{ stoExpDetailRow.alloc_qty }}</b></a-descriptions-item>
+                  <a-descriptions-item label="推荐计划数量(MPQ取整后)">{{ stoExpDetailRow.mpq_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="推荐计划数量">{{ stoExpDetailRow.rec_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="库间LT（天）">{{ stoExpDetailRow.transfer_lt }}</a-descriptions-item>
+                  <a-descriptions-item label="要求到货日期">{{ stoExpDetailRow.required_arrival_date }}</a-descriptions-item>
+                  <a-descriptions-item label="体积">{{ stoExpDetailRow.unit_volume }}</a-descriptions-item>
+                  <a-descriptions-item label="体积单位">{{ stoExpDetailRow.volume_unit }}</a-descriptions-item>
+                  <a-descriptions-item label="预计调拨体积">{{ stoExpDetailRow.est_volume }}</a-descriptions-item>
+                  <a-descriptions-item label="是否下单">{{ stoExpDetailRow.is_placed }}</a-descriptions-item>
                   <a-descriptions-item label="导出状态">
                     <a-tag :color="stoExpDetailRow.export_status==='已导出'?'green':'orange'" style="margin:0;">{{ stoExpDetailRow.export_status }}</a-tag>
                   </a-descriptions-item>
@@ -5630,11 +5626,13 @@ const stoRouteCodes = ['RT-CJ-SH','RT-CJ-BJ','RT-CJ-GZ','RT-CJ-CD','RT-JL-SH','R
 const stoVehicleCodes = ['X260','F-PACE','E-PACE','XEL','XFL','DEFENDER','DISCOVERY'];
 const stoToWhs = window.CSPPWarehouseNetwork.regions.map(c=>c+' '+window.CSPPWarehouseNetwork.names[c]);
 const stoFromWhs = window.CSPPWarehouseNetwork.centers.map(c=>c+' '+window.CSPPWarehouseNetwork.names[c]);
-/* 字段口径＝PRD 5.4.4.1 计划结果表 29 字段（最新）：
-   数据生成日期 / 计划批次 / 计划行 / 计划类型 / 配件号 / 配件名称 / 发货仓 / 收货仓 /
-   收货仓最低风控线 / 收货仓目标库存 / 是否出计划日 / ABC分类 / 车型代码 / 计划员 /
-   预期库存 / 可用库存数量 / 欠交数量 / 库间在途数量 / 缺货数量 / 近3个月月均销量 / 当前可用天数 /
-   库间LT / 要求到货日期 / 推荐计划数量(取整前) / 推荐计划数量(分配后) / 体积 / 体积单位 / 预计调拨体积 / 备注
+/* 字段口径＝PRD 6.3.4 计算输出（最新）：
+   数据生成日期 / 配件号 / 配件名称 / 发货仓 / 收货仓 / 收货仓最低风控线 / 收货仓目标库存 /
+   ABC分类 / 车型代码 / 计划员 / 计划批次 / 计划行 /
+   预期库存/可用库存数量/欠交数量/库间在途数量/缺货数量 ×（发货仓）/（收货仓）两组 /
+   近3个月月均销量 / 当前可用天数 /
+   推荐计划数量(取整前) / 推荐计划数量(分配后) / 推荐计划数量(MPQ取整后) / 推荐计划数量 /
+   库间LT / 要求到货日期 / 体积 / 体积单位 / 预计调拨体积 / 导出状态 / 导出时间 / 是否下单
    计划类型：本周＝紧急调拨计划/常规调拨计划（批次 EW/W），下周＝下周预计调拨计划（批次 W）；
    工具栏仅保留「导出」；备注支持在详情弹窗内编辑保存；详情弹窗仅展示字段详情。 */
 const stoPlanData = Vue.reactive([]);
@@ -5670,6 +5668,13 @@ const stoPlanData = Vue.reactive([]);
       const shortageQty = (id % 4 === 0) ? Math.round(rnd()*80) : 0;
       const avg3mQty = Math.round(30 + rnd()*170);
       const availDays = avg3mQty>0 ? Math.round(expectedStock/(avg3mQty/30)*10)/10 : 0;
+      // ---- 发货仓（调出仓）视角：库存四要素独立生成，与收货仓无关 ----
+      const availQtyFrom = Math.round(200 + rnd()*900);
+      const transitQtyFrom = Math.round(rnd()*260);
+      const owedQtyFrom = (id % 3 === 0) ? Math.round(rnd()*220) : 0;
+      const openPoQtyFrom = Math.round(rnd()*180);
+      const expectedStockFrom = Math.max(0, availQtyFrom + transitQtyFrom + openPoQtyFrom - owedQtyFrom);
+      const shortageQtyFrom = (id % 4 === 0) ? Math.round(rnd()*80) : 0;
       // ---- 补货目标与三层缺口（每层取 MAX(差值,0)，仅用于详情计算过程展示）----
       const targetStock = Math.round(400 + rnd()*2600);
       const safetyStock = Math.round(targetStock*0.3);
@@ -5708,13 +5713,16 @@ const stoPlanData = Vue.reactive([]);
         safety_stock:safetyStock, target_stock:targetStock,
         expected_stock:expectedStock, avail_qty:availQty, owed_qty:owedQty,
         transit_qty:transitQty, shortage_qty:shortageQty, avg3m_qty:avg3mQty, avail_days:availDays,
-        raw_qty:rawQty, mpq:mpq, mpq_qty:mpqQty,
+        raw_qty:rawQty, mpq:mpq, mpq_qty:mpqQty, rec_qty:mpqQty,
         bo_gap_qty:boGapQty, safety_gap_qty:safetyGapQty, gap_qty:gapQty,
         surplus_qty:surplusQty, allocated_qty:allocatedQty,
         alloc_l1:l1, alloc_l2:l2, alloc_l3:l3, alloc_round:allocRound,
         alloc_ratio:Math.round(allocRatio*10000)/10000, cut_qty:cutQty, cap_qty:capQty,
         alloc_qty:allocQty, unit_volume:unitVolume, volume_unit:'m³', est_volume:estVolume,
         unmet_qty:unmetQty, remark:remark,
+        expected_stock_from:expectedStockFrom, avail_qty_from:availQtyFrom, owed_qty_from:owedQtyFrom,
+        transit_qty_from:transitQtyFrom, shortage_qty_from:shortageQtyFrom,
+        export_status:'待导出', is_placed:'否',
       });
     }
   });
@@ -5731,6 +5739,7 @@ stoPlanData.filter(r=> r.period === 'week').forEach(function(r, i){
   row.exported_time = (row.export_status === '已导出')
     ? ('2026-10-' + String(20 + (i % 8)).padStart(2,'0') + ' ' + String(9 + (i % 9)).padStart(2,'0') + ':' + String(10 + (i % 49)).padStart(2,'0'))
     : '';
+  row.is_placed = (row.export_status === '已导出') ? '是' : '否';
   stoExpData.push(row);
 });
 
@@ -6996,40 +7005,85 @@ const app = createApp({
     const stoTitle = computed(()=> stoIsWeek.value ? '调拨计划' : '给仓库的预计调拨计划');
     // 计划类型枚举：本周＝紧急/常规调拨计划；下周＝仅「下周预计调拨计划」
     const stoPlanTypeOptions = computed(()=> stoIsWeek.value ? ['紧急调拨计划','常规调拨计划'] : ['下周预计调拨计划']);
-    /* 29 个字段（PRD 5.4.4.1 计划结果表输出字段，最新）；计划批次/计划行提至第2、3列；默认全量展示，列设置可隐藏 */
+    /* 调拨计划（PRD 6.3.4 计算输出，最新；按用户调整）：移除计划类型/是否出计划日/备注列；
+       预期库存/可用库存数量/欠交数量/库间在途数量/缺货数量拆为（发货仓）/（收货仓）两组；新增导出状态、是否下单。
+       计划类型仍由筛选区与详情弹窗承载（不列为表头列）。默认全量展示，列设置可隐藏。 */
+    /* 调拨计划（PRD 6.3.4 计算输出，最新）：共 36 列（含操作）。
+       首屏前置关键业务字段：配件号/名称/收发仓 → 推荐计划数量(分配后/MPQ取整后/最终) → 体积/预计调拨体积
+       （实测表格可见宽约 1398px，该组合累计止于约 1364px，无需横向滚动即可见）；
+       推荐计划数量(取整前) 作为上游中间值后移至风控/目标之后，库存四要素拆分组、过程字段置后；导出状态/是否下单置后。 */
     const stoColumns = [
       { title:'数据生成日期', key:'data_gen_date', dataIndex:'data_gen_date', width:106 },
-      { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:96 },
-      { title:'计划行', key:'plan_line', dataIndex:'plan_line', width:92 },
-      { title:'计划类型', key:'plan_type', dataIndex:'plan_type', width:108 },
       { title:'配件号', key:'part_code', dataIndex:'part_code', width:128 },
-      { title:'配件名称', key:'part_name', dataIndex:'part_name', width:180, ellipsis:true },
-      { title:'推荐计划数量(分配后)', key:'alloc_qty', dataIndex:'alloc_qty', width:148, sorter:(a,b)=>a.alloc_qty-b.alloc_qty },
+      { title:'配件名称', key:'part_name', dataIndex:'part_name', width:170, ellipsis:true },
       { title:'发货仓', key:'from_wh', dataIndex:'from_wh', width:140 },
       { title:'收货仓', key:'to_wh', dataIndex:'to_wh', width:140 },
+      { title:'推荐计划数量(分配后)', key:'alloc_qty', dataIndex:'alloc_qty', width:150, sorter:(a,b)=>a.alloc_qty-b.alloc_qty },
+      { title:'推荐计划数量(MPQ取整后)', key:'mpq_qty', dataIndex:'mpq_qty', width:160, sorter:(a,b)=>a.mpq_qty-b.mpq_qty },
+      { title:'推荐计划数量', key:'rec_qty', dataIndex:'rec_qty', width:110, sorter:(a,b)=>a.rec_qty-b.rec_qty },
+      { title:'体积', key:'unit_volume', dataIndex:'unit_volume', width:76 },
+      { title:'体积单位', key:'volume_unit', dataIndex:'volume_unit', width:80 },
+      { title:'预计调拨体积', key:'est_volume', dataIndex:'est_volume', width:104, sorter:(a,b)=>a.est_volume-b.est_volume },
+      { title:'推荐计划数量(取整前)', key:'raw_qty', dataIndex:'raw_qty', width:150, sorter:(a,b)=>a.raw_qty-b.raw_qty },
       { title:'收货仓最低风控线', key:'safety_stock', dataIndex:'safety_stock', width:128, sorter:(a,b)=>a.safety_stock-b.safety_stock },
       { title:'收货仓目标库存', key:'target_stock', dataIndex:'target_stock', width:124, sorter:(a,b)=>a.target_stock-b.target_stock },
-      { title:'是否出计划日', key:'is_plan_day', dataIndex:'is_plan_day', width:104 },
+      { title:'ABC分类', key:'abc_class', dataIndex:'abc_class', width:80 },
+      { title:'车型代码', key:'vehicle_code', dataIndex:'vehicle_code', width:100 },
+      { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:96 },
+      { title:'计划行', key:'plan_line', dataIndex:'plan_line', width:96 },
+      { title:'计划员', key:'planner', dataIndex:'planner', width:80 },
+      { title:'预期库存（发货仓）', key:'expected_stock_from', dataIndex:'expected_stock_from', width:124, sorter:(a,b)=>a.expected_stock_from-b.expected_stock_from },
+      { title:'可用库存数量（发货仓）', key:'avail_qty_from', dataIndex:'avail_qty_from', width:136, sorter:(a,b)=>a.avail_qty_from-b.avail_qty_from },
+      { title:'欠交数量（发货仓）', key:'owed_qty_from', dataIndex:'owed_qty_from', width:112, sorter:(a,b)=>a.owed_qty_from-b.owed_qty_from },
+      { title:'库间在途数量（发货仓）', key:'transit_qty_from', dataIndex:'transit_qty_from', width:144, sorter:(a,b)=>a.transit_qty_from-b.transit_qty_from },
+      { title:'缺货数量（发货仓）', key:'shortage_qty_from', dataIndex:'shortage_qty_from', width:116, sorter:(a,b)=>a.shortage_qty_from-b.shortage_qty_from },
+      { title:'预期库存（收货仓）', key:'expected_stock', dataIndex:'expected_stock', width:124, sorter:(a,b)=>a.expected_stock-b.expected_stock },
+      { title:'可用库存数量（收货仓）', key:'avail_qty', dataIndex:'avail_qty', width:136, sorter:(a,b)=>a.avail_qty-b.avail_qty },
+      { title:'欠交数量（收货仓）', key:'owed_qty', dataIndex:'owed_qty', width:112, sorter:(a,b)=>a.owed_qty-b.owed_qty },
+      { title:'库间在途数量（收货仓）', key:'transit_qty', dataIndex:'transit_qty', width:144, sorter:(a,b)=>a.transit_qty-b.transit_qty },
+      { title:'缺货数量（收货仓）', key:'shortage_qty', dataIndex:'shortage_qty', width:116, sorter:(a,b)=>a.shortage_qty-b.shortage_qty },
+      { title:'近3个月月均销量', key:'avg3m_qty', dataIndex:'avg3m_qty', width:132, sorter:(a,b)=>a.avg3m_qty-b.avg3m_qty },
+      { title:'当前可用天数', key:'avail_days', dataIndex:'avail_days', width:112, sorter:(a,b)=>a.avail_days-b.avail_days },
+      { title:'库间LT', key:'transfer_lt', dataIndex:'transfer_lt', width:84, sorter:(a,b)=>a.transfer_lt-b.transfer_lt },
+      { title:'要求到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:120 },
+      { title:'导出状态', key:'export_status', dataIndex:'export_status', width:92 },
+      { title:'是否下单', key:'is_placed', dataIndex:'is_placed', width:92 },
+      { title:'操作', key:'action', width:80, fixed:'right' },
+    ];
+
+    /* 调拨计划导出（sto-export）：在「调拨计划」口径基础上删减中间计算过程字段，仅保留执行导出所需的精简列。
+       已删：预期/可用/欠交/库间在途/缺货（发货仓/收货仓）共 10 个库存诊断列、推荐计划数量(取整前)、
+       近3个月月均销量、当前可用天数；保留 收货仓最低风控线/目标库存、推荐计划数量(分配后/MPQ取整后/最终)、
+       库间LT、要求到货日期、体积/预计调拨体积 等执行字段，外加 导出状态/是否下单/导出时间。
+       首屏前置：推荐计划数量(分配后/MPQ取整后/最终) 与 预计调拨体积 紧接收货仓之后（风控/目标后移），无需横向滚动即可见。 */
+    const stoExpColumns = [
+      { title:'数据生成日期', key:'data_gen_date', dataIndex:'data_gen_date', width:106 },
+      { title:'配件号', key:'part_code', dataIndex:'part_code', width:128 },
+      { title:'配件名称', key:'part_name', dataIndex:'part_name', width:170, ellipsis:true },
+      { title:'发货仓', key:'from_wh', dataIndex:'from_wh', width:140 },
+      { title:'收货仓', key:'to_wh', dataIndex:'to_wh', width:140 },
+      { title:'推荐计划数量(分配后)', key:'alloc_qty', dataIndex:'alloc_qty', width:150, sorter:(a,b)=>a.alloc_qty-b.alloc_qty },
+      { title:'推荐计划数量(MPQ取整后)', key:'mpq_qty', dataIndex:'mpq_qty', width:160, sorter:(a,b)=>a.mpq_qty-b.mpq_qty },
+      { title:'推荐计划数量', key:'rec_qty', dataIndex:'rec_qty', width:110, sorter:(a,b)=>a.rec_qty-b.rec_qty },
+      { title:'体积', key:'unit_volume', dataIndex:'unit_volume', width:76 },
+      { title:'体积单位', key:'volume_unit', dataIndex:'volume_unit', width:80 },
+      { title:'预计调拨体积', key:'est_volume', dataIndex:'est_volume', width:104, sorter:(a,b)=>a.est_volume-b.est_volume },
+      { title:'收货仓最低风控线', key:'safety_stock', dataIndex:'safety_stock', width:128, sorter:(a,b)=>a.safety_stock-b.safety_stock },
+      { title:'收货仓目标库存', key:'target_stock', dataIndex:'target_stock', width:124, sorter:(a,b)=>a.target_stock-b.target_stock },
       { title:'ABC分类', key:'abc_class', dataIndex:'abc_class', width:80 },
       { title:'车型代码', key:'vehicle_code', dataIndex:'vehicle_code', width:100 },
       { title:'计划员', key:'planner', dataIndex:'planner', width:80 },
-      { title:'预期库存', key:'expected_stock', dataIndex:'expected_stock', width:92, sorter:(a,b)=>a.expected_stock-b.expected_stock },
-      { title:'可用库存数量', key:'avail_qty', dataIndex:'avail_qty', width:104, sorter:(a,b)=>a.avail_qty-b.avail_qty },
-      { title:'欠交数量', key:'owed_qty', dataIndex:'owed_qty', width:84, sorter:(a,b)=>a.owed_qty-b.owed_qty },
-      { title:'库间在途数量', key:'transit_qty', dataIndex:'transit_qty', width:108, sorter:(a,b)=>a.transit_qty-b.transit_qty },
-      { title:'缺货数量', key:'shortage_qty', dataIndex:'shortage_qty', width:88, sorter:(a,b)=>a.shortage_qty-b.shortage_qty },
-      { title:'近3个月月均销量', key:'avg3m_qty', dataIndex:'avg3m_qty', width:128, sorter:(a,b)=>a.avg3m_qty-b.avg3m_qty },
-      { title:'当前可用天数', key:'avail_days', dataIndex:'avail_days', width:106, sorter:(a,b)=>a.avail_days-b.avail_days },
+      { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:96 },
+      { title:'计划行', key:'plan_line', dataIndex:'plan_line', width:96 },
       { title:'库间LT', key:'transfer_lt', dataIndex:'transfer_lt', width:84, sorter:(a,b)=>a.transfer_lt-b.transfer_lt },
       { title:'要求到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:120 },
-      { title:'推荐计划数量(取整前)', key:'raw_qty', dataIndex:'raw_qty', width:148, sorter:(a,b)=>a.raw_qty-b.raw_qty },
-      { title:'体积', key:'unit_volume', dataIndex:'unit_volume', width:76 },
-      { title:'体积单位', key:'volume_unit', dataIndex:'volume_unit', width:80 },
-      { title:'预计调拨体积', key:'est_volume', dataIndex:'est_volume', width:108, sorter:(a,b)=>a.est_volume-b.est_volume },
-      { title:'备注', key:'remark', dataIndex:'remark', width:150, ellipsis:true },
+      { title:'导出状态', key:'export_status', dataIndex:'export_status', width:92 },
+      { title:'是否下单', key:'is_placed', dataIndex:'is_placed', width:92 },
+      { title:'导出时间', key:'exported_time', dataIndex:'exported_time', width:150, fixed:'right' },
       { title:'操作', key:'action', width:80, fixed:'right' },
     ];
-    // 默认列：PRD 5.4.4.1 输出表 27 字段全量展示（列设置可自行隐藏）；操作列固定右侧
+
+    // 默认列：列设置可自行隐藏；操作列固定右侧
     const stoDefaultVisible = stoColumns.map(c=>c.key);
     const stoHiddenCols = ref(stoColumns.filter(c=>!stoDefaultVisible.includes(c.key)).map(c=>c.key));
     const stoVisibleColumns = computed(()=> stoColumns.filter(c=>!stoHiddenCols.value.includes(c.key)));
@@ -7075,11 +7129,11 @@ const app = createApp({
 
     /* 导出 */
     const stoExportOpen = ref(false);
-    const stoExportFields = ref(stoColumns.filter(c=>c.key!=='action').map(c=>c.key));
+    const stoExportFields = ref(stoExpColumns.filter(c=>c.key!=='action' && c.key!=='exported_time').map(c=>c.key));
     function stoToggleExportField(k){ const i=stoExportFields.value.indexOf(k); if(i>=0) stoExportFields.value.splice(i,1); else stoExportFields.value.push(k); }
     function stoDoExport(){
       const rows = stoFiltered.value;
-      const cols = stoColumns.filter(c=> stoExportFields.value.includes(c.key));
+      const cols = stoExpColumns.filter(c=> stoExportFields.value.includes(c.key));
       const header = cols.map(c=>c.title);
       const lines = [header.join(',')].concat(rows.map(r=> cols.map(c=>{ const v=r[c.dataIndex]; return (v===null||v===undefined)?'':String(v).replace(/,/g,'，'); }).join(',')));
       const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
@@ -7089,19 +7143,13 @@ const app = createApp({
     }
 
     /* ================= 6.5.2 调拨计划导出（sto-export） =================
-       口径：字段与「调拨计划」一致（29 个输出字段，去操作列），额外带 export_status（待导出/已导出）与导出时间；
-       逻辑同「采购计划导出」：顶部仅「待导出」状态tab，勾选行导出或按当前筛选命中全量导出，
-       导出成功后自动打「已导出」标签并记录导出时间（已导出行随 tab 移出待导出清单），列表只读、仅详情与导出。 */
+       口径＝PRD 6.3.4 计算输出精简列（见上方 stoExpColumns：已删库存诊断拆分列与取整前/近3月均销量/当前可用天数等中间过程字段），
+       额外带 export_status（待导出/已导出）与导出时间；逻辑同「采购计划导出」：顶部仅「待导出」状态tab，
+       勾选行导出或按当前筛选命中全量导出，导出成功后自动打「已导出」标签并记录导出时间（已导出行随 tab 移出待导出清单），
+       列表只读、仅详情与导出。 */
     const stoExpTabs = [ { key:'待导出', label:'待导出' } ];
     const stoExpTab = ref('待导出');
     const stoExpPlanTypes = ['紧急调拨计划','常规调拨计划'];
-    const stoExpColumns = (function(){
-      const out = stoColumns.filter(c=> c.key!=='action').map(c=> c);
-      out.push({ title:'导出状态', key:'export_status', dataIndex:'export_status', width:92, fixed:'right' });
-      out.push({ title:'导出时间', key:'exported_time', dataIndex:'exported_time', width:150, fixed:'right' });
-      out.push({ title:'操作', key:'action', width:80, fixed:'right' });
-      return out;
-    })();
     const stoExpHiddenCols = ref([]);
     const stoExpVisibleColumns = computed(()=> stoExpColumns.filter(c=> !stoExpHiddenCols.value.includes(c.key)));
     const stoExpScrollX = computed(()=> stoExpVisibleColumns.value.reduce((s,c)=> s + (c.width||100), 0));
