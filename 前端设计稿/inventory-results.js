@@ -938,9 +938,9 @@ const api={definitions,sourcePairs,period,isBreak,hasGlobal,finalize,seed,valida
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 root.CsppStorageResults=api;if(!root.Vue)return;
 const {ref,reactive,computed,watch}=root.Vue;
-root.CsppStorageResultsComponent={setup(){
+root.CsppStorageResultsComponent={props:{resultType:{type:String,default:'PO'}},setup(props){
  const columnFilters=ref({});
- const kind=ref('PO'),expanded=ref(false),q=reactive({}),applied=ref({}),page=ref(1),message=ref(''),error=ref(''),modal=ref(false),mode=ref('detail'),current=ref(null),manual=reactive({}),saveErrors=ref([]);
+ const kind=ref(props.resultType),expanded=ref(false),q=reactive({}),applied=ref({}),page=ref(1),message=ref(''),error=ref(''),modal=ref(false),mode=ref('detail'),current=ref(null),manual=reactive({}),saveErrors=ref([]);
  let initial;try{initial=JSON.parse(localStorage.getItem('cspp-storage-results-network-v1'));}catch{}
  const records=ref(Array.isArray(initial)&&initial.length?initial.map(r=>finalize(r)):[...seed('PO'),...seed('STO')]);
  const persist=()=>localStorage.setItem('cspp-storage-results-network-v1',JSON.stringify(records.value));persist();
@@ -962,8 +962,8 @@ root.CsppStorageResultsComponent={setup(){
  const editFields=computed(()=>[{key:'manualTarget',label:'调整后目标库存'},{key:'manualReorder',label:'调整后再订购点'},{key:'manualMax',label:'调整后最高风控线'},{key:'manualMin',label:'调整后最低风控线'}]);
  return{kind,expanded,q,page,message,error,modal,mode,current,manual,saveErrors,fields,rows,allRows,sourceFields,metricOptions,columns,search,reset,tableChange,open,save,exportData,display,valueClass,groups,editFields,isBreak,hasGlobal,sourcePairs};
 },template:`<section class="strategy-page result-page">
-<div class="strategy-heading"><h2>建储水位线计算结果</h2></div>
-<a-radio-group v-model:value="kind" button-style="solid" class="result-types"><a-radio-button value="PO">PO 建储</a-radio-button><a-radio-button value="STO">STO 建储</a-radio-button></a-radio-group>
+<div class="strategy-heading"><h2>{{kind}} 建储结果</h2></div>
+
 <a-alert v-if="message" :message="message" type="success" closable @close="message=''" style="margin:12px 0"/>
 <div class="card"><div class="result-query-grid">
 <label><span>版本号</span><a-input v-model:value="q.buildVersion" placeholder="如 202643" allow-clear @pressEnter="search"/></label>

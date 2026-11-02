@@ -999,7 +999,7 @@ mark {
             </div>
           </template>
 
-          <template v-else-if="activeMenu==='strategy-result'"><inventory-results/></template>
+          <template v-else-if="['strategy-result','strategy-result-po','strategy-result-sto'].includes(activeMenu)"><inventory-results :key="activeMenu" :result-type="activeMenu==='strategy-result-sto'?'STO':'PO'"/></template>
           <template v-else-if="activeMenu.startsWith('strategy-')"><inventory-strategy :page-key="activeMenu" :key="activeMenu"/></template>
 
           <!-- 常规采购计划 -->
@@ -3910,7 +3910,7 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 <script src="warehouse-network.js?v=20261026-real-network"></script>
 <script src="stocking-rules.js?v=20261026-create"></script>
 <script src="global-parameters.js?v=20261026-derived-service"></script>
-<script src="inventory-results.js?v=20261028-po-order"></script>
+<script src="inventory-results.js?v=20261102-split-menus"></script>
 <script src="inventory-strategy.js?v=20261102-application-forms"></script>
 <script>
 /* ================= 模拟数据（确定性随机，每次打开一致） ================= */
@@ -5157,7 +5157,7 @@ const app = createApp({
     const collapsed = ref(false);
     const menuKeyword = ref('');
     const openGroups = reactive({ base:true, strategy:true, draft:false, report:false });
-    const VALID_KEYS = ['strategy-purchase','strategy-service','strategy-stocking','strategy-transfer','strategy-increase','strategy-cycle','strategy-risk','strategy-riskRule','strategy-result','mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier','plan-hier-2','plan-hier-3','gp-params','svc-dash',
+    const VALID_KEYS = ['strategy-purchase','strategy-service','strategy-stocking','strategy-transfer','strategy-increase','strategy-cycle','strategy-risk','strategy-riskRule','strategy-result','strategy-result-po','strategy-result-sto','mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier','plan-hier-2','plan-hier-3','gp-params','svc-dash',
       'fc-new','fc-new-draft','fc-long','fc-long-draft','fc-buyout','fc-buyout-draft','fc-regular','fc-regular-draft','fc-wh-regular','fc-best','fc-backtest','fc-backtest-draft',
       'part-group','po-regular','po-eop','po-approval','po-issue','sto-week','sto-next',
       'po-atb','po-bridge','po-ref','po-roll'];
@@ -5200,7 +5200,8 @@ const app = createApp({
       {type:'item',key:'strategy-cycle',parent:'strategy',title:'计划周期',icon:'▦'},
       {type:'item',key:'strategy-risk',parent:'strategy',title:'配件风控线',icon:'▦'},
       {type:'item',key:'strategy-riskRule',parent:'strategy',title:'配件多分类风控线',icon:'▦'},
-      {type:'item',key:'strategy-result',parent:'strategy',title:'建储水位线计算结果',icon:'▦'},
+      {type:'item',key:'strategy-result-po',parent:'strategy',title:'PO 建储结果',icon:'▦'},
+      {type:'item',key:'strategy-result-sto',parent:'strategy',title:'STO 建储结果',icon:'▦'},
       { type:'group', key:'po', title:'计划管理' },
       { type:'item', key:'po-regular', parent:'po', title:'常规采购计划', icon:'📋' },
       { type:'item', key:'sto-week', parent:'po', title:'本周调拨计划', icon:'🚚' },
