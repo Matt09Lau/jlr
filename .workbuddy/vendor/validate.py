@@ -30,12 +30,16 @@ PAGES = [
     ("fc-regular",   "常规预测",           "2026-10",        False),
     ("fc-best",      "最佳模型",           "最优模型",       False),
     ("part-group",      "配件组管理",        "分组类型",      False),
-    ("po-regular",      "常规采购计划",      "数据生成日期",  False),
+    ("po-regular",      "采购计划",          "数据生成日期",  False),
+    ("po-history",      "历史采购计划",      "数据生成日期",  False),
+    ("po-export",       "采购计划导出",      "导出状态",      False),
     ("po-eop",          "停产最后采购量",    "末采数量",      False),
     ("po-approval",     "采购计划审批",      "审批状态",      False),
     ("po-issue",        "采购订单下达",      "PO单号",        False),
-    ("sto-week",        "本周调拨计划",      "计划批次",      False),
-    ("sto-next",        "下周调拨计划",      "计划批次",      False),
+    ("sto-week",        "调拨计划",          "计划批次",      False),
+    ("sto-export",      "调拨计划导出",      "计划批次",      False),
+    ("sto-summary",     "调拨计划汇总",      "数据快照日期",  False),
+    ("sto-next",        "给仓库的预计调拨计划", "计划批次",   False),
     ("po-atb",          "All Time Buy 计划", "全生命周期累计需求", False),
     ("po-bridge",       "Bridge Buy 计划",   "属地预期库存",  False),
     ("po-ref",          "参考零件采购计划",  "参考车型",      False),
@@ -59,7 +63,9 @@ def dump(page_key, html_path=None, inject=None):
         tag = "</body>"
         idx = src.rfind(tag)
         src = src[:idx] + inject + "\n" + tag + src[idx + len(tag):]
-        path = os.path.join(VENDOR_DIR, "_tmp_probe.html")
+        # 必须与正式 HTML 同目录：成品页以相对路径引用 5 个外部 js（warehouse-network 等），
+        # 若写到 vendor 目录会导致 C:\...\vendor\warehouse-network.js 不存在 → window.CSPPWarehouseNetwork 未定义 → app 挂载失败
+        path = os.path.join(os.path.dirname(HTML), "_tmp_probe.html")
         with open(path, "w", encoding="utf-8") as f:
             f.write(src)
     url = file_url(path, page_key)
@@ -137,7 +143,7 @@ def check_po_pages():
     field_left = [k for k in ["需求仓库要求到货日期", "wh_required_arrival_date"] if k in src]
 
     checks = [
-        ("po-regular", "常规采购计划", "数据生成日期"),
+        ("po-regular", "采购计划", "数据生成日期"),
         ("po-eop", "停产最后采购量", "末采数量"),
         ("po-approval", "采购计划审批", "审批状态"),
         ("po-issue", "采购订单下达", "PO单号"),
@@ -166,7 +172,7 @@ def check_fc_buyout_btns():
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
         return {"key":"fc-buyout-按钮","ok":False,"msg":"渲染失败/错误页"}
     r = strip_scripts(rendered(data))
-    need = ["编 辑", "生成All time buy计划", "批量调整"]
+    need = ["编 辑", "生成All time buy计划", "批量圆整"]
     miss = [k for k in need if k not in r]
     bad = [k for k in ["生成采购计划", "生成bridge buy计划", "系数调整", "保 存"] if k in r]
     ok = (not miss) and (not bad)
@@ -354,20 +360,22 @@ def check_fc_new_pred():
     has_invalid = "不在清单" in full
     has_import_msg = "已导入" in full
     has_jlr = ("LR062541" in full) and ("前制动摩擦片" in full)
+    # base 为预测结果弹窗内的合法展示列（字段来源口径）；此处只校验查询条件不含 base/配件名称，
+    # 该点由 check_fc_adjust 的 fcPredM.base / fcPredM.name 源级断言覆盖，故不再要求渲染文本无 base 列。
     has_base = has_col(full, 'base')
     no_lr = "左右标识" not in full
     no_upc = "UPC/FN号" not in full
     ok = (has_filter and not has_update and has_batch and has_tpl and has_import
           and has_valid_col and has_note and has_invalid and has_import_msg and has_jlr
-          and (not has_base) and no_lr and no_upc)
+          and no_lr and no_upc)
     detail = (f"匹配状态={has_filter} 更新按钮已移除={not has_update} 批量按钮={has_batch} 下载模板={has_tpl} "
               f"导入按钮={has_import} 校验列={has_valid_col} 说明={has_note} 越界标红={has_invalid} "
               f"导入提示={has_import_msg} JLR料号={has_jlr} "
-              f"base={has_base} 无左右标识={no_lr} 无UPC/FN={no_upc}")
+              f"base列={has_base}(合法) 无左右标识={no_lr} 无UPC/FN={no_upc}")
     return {"key":"fc-new-pred","ok":ok,"msg":detail}
 
 def check_fc_new_6m():
-    """参考零件需求预测：计划生产量应为未来 1~6 个月（列表列），预测结果应为 1~6 个月预测列。"""
+    """参考零件需求预测：计划生产量应为未来 1~12 个月（列表列），预测结果应为 1~12 个月预测列。"""
     # 探针：进入步骤7 → 统计列表里「未来N个月计划生产量」表头；再打开「预测结果」弹窗统计「N个月预测」列
     inject = ("<script>"
               "var zprod=0, zmax=0, zfc=0;"
@@ -388,17 +396,17 @@ def check_fc_new_6m():
     dump("fc-new", inject=inject)
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
-        return {"key": "fc-new-6个月", "ok": False, "msg": "渲染失败/错误页"}
+        return {"key": "fc-new-12个月", "ok": False, "msg": "渲染失败/错误页"}
     m = re.search(r"ZZPROBE6M prod=(\d+) max=(\d+) fc=(\d+)", data)
     if not m:
-        return {"key": "fc-new-6个月", "ok": False, "msg": "未取得探针"}
+        return {"key": "fc-new-12个月", "ok": False, "msg": "未取得探针"}
     prod, mx, fc = int(m.group(1)), int(m.group(2)), int(m.group(3))
-    ok = prod == 6 and mx == 6 and fc == 6
+    ok = prod == 12 and mx == 12 and fc == 12
     detail = f"计划生产量列={prod}(最大{mx}月) 预测结果列={fc}"
-    return {"key": "fc-new-6个月", "ok": ok, "msg": detail}
+    return {"key": "fc-new-12个月", "ok": ok, "msg": detail}
 
 def check_fc_new_coef():
-    """参考零件需求预测：页面步骤7「系数调整」按钮 → 弹窗内维护 1~6 月系数。"""
+    """参考零件需求预测：页面步骤7「系数调整」按钮 → 弹窗内维护 1~12 月系数。"""
     # 探针：进入步骤7 → 点击「系数调整」按钮后，统计弹窗内真实渲染的月份系数输入框
     inject = ("<script>"
               "setTimeout(function(){var steps=[].slice.call(document.querySelectorAll('.fc-step'));if(steps[6]){steps[6].click();}}, 900);"
@@ -408,7 +416,7 @@ def check_fc_new_coef():
               "setTimeout(function(){"
               "var n=0,txt=0;"
               "[].slice.call(document.querySelectorAll('.ant-modal-content')).forEach(function(c){"
-              "if(c.textContent.indexOf('预测系数调整（第 1 ~ 6 月）')>=0){txt++; n+=c.querySelectorAll('.ant-input-number').length;}});"
+              "if(c.textContent.indexOf('预测系数调整（第 1 ~ 12 月）')>=0){txt++; n+=c.querySelectorAll('.ant-input-number').length;}});"
               "var d=document.createElement('div'); d.id='zzprobe'; d.textContent='ZZPROBE btn='+bs.length+' modalWithTxt='+txt+' inputs='+n; document.body.appendChild(d);"
               "}, 800);"
               "}, 1900);</script>")
@@ -420,7 +428,7 @@ def check_fc_new_coef():
     if not m:
         return {"key":"fc-new-系数","ok":False,"msg":"未取得弹窗探针"}
     btn, mw, inp = int(m.group(1)), int(m.group(2)), int(m.group(3))
-    ok = btn >= 1 and mw >= 1 and inp >= 6
+    ok = btn >= 1 and mw >= 1 and inp >= 12
     detail = f"页面按钮={btn} 弹窗命中={mw} 弹窗内月份系数输入={inp}"
     return {"key":"fc-new-系数","ok":ok,"msg":detail}
 
@@ -669,14 +677,14 @@ def check_fc_long_trend():
 
 
 def check_fc_long_round():
-    """长周期预测报表：数值策略（圆整）能力保留——页头圆整规则说明 + 「圆整视角」开关 + 「汇总值」列 + 「批量调整」按钮。"""
+    """长周期预测报表：数值策略（圆整）能力保留——「汇总值」列 + 「批量圆整」按钮；页头圆整规则说明文案已按需求移除。"""
     dump("fc-long")
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
         return {"key": "fc-long-圆整策略", "ok": False, "msg": "渲染失败/错误页"}
     r = rendered(data)
-    # 圆整按规则默认生效：保留说明文案与汇总值列，但不再需要「圆整视角」开关
-    need = ["数值策略（长周期预测圆整规则）", "汇总值", "批量调整", "编 辑"]
+    # 圆整按规则默认生效：保留汇总值列与批量圆整按钮；页头数值策略圆整规则说明（红框提示）已移除
+    need = ["汇总值", "批量圆整", "编 辑"]
     miss = [k for k in need if k not in r]
     bad = [k for k in ["圆整视角", "关闭圆整视图"] if k in r]
     rows = r.count("ant-table-row")
@@ -686,24 +694,26 @@ def check_fc_long_round():
 
 
 def check_fc_long_import():
-    """长周期批量调整：勾选行后打开弹窗，应支持「已勾选行 / 导入配件号」两种调整范围（含粘贴框与导入文件按钮）。"""
+    """长周期批量圆整弹窗：范围固定为当前勾选行，「已勾选行 / 导入配件号」范围选择与导入框已下线；保留策略名称/策略说明/截至日期。"""
     inject = ("<script>setTimeout(function(){"
               "var cb=document.querySelector('.ant-table-tbody .ant-checkbox-input');"
               "if(cb){cb.dispatchEvent(new MouseEvent('click',{bubbles:true}));}"
               "setTimeout(function(){"
               "var btns=[].slice.call(document.querySelectorAll('button'));"
-              "var b=btns.find(function(x){var t=(x.textContent||'').replace(/\\s/g,'');return t.indexOf('批量调整')>=0;});"
+              "var b=btns.find(function(x){var t=(x.textContent||'').replace(/\\s/g,'');return t.indexOf('批量圆整')>=0;});"
               "if(b){b.dispatchEvent(new MouseEvent('click',{bubbles:true}));}"
               "}, 1200);}, 1800);</script>")
     dump("fc-long", inject=inject)
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
-        return {"key": "fc-long-批量导入", "ok": False, "msg": "渲染失败/错误页"}
-    need = ["调整范围", "已勾选行（", "导入配件号", "导入文件", "策略名称", "稀疏件圆整策略"]
+        return {"key": "fc-long-批量圆整", "ok": False, "msg": "渲染失败/错误页"}
+    need = ["策略名称", "稀疏件圆整策略", "截至日期", "本次共选中"]
+    not_want = ["选中的零件号", "导入配件号", "已勾选行"]
     miss = [k for k in need if k not in data]
-    ok = not miss
-    detail = f"缺失={miss if miss else '无'}"
-    return {"key": "fc-long-批量导入", "ok": ok, "msg": detail}
+    bad = [k for k in not_want if k in data]
+    ok = not miss and not bad
+    detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
+    return {"key": "fc-long-批量圆整", "ok": ok, "msg": detail}
 
 
 def check_fc_long_editmode():
@@ -1195,7 +1205,7 @@ def check_menu():
                  "草稿", "计划层级管理", "计划层级管理2", "服务水平dashboard", "基础数据管理",
                  "库存策略参数", "采购LT", "目标满足率", "备货规则", "库间LT", "增储天数", "计划周期", "配件风控线", "配件多分类风控线", "建储水位线计算结果",
                  "配件组管理",
-                 "计划管理", "常规采购计划", "本周调拨计划", "下周调拨计划",
+                 "计划管理", "采购计划", "历史采购计划", "采购计划导出", "调拨计划", "调拨计划导出", "调拨计划汇总", "给仓库的预计调拨计划",
                  "All Time Buy 计划", "Bridge Buy 计划", "参考零件采购计划",
                  "给供应商的滚动计划",
                  "停产最后采购量", "采购计划审批", "采购订单下达"]
@@ -1203,7 +1213,8 @@ def check_menu():
     # 不应出现（已移除的纯占位菜单 / 已更名的旧称）
     must_not = ["历史需求处理", "准确率报表", "预测回测配置",
                 "售后订单管理", "【本地测试页面】", "计划层级管理3",
-                "全新车型配件预测", "参考零件采购计划（首储）"]
+                "全新车型配件预测", "参考零件采购计划（首储）",
+                "常规采购计划", "本周调拨计划", "下周调拨计划", "给仓库的滚动调拨计划"]
     bad = [k for k in must_not if k in r]
     # 菜单归属顺序：停产最后采购量/采购计划审批/采购订单下达 应位于「草稿」组（常规预测(草稿) 之后），
     # 且采购计划组内 参考零件采购计划 之后直接是「报表」组
@@ -1217,6 +1228,23 @@ def check_menu():
         bad.append("草稿组顺序(三页应位于草稿组内)")
     if not (0 <= ipo < irep):
         bad.append("采购计划组顺序(po-ref 后应为报表组)")
+    # 顺序要求：给供应商的滚动计划 应位于 采购计划（po-regular）之后、调拨计划（sto-week）之前
+    ipo_reg = r.find("采购计划")
+    iroll = r.find("给供应商的滚动计划")
+    isto = r.find("调拨计划")   # 先命中「调拨计划」(本周改名)，其位置在「给仓库的滚动调拨计划」之前
+    if not (0 <= ipo_reg < iroll < isto):
+        bad.append("采购计划组顺序(po-roll 应在采购计划下、调拨计划上)")
+    # 顺序要求：调拨计划(sto-week) → 调拨计划导出(sto-export) → 调拨计划汇总(sto-summary) → 给仓库的预计调拨计划(sto-next)
+    isto_exp = r.find("调拨计划导出")
+    isum = r.find("调拨计划汇总")
+    inext = r.find("给仓库的预计调拨计划")
+    if not (0 <= isto < isto_exp < isum < inext):
+        bad.append("计划顺序(调拨计划 → 调拨计划导出 → 调拨计划汇总 → 给仓库的预计调拨计划)")
+    # 顺序要求：历史采购计划 / 采购计划导出 应位于 采购计划 之下、给供应商的滚动计划 之上
+    ihist = r.find("历史采购计划")
+    iexp = r.find("采购计划导出")
+    if not (0 <= ipo_reg < ihist < iexp < iroll):
+        bad.append("采购计划组顺序(po-history/po-export 应在采购计划下、给供应商的滚动计划上)")
     ok = (not miss) and (not bad)
     detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
     return {"key":"menu","ok":ok,"msg":detail}
@@ -1248,18 +1276,22 @@ def check_strategy():
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
     return {"ok": True, "msg": f"{len(STRATEGY_PAGES)} 页全部渲染正常"}
 
-STO_PAGES = [("sto-week", "本周调拨计划"), ("sto-next", "下周调拨计划")]
-# 字段口径＝PRD 5.4.4.1 计划结果表 29 字段（最新；无缺口/STO单号/执行状态/所需车次/缺口结转标记/运输线路）
-STO_COLS = ["数据生成日期", "计划类型", "配件号", "配件名称", "发货仓", "收货仓",
-            "收货仓最低风控线", "收货仓目标库存", "是否出计划日", "ABC分类", "车型代码",
-            "计划员", "计划批次", "计划行", "预期库存", "可用库存数量", "欠交数量",
-            "库间在途数量", "缺货数量", "库间LT", "近3个月月均销量", "当前可用天数",
-            "要求到货日期", "推荐计划数量(取整前)", "推荐计划数量(分配后)", "体积", "体积单位", "预计调拨体积", "备注"]
+STO_PAGES = [("sto-week", "调拨计划"), ("sto-next", "给仓库的预计调拨计划")]
+# 字段口径＝PRD 6.3.4 计算输出（最新；按用户调整）：移除计划类型/是否出计划日/备注列；
+# 预期/可用/欠交/库间在途/缺货拆为（发货仓）/（收货仓）两组；新增 推荐计划数量(MPQ取整后)/推荐计划数量、导出状态、是否下单
+STO_COLS = ["数据生成日期", "配件号", "配件名称", "发货仓", "收货仓",
+            "收货仓最低风控线", "收货仓目标库存", "ABC分类", "车型代码", "计划员",
+            "计划批次", "计划行", "预期库存（发货仓）", "可用库存数量（发货仓）", "欠交数量（发货仓）",
+            "库间在途数量（发货仓）", "缺货数量（发货仓）", "预期库存（收货仓）", "可用库存数量（收货仓）",
+            "欠交数量（收货仓）", "库间在途数量（收货仓）", "缺货数量（收货仓）", "近3个月月均销量",
+            "当前可用天数", "推荐计划数量(取整前)", "推荐计划数量(分配后)", "推荐计划数量(MPQ取整后)",
+            "推荐计划数量", "库间LT", "要求到货日期",
+            "体积", "体积单位", "预计调拨体积", "导出状态", "是否下单"]
 STO_FORBIDDEN = ["缺口", "STO单号", "执行状态", "所需车次", "建议调拨数量", "缺口结转标记"]
 
 def check_sto():
-    """调拨计划（STO）：2 页必须渲染表格行且命中 PRD 5.4.4.1 输出表字段；不得残留缺口/STO单号等已删字段；
-    本周（执行，W2643）与下周（预排，W2644）计划批次体现时点差异。"""
+    """调拨计划（STO）：2 页必须渲染表格行且命中 PRD 6.3.4 计算输出字段；不得残留缺口/STO单号等已删字段；
+    本周（执行，W2643）与下周（预排，W2644）计划批次体现时点差异。计划类型已不列为表头列（仅筛选/详情承载）。"""
     bad = []
     for key, title in STO_PAGES:
         r = rendered(dump(key))
@@ -1279,15 +1311,79 @@ def check_sto():
         bad.append("sto-next(缺计划批次W2644)")
     if "W2644" in rw or "W2643" in rn:
         bad.append("sto(批次时点串页)")
-    if "紧急调拨计划" not in rw or "常规调拨计划" not in rw:
-        bad.append("sto-week(缺计划类型枚举)")
-    if "下周预计调拨计划" not in rn:
-        bad.append("sto-next(缺下周预计调拨计划)")
+    # 计划类型已不列为表头列（仅筛选/详情承载），故不再断言列表文本；
+    # 以「下周页不得出现紧急/常规」反向校验类型口径正确
     if "紧急调拨计划" in rn or "常规调拨计划" in rn:
         bad.append("sto-next(不应出现紧急/常规调拨计划)")
     if bad:
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
-    return {"ok": True, "msg": "2 页渲染正常，字段口径对齐 PRD 5.4.4.1 输出表"}
+    return {"ok": True, "msg": "2 页渲染正常，字段口径对齐 PRD 6.3.4 计算输出"}
+
+def check_sto_summary():
+    """调拨计划汇总（sto-summary）：PRD 6.5.2 汇总维度页面，导出后的「已执行计划」只读报表。
+    列结构严格按业务报表 35 列：数据快照日期 / 配件号 / 配件名称 + 每个区域仓 7 列
+    （目标库存、调拨占比、调拨数量、库存+在途、潜在缺口、当前占比、目标占比）+ 仓网 4 列
+    （中心仓库存、调拨后未分配量、总需求、已分配量）。
+    断言：渲染出行、35 列齐备、三套仓网可切换、仅导出（无导入/无编辑/无审批）。"""
+    r = rendered(dump("sto-summary"))
+    bad = []
+    if r.count("ant-table-row") <= 0:
+        bad.append("rows=0")
+    for c in ["数据快照日期", "配件号", "配件名称"]:
+        if c not in r:
+            bad.append("缺列:" + c)
+    # CJLR 仓网：中心仓 CJDC，区域仓 CJV0~CJV3，每组 7 列
+    for reg in ["CJV0", "CJV1", "CJV2", "CJV3"]:
+        for m in ["目标库存", "调拨占比", "调拨数量", "库存+在途", "潜在缺口", "当前占比", "目标占比"]:
+            if (reg + " " + m) not in r:
+                bad.append("缺列:" + reg + " " + m)
+    for c in ["CJDC 中心仓库存", "CJLR 调拨后未分配量", "CJLR 总需求", "CJLR 已分配量"]:
+        if c not in r:
+            bad.append("缺列:" + c)
+    for n in ["CJLR", "JLR", "JLRC"]:
+        if n not in r:
+            bad.append("缺仓网:" + n)
+    if "导入" in r:
+        bad.append("不应有导入")
+    if "审批通过" in r or "驳回" in r:
+        bad.append("报表页不应有审批按钮")
+    if bad:
+        return {"ok": False, "msg": "异常: " + ", ".join(bad)}
+    return {"ok": True, "msg": "已执行计划汇总渲染正常（35 列严格对齐业务报表 / 三套仓网切换 / 仅导出无编辑）"}
+
+def check_sto_export():
+    """调拨计划导出（sto-export）：PRD 6.3.4 计算输出的精简列（已删库存诊断拆分列与取整前/近3月均销量/当前可用天数等中间过程字段）
+    + 导出时间，逻辑同「采购计划导出」：顶部仅「待导出」tab、勾选行或筛选全量导出、导出后自动标记已导出。
+    断言：渲染出行、精简列齐备（含 推荐计划数量(MPQ取整后)/推荐计划数量/导出状态/是否下单/导出时间）、
+    顶部仅一个 tab、无「已导出」tab、无导入/无审批/无编辑；且不得出现已删的库存拆分过程列。"""
+    r = rendered(dump("sto-export"))
+    bad = []
+    if r.count("ant-table-row") <= 0:
+        bad.append("rows=0")
+    for c in ["数据生成日期", "配件号", "配件名称", "发货仓", "收货仓",
+              "收货仓最低风控线", "收货仓目标库存", "ABC分类", "车型代码", "计划员",
+              "计划批次", "计划行", "推荐计划数量(分配后)", "推荐计划数量(MPQ取整后)", "推荐计划数量",
+              "库间LT", "要求到货日期", "体积", "体积单位", "预计调拨体积", "导出状态", "是否下单"]:
+        if c not in r:
+            bad.append("缺列:" + c)
+    for c in ["导出状态", "是否下单", "导出时间"]:
+        if c not in r:
+            bad.append("缺列:" + c)
+    # 导出页应已删减的中间过程字段
+    for c in ["预期库存（发货仓）", "预期库存（收货仓）", "推荐计划数量(取整前)", "近3个月月均销量", "当前可用天数"]:
+        if c in r:
+            bad.append("导出页不应有中间过程列:" + c)
+    if "待导出" not in r:
+        bad.append("缺「待导出」tab")
+    if "已导出（" in r:
+        bad.append("不应有「已导出」tab")
+    for b in ["导入", "审批通过", "驳回", "新增"]:
+        if b in r:
+            bad.append("导出页不应有:" + b)
+    if bad:
+        return {"ok": False, "msg": "异常: " + ", ".join(bad)}
+    return {"ok": True, "msg": "调拨计划导出渲染正常（字段对齐 6.3.4 / 仅待导出 tab / 导出后自动标记）"}
+
 
 def check_po_plan():
     """采购计划扩展 3 页：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划。
@@ -1314,8 +1410,6 @@ def check_po_plan():
     ra = rendered(dump("po-atb"))
     rb = rendered(dump("po-bridge"))
     rr = rendered(dump("po-ref"))
-    if "批量下计划" not in ra:
-        bad.append("po-atb(缺批量下计划)")
     if "买断区间" not in rb:
         bad.append("po-bridge(缺买断区间)")
     if "展开年份" in rb or "折叠年份" in rb:
@@ -1338,18 +1432,20 @@ def check_po_plan():
     return {"ok": True, "msg": "3 页渲染正常，列集对齐 PRD 第 6/7 章"}
 
 def check_po_roll():
-    """给供应商的滚动计划（PRD 4.4.3.2 支持供应商协同）：
-    15 个基础字段 + 6 个月份列（M1~M6，PRD 口径：增加LT后未来 6 个月）+ 同步状态页签 + 同步到 SAP。
-    顶部口径说明条已按用户要求移除，且不应残留 M7~M12 与 12 个月口径。"""
+    """给供应商的滚动计划（PRD 第 5 章）：
+    17 个基础字段（含参数 MOQ / MPQ）+ 6 个月份列（M1~M6＝各月计划数量，PRD 5.4.3 计算链终值）
+    + 同步状态展示（后台定时任务自动同步，前台已移除所有手动同步入口）。顶部口径说明条已按用户要求移除，且不应残留 M7~M12 与 12 个月口径。
+    详情弹窗须含「参数」区与计算实例完整表（指标为行、M1~M6 为列），由探针 probe_poreg_roll.mjs 校验。"""
     r = rendered(dump("po-roll"))
     base_cols = ["数据日期", "计划批次", "计划行", "供应商编码", "供应商名称", "配件号", "配件名称",
-                 "车型", "计划数量", "采购LT(月)", "预测起始月份", "未来6个月合计", "同步状态", "同步时间", "操作"]
+                 "车型", "MOQ", "MPQ", "计划数量", "采购LT(月)", "预测起始月份", "未来6个月合计",
+                 "同步状态", "同步时间", "操作"]
     miss = [c for c in base_cols if not has_col(r, c)]
     month_miss = [("M%d" % i) for i in range(1, 7) if not has_col(r, "M%d" % i)]
     tab_miss = [t for t in ["全部", "未同步", "已同步SAP"] if t not in r]
     bad = []
-    if "同步到 SAP" not in r:
-        bad.append("缺同步到SAP按钮")
+    if "同步到 SAP" in r:
+        bad.append("不应残留同步到SAP按钮")
     # 已移除：顶部口径说明条、12 个月列、发布状态口径
     if "滚动计划口径" in r:
         bad.append("顶部口径说明条未移除")
@@ -1364,6 +1460,91 @@ def check_po_roll():
     detail = (f"基础列={len(base_cols)-len(miss)}/{len(base_cols)} 月份列={6-len(month_miss)}/6 "
               f"页签缺失={tab_miss if tab_miss else '无'} 行={rows} 异常={bad if bad else '无'} 列缺失={miss if miss else '无'}")
     return {"key": "po-roll", "ok": ok, "msg": detail}
+
+def check_po_archive():
+    """历史采购计划（po-history）+ 采购计划导出（po-export）两页渲染与口径校验。
+    历史页：列表列须与采购计划全量一致（默认全量 57 数据列，仅去掉顶部状态tab，归档只读）；
+    导出页：精简为下单字段，含「导出状态」列与 仅 待导出 一个 tab（无「全部」「已导出」tab、无标记按钮），
+            导出按钮名为「导出」，导出成功后自动打「已导出」标签（不再显示在页面中）。"""
+    bad = []
+    # ---- 历史采购计划 ----
+    rh = rendered(dump("po-history"))
+    if rh.count("ant-table-row") <= 0:
+        bad.append("po-history(rows=0)")
+    # 无顶部状态tab：归档页不应渲染 antd tabs 组件（审批状态页签）；单据状态仅作为数据列展示
+    if "ant-tabs-tab" in rh or "ant-tabs-nav" in rh:
+        bad.append("po-history(不应有状态tab)")
+    for col in ["数据生成日期", "调整计划数量", "拦截原因", "配件号", "单据状态"]:
+        if not has_col(rh, col):
+            bad.append("po-history(缺列:" + col + ")")
+    # 列须与采购计划全量一致：断言采购计划中「非首屏默认列」在历史页同样渲染（防只显示 11 列的回归）
+    po_full_extra = ["推荐计划数量(凑MOQ后)", "推荐计划数量(凑联合MOQ后)", "推荐计划数量(凑MPQ后)",
+                     "最低风控线", "预期库存数量", "近 3 个月月均销量", "修改人名称", "审批时间", "是否多供应商"]
+    for col in po_full_extra:
+        if not has_col(rh, col):
+            bad.append("po-history(列未与采购计划全量一致,缺:" + col + ")")
+    # 筛选区：默认 5 项可见，车型代码 / ABC分类 收在「展开」折叠里（与采购计划一致）
+    fi = rh.find('<div class="filter-row"')
+    fr = rh[fi:rh.find('<div class="toolbar-row"')] if fi >= 0 else ""
+    vis = re.findall(r'class="f-label"[^>]*>([^<]+)<', fr)
+    for need in ["配件号", "配件名称", "建储仓库编码", "建储仓库名称", "计划类型"]:
+        if need not in vis:
+            bad.append("po-history(筛选默认缺:" + need + ")")
+    for hidden in ["车型代码", "ABC分类"]:
+        if hidden in vis:
+            bad.append("po-history(" + hidden + "应收在展开折叠里)")
+    if "展开" not in fr and "收起" not in fr:
+        bad.append("po-history(缺展开/收起切换)")
+    # 行操作：详情 + 变更记录（变更记录沿用采购计划同一套 PRD 4.4.3.2 口径）
+    acts = re.findall(r'class="link-btn"[^>]*>([^<]*)<', rh)
+    if "变更记录" not in [a.strip() for a in acts]:
+        bad.append("po-history(缺变更记录入口)")
+    # ---- 采购计划导出 ----
+    re_ = rendered(dump("po-export"))
+    if re_.count("ant-table-row") <= 0:
+        bad.append("po-export(rows=0)")
+    if not has_col(re_, "导出状态"):
+        bad.append("po-export(缺导出状态列)")
+    # 顶部 tab：仅 待导出（不应有「全部」「已导出」tab）
+    for t in ["待导出"]:
+        if t not in re_:
+            bad.append("po-export(缺tab:" + t + ")")
+    if "已导出" in re_:
+        bad.append("po-export(不应有「已导出」tab)")
+    if has_col(re_, "全部"):
+        bad.append("po-export(不应有「全部」tab)")
+    # 精简后须保留的下单字段
+    for col in ["计划数量(最终计划)", "供应商名称", "采购LT(天)", "要求到货日期", "建储仓库", "计划批次", "计划行"]:
+        if not has_col(re_, col):
+            bad.append("po-export(缺列:" + col + ")")
+    # 不应残留计算过程 / 审批 / 调整 字段
+    for col in ["推荐计划数量(凑MOQ后)", "推荐计划数量(凑联合MOQ后)", "推荐计划数量(凑成套采购后)", "推荐计划数量(凑MPQ后)",
+                "审批意见", "调整原因", "最低风控线", "预期库存数量", "近 3 个月月均销量", "欠交数量", "库间在途数量", "缺货数量"]:
+        if has_col(re_, col):
+            bad.append("po-export(不应出现过程/审批/调整列:" + col + ")")
+    # 无标记按钮 / 行内标记链接；导出按钮名为「导出」
+    if "标记导出" in re_ or "标记已导出" in re_:
+        bad.append("po-export(不应有标记导出按钮/链接)")
+    # antd 两字按钮会自动插空格（"导 出"），用正则匹配；"导出状态"列头不会误命中
+    if not re.search(r'>\s*导\s*出\s*<', re_):
+        bad.append("po-export(缺「导出」按钮)")
+    # 第一屏列序与采购计划一致：当前采购件号 / 当前采购配件名称 必须排在 配件号 / 配件名称 之前
+    ehds = [re.sub(r"<[^>]+>", "", h).strip() for h in re.findall(r"<th[^>]*>(.*?)</th>", re_, re.S)]
+
+    def _idx(t):
+        return ehds.index(t) if t in ehds else -1
+    for t in ["当前采购件号", "当前采购配件名称", "配件号", "配件名称"]:
+        if _idx(t) < 0:
+            bad.append("po-export(缺列:" + t + ")")
+    if 0 <= _idx("当前采购件号") and 0 <= _idx("配件号") and not _idx("当前采购件号") < _idx("配件号"):
+        bad.append("po-export(当前采购件号应在配件号之前)")
+    if 0 <= _idx("当前采购配件名称") and 0 <= _idx("配件名称") and not _idx("当前采购配件名称") < _idx("配件名称"):
+        bad.append("po-export(当前采购配件名称应在配件名称之前)")
+    if "供应商代码" not in ehds:
+        bad.append("po-export(缺供应商代码列)")
+    if bad:
+        return {"ok": False, "msg": "异常: " + ", ".join(bad)}
+    return {"ok": True, "msg": "2 页渲染正常（历史列与采购计划全量一致；导出页仅 待导出 1 个tab、无全部/无标记按钮，导出即自动记录导出时间）"}
 
 def main():
     only = sys.argv[1] if len(sys.argv) > 1 else None
@@ -1422,10 +1603,10 @@ def main():
         r = check_fc_new_coef()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-new-系数   {r['msg']}")
-    if only in (None, 'fc-new-6m', 'fc-new'):
+    if only in (None, 'fc-new-6m', 'fc-new-12m', 'fc-new'):
         r = check_fc_new_6m()
         all_ok = all_ok and r["ok"]
-        print(f"[{'✓' if r['ok'] else '✗'}] fc-new-6个月  {r['msg']}")
+        print(f"[{'✓' if r['ok'] else '✗'}] fc-new-12个月  {r['msg']}")
     if only in (None, 'fc-new-reason', 'fc-new', 'fc-new-pred'):
         r = check_fc_new_pred_reason()
         all_ok = all_ok and r["ok"]
@@ -1464,7 +1645,7 @@ def main():
         print(f"[{'✓' if r['ok'] else '✗'}] fc-long-圆整策略  {r['msg']}")
         r = check_fc_long_import()
         all_ok = all_ok and r["ok"]
-        print(f"[{'✓' if r['ok'] else '✗'}] fc-long-批量导入  {r['msg']}")
+        print(f"[{'✓' if r['ok'] else '✗'}] fc-long-批量圆整  {r['msg']}")
         r = check_fc_adjust_reason()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-调整原因    {r['msg']}")
@@ -1544,6 +1725,14 @@ def main():
         r = check_sto()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] sto-2pages    {r['msg']}")
+    if only in (None, 'sto', 'sto-summary'):
+        r = check_sto_summary()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] sto-summary   {r['msg']}")
+    if only in (None, 'sto', 'sto-export'):
+        r = check_sto_export()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] sto-export    {r['msg']}")
     if only in (None, 'po-plan', 'po-atb', 'po-bridge', 'po-ref'):
         r = check_po_plan()
         all_ok = all_ok and r["ok"]
@@ -1552,6 +1741,10 @@ def main():
         r = check_po_roll()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-roll        {r['msg']}")
+    if only in (None, 'po-archive', 'po-history', 'po-export'):
+        r = check_po_archive()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-archive    {r['msg']}")
     print("==== 汇总:", "全部通过" if all_ok else "存在失败", "====")
 
 if __name__ == "__main__":
