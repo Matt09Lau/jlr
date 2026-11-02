@@ -57,7 +57,7 @@ function seed(key){return Array.from({length:key==='increase'?12:key==='transfer
  if(key==='service'){r.type=types[i%2];r.rate=95+i%5;r.service='';r.partAbc='A';if(i%2)r.part='';else r.abc='';r.wh=wh.options[i%wh.options.length];}
  if(key==='stocking')Object.assign(r,{ruleNo:'STK'+String(i+1).padStart(4,'0'),allowed:i%3?'允许':'禁止',start:today(),enabled:i%4?'启用':'停用',remark:'演示备货配置'});
  if(key==='transfer'){r.shipWh=network.routes[i%network.routes.length].from;r.receiveWh=network.routes[i%network.routes.length].to;r.lt=2+i%6;}
- if(key==='increase'){r.part=part.options[i%8];r.wh=wh.options[i%wh.options.length];Object.assign(r,{applicant:i>=6?'王经理（计划经理）':'张计划（计划员）',days:3+i,start:'2026-01-01',end:'2030-01-01',status:statusList[i%6],reason:'旺季备货需求',history:[]});if(i>=6&&r.status==='待计划经理确认')r.status='待库存控制高级经理确认';if(i>=6)r.start=today();if(i>=6&&i%6!==3)r.approved={days:2,start:'2026-01-01',end:'2027-01-01'};if(i%6===4)r.history.push({at:stamp(),action:'驳回',reason:'请补充增储依据'});}
+ if(key==='increase'){r.part=part.options[i%8];r.wh=wh.options[i%wh.options.length];Object.assign(r,{applicant:i>=6?'王经理（计划经理）':'张计划（计划员）',days:3+i,start:'2026-01-01',end:'2030-01-01',status:statusList[i%6],reason:'旺季备货需求',history:[]});if(i>=6&&r.status==='待计划经理确认')r.status='待库存控制高级经理确认';if(i>=6)r.start=today();if(i>=6&&i%6!==3)r.approved={days:2,start:'2026-01-01',end:'2027-01-01'};r.history=mockApprovalHistory(r);}
  if(key==='cycle'){r.type=i%2?'ABC分类计划周期':'配件计划周期';r.cycle=r.buildType==='PO 建储'?cycleOptions[i%cycleOptions.length]:7+i%4*7;if(i%2)r.part='';else r.abc='';}
  if(key==='risk'||key==='riskRule')Object.assign(r,{minCoef:0.8,minDays:-2,maxCoef:1.2,maxDays:3,xyz:['X','Y','Z'][i%3],volume:['大','中','小'][i%3]});
  if(key==='riskRule')r.amount=['P0~P25','P25~P50','P50~P75','P75 以上'][i%4];
@@ -65,7 +65,7 @@ function seed(key){return Array.from({length:key==='increase'?12:key==='transfer
  if(key==='result')Object.assign(r,resultPeriod(r.buildType,i));
  return decorate(r);
  }).filter((r,i,arr)=>arr.findIndex(x=>uniqueKey(key,x)===uniqueKey(key,r))===i);}
-function migrate(key,rows){const out=rows.map((row,index)=>{const r=JSON.parse(JSON.stringify(row));if(key==='riskRule'&&!['P0~P25','P25~P50','P50~P75','P75 以上'].includes(r.amount))r.amount='';if(key==='increase'){const rename=v=>typeof v==='string'?v.replace(/库存高级经理/g,'库存控制高级经理'):v;r.applicant=r.applicant||'张计划（计划员）';r.status=rename(r.status);r.modifier=rename(r.modifier);for(const h of r.history||[]){h.role=rename(h.role);h.action=rename(h.action);}}if(key==='result'){if(r.buildType==='采购建储')r.buildType='PO 建储';if(r.buildType==='STO调拨建储')r.buildType='STO 建储';const period=resultPeriod(r.buildType,index);if(!r.buildVersion)r.buildVersion=period.buildVersion;if(!r.useDate)r.useDate=period.useDate;}else if(buildTypePages.includes(key)&&!r.buildType)r.buildType='PO 建储';return decorate(r);});if(buildTypePages.includes(key)&&!out.some(r=>r.buildType==='STO 建储'))for(const r of seed(key).filter(r=>r.buildType==='STO 建储')){if(!out.some(x=>uniqueKey(key,x)===uniqueKey(key,r)))out.push({...r,id:r.id+'-sto'});}return out;}
+function migrate(key,rows){const out=rows.map((row,index)=>{const r=JSON.parse(JSON.stringify(row));if(key==='riskRule'&&!['P0~P25','P25~P50','P50~P75','P75 以上'].includes(r.amount))r.amount='';if(key==='increase'){const rename=v=>typeof v==='string'?v.replace(/库存高级经理/g,'库存控制高级经理'):v;r.applicant=r.applicant||'张计划（计划员）';if(!r.history?.length||!r.history.some(h=>h.after))r.history=mockApprovalHistory(r);r.status=rename(r.status);r.modifier=rename(r.modifier);for(const h of r.history||[]){h.role=rename(h.role);h.action=rename(h.action);}}if(key==='result'){if(r.buildType==='采购建储')r.buildType='PO 建储';if(r.buildType==='STO调拨建储')r.buildType='STO 建储';const period=resultPeriod(r.buildType,index);if(!r.buildVersion)r.buildVersion=period.buildVersion;if(!r.useDate)r.useDate=period.useDate;}else if(buildTypePages.includes(key)&&!r.buildType)r.buildType='PO 建储';return decorate(r);});if(buildTypePages.includes(key)&&!out.some(r=>r.buildType==='STO 建储'))for(const r of seed(key).filter(r=>r.buildType==='STO 建储')){if(!out.some(x=>uniqueKey(key,x)===uniqueKey(key,r)))out.push({...r,id:r.id+'-sto'});}return out;}
 function uniqueKey(key,r){return schemas[key].unique.map(k=>r[k]??'').join('|');}
 function isDisabled(key,f,r){return (key==='service'&&f==='service')||(key==='increase'&&['applicant','buildType','part','wh'].includes(f)&&!!r.id)||(['service','cycle'].includes(key)&&((f==='abc'&&String(r.type).startsWith('配件'))||(f==='part'&&String(r.type).startsWith('ABC'))))||(key==='purchase'&&f==='lt'&&r.method!=='手工维护')||(key==='result'&&f==='adjustReorder'&&r.buildType!=='PO 建储');}
 function required(key,f,r){return !['remark','adjustReorder'].includes(f)&&(!isDisabled(key,f,r)||(key==='increase'&&['buildType','part','wh'].includes(f)));}
@@ -103,6 +103,18 @@ function transition(rows,action,role,reason){
 }
 function csvEncode(rows,cols){return '\ufeff'+[cols.map(c=>c.label),...rows.map(r=>cols.map(c=>r[c.key]??''))].map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');}
 function csvParse(text){const rows=[];let row=[],cell='',quoted=false;for(let i=0;i<text.length;i++){let c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}else if(c===','&&!quoted){row.push(cell);cell='';}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(cell);if(row.some(v=>v!==''))rows.push(row);row=[];cell='';}else cell+=c;}if(quoted)throw Error('CSV引号未闭合');row.push(cell);if(row.some(v=>v!==''))rows.push(row);if(rows[0])rows[0][0]=rows[0][0].replace(/^\ufeff/,'');return rows;}
+function mockApprovalHistory(r){
+ const manager=highestApplicantRole(r)==='计划经理',content={days:r.days,start:r.start,end:r.end,reason:r.reason};
+ const base='2026-10-26 ';
+ const events=[{action:'新增申请',at:base+'09:00:00',actor:r.applicant,role:manager?'计划经理':'计划员',toStatus:'待审批',after:content}];
+ const add=(action,time,actor,status,reason='')=>events.push({action,at:base+time,actor,toStatus:status,reason,after:{...content}});
+ if(r.status!=='待审批')add('确认','09:10:00',r.applicant,manager?'待库存控制高级经理确认':'待计划经理确认');
+ if(!manager&&['待库存控制高级经理确认','审批通过'].includes(r.status))add('计划经理确认','10:00:00','王经理','待库存控制高级经理确认');
+ if(r.status==='审批通过')add('库存控制高级经理确认','11:00:00','陈经理','审批通过');
+ if(r.status==='已驳回')add('驳回','10:00:00','王经理','已驳回','请补充旺季需求依据');
+ if(r.status==='已撤回')add('撤回','09:30:00',r.applicant,'已撤回','调整申请有效期后重新提交');
+ return events;
+}
 function applicationLogs(row){
  const groups=[];let current;
  for(const h of row.history||[]){
@@ -112,8 +124,8 @@ function applicationLogs(row){
   current.events.push(h);
  }
  return groups.reverse().map((g,i)=>({number:groups.length-i,fields:[
-  ['申请增储天数',g.content?.days??'未记录'],['申请生效日期',g.content?.start||'未记录'],['申请失效日期',g.content?.end||'未记录'],['申请原因',g.content?.reason||'未记录'],
-  ...g.events.flatMap(h=>[[h.action+'时间',h.at||'未记录'],[h.action+'操作人',h.actor||h.by||'未记录'],[h.action+'角色',h.role||'未记录'],[h.action+'后状态',h.toStatus||'未记录'],[h.action+'意见',h.reason||'—']])
+  ['申请增储天数',g.content?.days??'—'],['申请生效日期',g.content?.start||'—'],['申请失效日期',g.content?.end||'—'],['申请原因',g.content?.reason||'—'],
+  ...g.events.flatMap(h=>[[h.action+'时间',h.at||'—'],[h.action+'操作人',h.actor||h.by||'—'],...(['计划经理确认','库存控制高级经理确认'].includes(h.action)?[]:[[h.action+'角色',h.role||'—']]),[h.action+'后状态',h.toStatus||'—'],...(['确认','计划经理确认','库存控制高级经理确认'].includes(h.action)?[]:[[h.action+'意见',h.reason||'—']])])
  ]}));
 }
 const api={applicationLogs,cycleOptions,highestApplicantRole,allowedActions,normalQuantile,schemas,seed,validate,normalize,transition,effective,effectiveFields,uniqueKey,csvParse,csvEncode,isDisabled,required,actionRole,migrate,isoWeekVersion,resultPeriod};
