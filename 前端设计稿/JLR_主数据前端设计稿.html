@@ -2194,7 +2194,7 @@ mark {
 
             <!-- 仓网切换：CJLR / JLR / JLRC 三套仓网，跨仓网不共享库存，分别查看 -->
             <a-tabs v-model:activeKey="stoSumTab" type="card" style="margin-bottom:12px;">
-              <a-tab-pane v-for="n in stoNetworks" :key="n" :tab="n + ' 仓网（' + stoSumNetCount(n) + '）'"/>
+              <a-tab-pane v-for="n in stoNetworks" :key="n" :tab="n + ' 仓网'"/>
             </a-tabs>
 
             <!-- 筛选卡片（仅查询，不改数；导出后即已执行计划，页面只读） -->
@@ -7207,12 +7207,11 @@ const app = createApp({
     watch(stoExpTab, ()=>{ stoExpSelectedKeys.value=[]; stoExpPage.current=1; });
 
     /* ================= 6. 调拨计划汇总（STO 汇总维度报表） =================
-       口径＝PRD 6.5.2「汇总维度页面（导出后的计划：相当于执行了的计划）」，列结构严格按业务报表 35 列输出：
+       口径＝PRD 6.5.2「汇总维度页面（导出后的计划：相当于执行了的计划）」，列结构对齐 6.4.3.2 计算逻辑表：
          数据快照日期(Snapshot Date) / 配件号(Material) / 配件名称(Material Description)
-       + 每个区域仓 7 列：目标库存(SSQ)、调拨占比(STO Ratio)、调拨数量(Total STO Qty)、
-         库存+在途(StockPlusIntr)、潜在缺口(Potential)、当前占比(Currenratio)、目标占比(SSQ Ratio)
-       + 仓网 4 列：中心仓库存(CJDC Stock)、调拨后未分配量(After STO Unallocated)、
-         总需求(Total Demand)、已分配量(Total Allocated)
+       + 每个区域仓 8 列（指标名取自 6.4.3.2 计算逻辑表）：是否备货标识 / 目标库存(SSQ) / STO分配率(STO Ratio) /
+         STO计划量(Total STO Qty) / 预期库存(StockPlusIntr) / 可用库存(Available) / Currenratio / SSQ Ratio
+       + 中心仓 4 列（指标名取自 6.4.3.2 计算逻辑表）：预期库存 / STO分配后库存 / STO分配总量 / 近3个月月均销量
        三套仓网（跨仓网不共享库存）：CJLR＝CJDC→CJV0~CJV3；JLR＝JB09→CN00~CN03；JLRC＝CN00→CN01~CN03。
        页面只读：无新增/编辑/审批/导入，仅支持查询与导出。 */
     /* ---- 仓网结构（跨仓网不共享库存）：中心仓 → 区域仓 ---- */
@@ -7221,20 +7220,21 @@ const app = createApp({
       JLR:  { center:'JB09', regions:['CN00','CN01','CN02','CN03'] },
       JLRC: { center:'CN00', regions:['CN01','CN02','CN03'] },
     };
-    /* 每个区域仓固定 8 列：是否备货标识 + 7 项库存诊断，顺序与业务报表一致；
+    /* 每个区域仓固定 8 列，指标名严格取自 6.4.3.2 计算逻辑表（分仓指标）：
+       是否备货标识 / 目标库存 / STO分配率 / STO计划量 / 预期库存 / 可用库存 / Currenratio / SSQ Ratio；
        是否备货位于各区域仓「目标库存」列前，取值 允许 / 禁止 */
     const stoSumRegionMeta = [
-      { key:'stock_flag', label:'是否备货', w:110 },
+      { key:'stock_flag', label:'是否备货标识', w:120 },
       { key:'ssq',       label:'目标库存',  w:100, num:true },
-      { key:'sto_ratio', label:'调拨占比',  w:96 },
-      { key:'sto_qty',   label:'调拨数量',  w:100, num:true },
-      { key:'spi',       label:'库存+在途', w:104, num:true },
-      { key:'potential', label:'潜在缺口',  w:100, num:true },
-      { key:'cur_ratio', label:'当前占比',  w:96 },
-      { key:'ssq_ratio', label:'目标占比',  w:96 },
+      { key:'sto_ratio', label:'STO分配率', w:100 },
+      { key:'sto_qty',   label:'STO计划量', w:100, num:true },
+      { key:'spi',       label:'预期库存',  w:104, num:true },
+      { key:'potential', label:'可用库存',  w:100, num:true },
+      { key:'cur_ratio', label:'Currenratio', w:110 },
+      { key:'ssq_ratio', label:'SSQ Ratio', w:100 },
     ];
     const stoSumSnapshot = '2026-09-21';
-    /* CJLR 仓网前 10 行＝业务实际导出数据（配件号/名称/各区域仓目标库存、库存+在途、调拨数量、中心仓库存、全网总需求） */
+    /* CJLR 仓网前 10 行＝业务实际导出数据（配件号/名称/各区域仓目标库存、预期库存、STO计划量、中心仓预期库存、全网总需求） */
     const stoSumRealRows = [
       ['02533124014PVJ','扶手盖',            [48,69,54,23],    [48,69,53,22],    [0,0,1,1],   1012, 103],
       ['02602123497','轮毂轴承',             [5,5,3,4],        [5,5,2,4],        [0,0,1,0],   3,    8],
@@ -7258,8 +7258,8 @@ const app = createApp({
       return (h % 10) < 8 ? '允许' : '禁止';
     }
     function stoSumPct(v){ return (Math.round(v*10000)/100).toFixed(2) + '%'; }
-    /* 计算链：缺口＝MAX(目标库存−库存+在途,0)；调拨数量＝ROUNDUP(缺口÷MPQ)×MPQ（中心仓可分配量封顶）；
-       潜在缺口＝MAX(目标库存−库存+在途−调拨数量,0)；调拨后未分配量＝中心仓库存−Σ调拨数量；已分配量＝Σ调拨数量 */
+    /* 计算链：缺口＝MAX(目标库存−库存+在途,0)；STO计划量＝ROUNDUP(缺口÷MPQ)×MPQ（中心仓可分配量封顶）；
+       可用库存＝MAX(目标库存−库存+在途−STO计划量,0)；中心仓预期库存＝中心仓当前库存＋STO分配总量；STO分配后库存＝中心仓当前库存 */
     function stoSumBuildRow(o){
       const regions = o.regions, ssq = o.ssq, spi = o.spi, sto = o.sto;
       const curSum = regions.reduce(function(a,_,i){ return a + spi[i] + sto[i]; }, 0);
@@ -7278,10 +7278,13 @@ const app = createApp({
         row[r + '_ssq_ratio'] = ssqSum ? stoSumPct(ssq[i] / ssqSum) : '0.00%';
       });
       const alloc = sto.reduce((a,b)=>a+b, 0);
-      row.center_stock = o.center_stock;
-      row.total_alloc  = alloc;
-      row.unalloc_qty  = Math.max(0, o.center_stock - alloc);
-      row.total_demand = o.total_demand;
+      const cstock = o.center_stock || 0;
+      // 中心仓指标（取自 6.4.3.2 计算逻辑表）：预期库存＝当前库存＋STO分配总量；STO分配后库存＝预期库存−STO分配总量；
+      // STO分配总量＝Σ各分仓调拨数量；近3个月月均销量＝全网总需求÷3（演示口径）
+      row.center_expected  = cstock + alloc;
+      row.center_sto_after = cstock;
+      row.center_sto_total = alloc;
+      row.center_avg_3m    = o.total_demand ? Math.round(o.total_demand / 3) : Math.round(alloc / 3);
       return row;
     }
     const stoSumData = Vue.reactive([]);
@@ -7360,10 +7363,10 @@ const app = createApp({
           out.push({ title:r + ' ' + m.label, key:r + '_' + m.key, dataIndex:r + '_' + m.key, width:m.w, align:'right', num:!!m.num });
         });
       });
-      out.push({ title: meta.center + ' 中心仓库存',   key:'center_stock',  dataIndex:'center_stock',  width:136, align:'right', num:true });
-      out.push({ title: net + ' 调拨后未分配量', key:'unalloc_qty',   dataIndex:'unalloc_qty',   width:152, align:'right', num:true });
-      out.push({ title: net + ' 总需求',         key:'total_demand',  dataIndex:'total_demand',  width:112, align:'right', num:true });
-      out.push({ title: net + ' 已分配量',       key:'total_alloc',   dataIndex:'total_alloc',   width:112, align:'right', num:true });
+      out.push({ title: meta.center + ' 预期库存',        key:'center_expected',  dataIndex:'center_expected',  width:120, align:'right', num:true });
+      out.push({ title: meta.center + ' STO分配后库存',   key:'center_sto_after', dataIndex:'center_sto_after', width:140, align:'right', num:true });
+      out.push({ title: meta.center + ' STO分配总量',     key:'center_sto_total', dataIndex:'center_sto_total', width:130, align:'right', num:true });
+      out.push({ title: meta.center + ' 近3个月月均销量', key:'center_avg_3m',    dataIndex:'center_avg_3m',    width:140, align:'right', num:true });
       return out;
     });
     const stoSumHiddenCols = ref([]);
@@ -7400,7 +7403,7 @@ const app = createApp({
       if(f.abc_class && r.abc_class!==f.abc_class) return false;
       if(f.vehicle_code && !String(r.vehicle_code).toLowerCase().includes(f.vehicle_code.toLowerCase())) return false;
       if(f.planner && r.planner!==f.planner) return false;
-      if(f.has_sto){ const has = (Number(r.total_alloc)||0) > 0; if((f.has_sto==='是') !== has) return false; }
+      if(f.has_sto){ const has = (Number(r.center_sto_total)||0) > 0; if((f.has_sto==='是') !== has) return false; }
       return true;
     }));
     const stoSumPaged = computed(()=>{ const s=(stoSumPage.current-1)*stoSumPage.size; return stoSumFiltered.value.slice(s, s+stoSumPage.size); });

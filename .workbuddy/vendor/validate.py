@@ -1321,10 +1321,10 @@ def check_sto():
 
 def check_sto_summary():
     """调拨计划汇总（sto-summary）：PRD 6.5.2 汇总维度页面，导出后的「已执行计划」只读报表。
-    列结构严格按业务报表 39 列：数据快照日期 / 配件号 / 配件名称 + 每个区域仓 8 列
-    （是否备货、目标库存、调拨占比、调拨数量、库存+在途、潜在缺口、当前占比、目标占比）+ 仓网 4 列
-    （中心仓库存、调拨后未分配量、总需求、已分配量）。
-    断言：渲染出行、39 列齐备、三套仓网可切换、仅导出（无导入/无编辑/无审批）。"""
+    列结构严格按 6.4.3.2 计算逻辑表 39 列：数据快照日期 / 配件号 / 配件名称 + 每个区域仓 8 列
+    （是否备货标识、目标库存、STO分配率、STO计划量、预期库存、可用库存、Currenratio、SSQ Ratio）+ 中心仓 4 列
+    （{中心仓编码} 预期库存、STO分配后库存、STO分配总量、近3个月月均销量）。
+    断言：渲染出行、39 列齐备、三套仓网可切换、仅导出（无导入/无编辑/无审批），且旧指标名已移除。"""
     r = rendered(dump("sto-summary"))
     bad = []
     if r.count("ant-table-row") <= 0:
@@ -1332,16 +1332,21 @@ def check_sto_summary():
     for c in ["数据快照日期", "配件号", "配件名称"]:
         if c not in r:
             bad.append("缺列:" + c)
-    # CJLR 仓网：中心仓 CJDC，区域仓 CJV0~CJV3，每组 8 列（是否备货位于目标库存列前）
+    # CJLR 仓网：中心仓 CJDC，区域仓 CJV0~CJV3，每组 8 列（指标名取自 6.4.3.2 计算逻辑表）
     for reg in ["CJV0", "CJV1", "CJV2", "CJV3"]:
-        if (reg + " 是否备货") not in r:
-            bad.append("缺列:" + reg + " 是否备货")
-        for m in ["目标库存", "调拨占比", "调拨数量", "库存+在途", "潜在缺口", "当前占比", "目标占比"]:
+        if (reg + " 是否备货标识") not in r:
+            bad.append("缺列:" + reg + " 是否备货标识")
+        for m in ["目标库存", "STO分配率", "STO计划量", "预期库存", "可用库存", "Currenratio", "SSQ Ratio"]:
             if (reg + " " + m) not in r:
                 bad.append("缺列:" + reg + " " + m)
-    for c in ["CJDC 中心仓库存", "CJLR 调拨后未分配量", "CJLR 总需求", "CJLR 已分配量"]:
+    for c in ["CJDC 预期库存", "CJDC STO分配后库存", "CJDC STO分配总量", "CJDC 近3个月月均销量"]:
         if c not in r:
             bad.append("缺列:" + c)
+    # 旧指标名应已移除（严格对齐 6.4.3.2 计算逻辑表）
+    for c in ["调拨占比", "调拨数量", "库存+在途", "潜在缺口", "当前占比", "目标占比",
+              "中心仓库存", "调拨后未分配量", "总需求", "已分配量"]:
+        if c in r:
+            bad.append("残留旧指标名:" + c)
     for n in ["CJLR", "JLR", "JLRC"]:
         if n not in r:
             bad.append("缺仓网:" + n)
