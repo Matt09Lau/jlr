@@ -167,13 +167,13 @@ def check_po_pages():
 
 def check_po_regular_activity():
     """采购计划-活动零件拦截弹窗：按需求第8条(历史数据处理-活动登记表)展示该配件登记的活动数量，
-    并提供「复制活动数量」按钮将登记量填入调整计划数量（客户调整的计划数量）。
+    供计划员参考后手动填写调整计划数量（客户调整的计划数量）。
     源码级断言：存在活动登记表主数据(poRegActivityTable)、按配件号查找(poRegActReg/poRegEditActReg)、
-    复制按钮(poRegCopyActivityQty)、展示面板标识(活动登记信息/活动数量（客户调整量）/复制活动数量)；
+    展示面板标识(活动登记信息/活动数量（客户调整量）)；
     且旧版「活动名称 / 编号 / 请输入活动名称或编号 / activity_no」已彻底移除。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
-    need = ["poRegActivityTable", "poRegActReg", "poRegEditActReg", "poRegCopyActivityQty",
-            "活动登记信息", "活动数量（客户调整量）", "复制活动数量"]
+    need = ["poRegActivityTable", "poRegActReg", "poRegEditActReg",
+            "活动登记信息", "活动数量（客户调整量）"]
     miss = [k for k in need if k not in src]
     bad = [k for k in ["活动名称 / 编号", "请输入活动名称或编号", "activity_no", "row.activity_no"] if k in src]
     ok = (not miss) and (not bad)

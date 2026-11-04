@@ -978,7 +978,6 @@
                   </div>
                   <label><span><b class="jlrs-req">*</b>调整计划数量（客户调整的计划数量）</span>
                     <a-input-number v-model:value="poRegEditRow.adjust_qty" :min="0" :precision="0" :placeholder="'活动数量 ' + (poRegEditActReg ? poRegEditActReg.activity_qty : '—') + '，可参考后调整'"/>
-                    <a-button class="jlrs-link-btn" type="link" @click="poRegCopyActivityQty" v-if="poRegEditActReg">复制活动数量</a-button>
                   </label>
                   <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>调整原因</span>
                     <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="活动零件须填写理由，100 字以内" :maxlength="100"/></label>
@@ -5036,7 +5035,7 @@ const poRegSuppliers = [
    字段口径严格取自需求文档：配件号、活动类型（服务活动/促销活动）、开始日期、结束日期、
    活动数量、处理方案、比例计算开始日期、比例计算结束日期、备注、最后修改人/时间。
    本原型以「按配件号确定性生成」模拟历史需求处理-活动登记表主数据；活动零件拦截弹窗据此
-   按配件号读取登记的活动数量，辅助计划员决策下单量（复制活动数量为客户调整的计划数量）。 */
+   按配件号读取登记的活动数量，辅助计划员决策下单量（活动数量展示在调整弹窗中供参考）。 */
 function poRegHash(s){ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
 const poRegActivityTypes = ['服务活动','促销活动'];
 const poRegActivityTable = matData.map((m, k)=>{
@@ -6496,7 +6495,6 @@ const app = createApp({
     const poRegEditBlockNote = computed(()=> poRegEditBlockNoteMap[poRegEditRow.value ? poRegEditRow.value.block_reason : ''] || '');
     // 活动零件拦截：按配件号读取活动登记表中登记的记录（历史需求处理-活动登记表）
     const poRegEditActReg = computed(()=>{ const r=poRegEditRow.value; return r ? (poRegActivityMap[r.part_code] || null) : null; });
-    function poRegCopyActivityQty(){ const reg=poRegEditActReg.value; const r=poRegEditRow.value; if(reg && r){ r.adjust_qty = reg.activity_qty; poRegEditErr.adjustQty=''; msg('已复制活动数量 '+reg.activity_qty+' 至调整计划数量','success'); } }
     function poRegSaveEdit(){
       const row = poRegEditRow.value; if(!row) return;
       let ok = true;
@@ -10368,7 +10366,7 @@ const app = createApp({
       poRegCanSubmit, poRegCanApprove, poRegCanReject, poRegRowSelection, poRegCustomRow, poRegBillColor,
       poRegSubmit, poRegApproveOpen, poRegApproveRemark, poRegApproveErr, poRegApproveConfirm,
       poRegRejectOpen, poRegRejectRemark, poRegRejectErr, poRegRejectConfirm,
-      poRegEditOpen, poRegEditRow, poRegEditErr, poRegEditErrList, poRegOpenEdit, poRegSaveEdit, poRegEditCurSupplier, poRegEditBlockNote, poRegEditActReg, poRegCopyActivityQty, poRegOpenDetail, poRegDetailOpen, poRegDetailRow,
+      poRegEditOpen, poRegEditRow, poRegEditErr, poRegEditErrList, poRegOpenEdit, poRegSaveEdit, poRegEditCurSupplier, poRegEditBlockNote, poRegEditActReg, poRegOpenDetail, poRegDetailOpen, poRegDetailRow,
       poRegChgOpen, poRegChgRow, poRegOpenChgLog, poRegChgColumns, poRegChgColor,
       poRegImportOpen, poRegDoImport, poRegExportOpen, poRegExportMode, poRegExportFields, poRegToggleExportField,
       poRegExportCsv, poRegExportSource, poRegDoExport, poRegPush, poRegMoreMenu, poRegPlanTypes, poRegReceiveModes, poRegStatuses, poRegPurchaseTypes, poRegBlockReasonOptions, poRegPushStatuses,
