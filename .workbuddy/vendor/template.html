@@ -3206,6 +3206,14 @@
             </div>
           </template>
 
+          <!-- ============ 报表 · All time buy跟踪报表 ============ -->
+          <template v-else-if="activeMenu==='all-time-buy-report'">
+            <section class="card">
+              <h2>All time buy跟踪报表</h2>
+              <a-empty description="暂无跟踪数据"/>
+            </section>
+          </template>
+
           <!-- ============ 需求预测 / 参考零件需求预测（参考件预测流程） ============ -->
           <template v-else-if="activeMenu==='fc-new' || activeMenu==='fc-new-draft'">
             <div class="card fc-new-card">
@@ -5848,7 +5856,7 @@ const app = createApp({
     const collapsed = ref(false);
     const menuKeyword = ref('');
     const openGroups = reactive({ base:true, strategy:true, draft:false, report:false });
-    const VALID_KEYS = ['strategy-purchase','strategy-service','strategy-stocking','strategy-transfer','strategy-increase','strategy-cycle','strategy-risk','strategy-riskRule','strategy-result','strategy-result-po','strategy-result-sto','mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier','plan-hier-2','plan-hier-3','gp-params','svc-dash',
+    const VALID_KEYS = ['strategy-purchase','strategy-service','strategy-stocking','strategy-transfer','strategy-increase','strategy-cycle','strategy-risk','strategy-riskRule','strategy-result','strategy-result-po','strategy-result-sto','mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier','plan-hier-2','plan-hier-3','gp-params','svc-dash','all-time-buy-report',
       'fc-new','fc-new-draft','fc-long','fc-long-draft','fc-buyout','fc-buyout-draft','fc-regular','fc-regular-draft','fc-wh-regular','fc-best','fc-backtest','fc-backtest-draft',
       'part-group','po-regular','po-history','po-export','po-eop','po-approval','po-issue','sto-week','sto-export','sto-summary','sto-next',
       'po-atb','po-bridge','po-ref','po-roll'];
@@ -5907,6 +5915,7 @@ const app = createApp({
       { type:'item', key:'po-ref', parent:'po', title:'参考零件采购计划', icon:'🆕' },
       { type:'group', key:'report', title:'报表' },
       { type:'item', key:'svc-dash', parent:'report', title:'服务水平dashboard', icon:'📊' },
+      { type:'item', key:'all-time-buy-report', parent:'report', title:'All time buy跟踪报表', icon:'📊' },
       { type:'group', key:'draft', title:'草稿' },
       { type:'item', key:'plan-hier', parent:'draft', title:'计划层级管理', icon:'🧩' },
       { type:'item', key:'plan-hier-2', parent:'draft', title:'计划层级管理2', icon:'📋' },
