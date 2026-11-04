@@ -518,6 +518,10 @@ mark {
   .jlrs-form-grid .ant-select,.jlrs-form-grid .ant-input-number,.jlrs-form-grid .ant-picker{width:100%;}
   .jlrs-form-grid-3{grid-template-columns:repeat(3,minmax(0,1fr));}
   .jlrs-req{color:#ff4d4f;margin-right:2px;}
+  .jlrs-act-reg{border:1px solid #e8e8e8;border-radius:6px;padding:12px 14px;background:#fafafa;}
+  .jlrs-act-reg-title{font-weight:600;margin-bottom:10px;color:#1f2d3d;font-size:13px;}
+  .jlrs-act-qty{color:#c0392b;font-weight:700;font-size:14px;}
+  .jlrs-link-btn{padding-left:10px;vertical-align:middle;}
   .jlrs-sec{font-size:13px;font-weight:600;color:#1f1f1f;margin:4px 0 12px;}
   .fc-bridge-total-row>td{background:#fafafa !important;font-weight:600;border-top:1px solid #d9d9d9;}
   .fc-bridge-cur-th{background:#e6f4ff !important;color:#1677ff !important;}
@@ -1206,12 +1210,31 @@ mark {
                     <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="调整数量须填写原因，100 字以内" :maxlength="100"/></label>
                 </div>
 
-                <!-- 活动零件：填写活动名称/编号 + 调整原因 -->
+                <!-- 活动零件：展示活动登记表中登记的记录（活动数量），复制为客户调整的计划数量 -->
                 <div v-else-if="poRegEditRow.block_reason==='活动零件'" class="jlrs-form-grid">
-                  <label><span><b class="jlrs-req">*</b>活动名称 / 编号</span>
-                    <a-input v-model:value="poRegEditRow.activity_no" placeholder="请输入活动名称或编号"/></label>
+                  <div class="jlrs-act-reg" style="grid-column:1 / -1;">
+                    <div class="jlrs-act-reg-title">活动登记信息（来自历史需求处理 · 活动登记表）</div>
+                    <a-descriptions bordered size="small" :column="2" v-if="poRegEditActReg">
+                      <a-descriptions-item label="配件号">{{ poRegEditActReg.part_code }}</a-descriptions-item>
+                      <a-descriptions-item label="配件名称">{{ poRegEditActReg.part_name }}</a-descriptions-item>
+                      <a-descriptions-item label="活动类型">{{ poRegEditActReg.activity_type }}</a-descriptions-item>
+                      <a-descriptions-item label="活动期间">{{ poRegEditActReg.start_date }} ~ {{ poRegEditActReg.end_date }}</a-descriptions-item>
+                      <a-descriptions-item label="活动数量（客户调整量）"><span class="jlrs-act-qty">{{ poRegEditActReg.activity_qty }}</span> 件</a-descriptions-item>
+                      <a-descriptions-item label="处理方案">{{ poRegEditActReg.process_plan }}</a-descriptions-item>
+                      <a-descriptions-item v-if="poRegEditActReg.activity_type==='促销活动'" label="比例计算期间">{{ poRegEditActReg.ratio_start }} ~ {{ poRegEditActReg.ratio_end }}</a-descriptions-item>
+                      <a-descriptions-item v-else label="比例计算期间">—</a-descriptions-item>
+                      <a-descriptions-item label="备注" :span="2">{{ poRegEditActReg.remark }}</a-descriptions-item>
+                      <a-descriptions-item label="最后修改人">{{ poRegEditActReg.last_modifier }}</a-descriptions-item>
+                      <a-descriptions-item label="最后修改时间">{{ poRegEditActReg.last_modify_time }}</a-descriptions-item>
+                    </a-descriptions>
+                    <a-alert v-else type="info" :message="'未查询到配件 ' + poRegEditRow.part_code + ' 的活动登记记录'" show-icon style="margin-top:4px;"/>
+                  </div>
+                  <label><span><b class="jlrs-req">*</b>调整计划数量（客户调整的计划数量）</span>
+                    <a-input-number v-model:value="poRegEditRow.adjust_qty" :min="0" :precision="0" :placeholder="'活动数量 ' + (poRegEditActReg ? poRegEditActReg.activity_qty : '—') + '，可参考后调整'"/>
+                    <a-button class="jlrs-link-btn" type="link" @click="poRegCopyActivityQty" v-if="poRegEditActReg">复制活动数量</a-button>
+                  </label>
                   <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>调整原因</span>
-                    <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="活动零件须填写原因，100 字以内" :maxlength="100"/></label>
+                    <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="活动零件须填写理由，100 字以内" :maxlength="100"/></label>
                 </div>
 
                 <!-- 其他（系统自动拦截，计划员无需处理）：仅记录备注 -->
@@ -5318,6 +5341,44 @@ const poRegSuppliers = [
   { code:'V004', name:'法雷奥汽车零部件（荆州）', moq:200, since:'2023-01-10' },
   { code:'V005', name:'宁德时代新能源科技', moq:10, since:'2019-08-05' },
 ];
+/* 活动登记表（原型示意）：对应蓝图 3.3.2 活动登记 / 迭代2 历史数据处理第 8 条。
+   字段口径严格取自需求文档：配件号、活动类型（服务活动/促销活动）、开始日期、结束日期、
+   活动数量、处理方案、比例计算开始日期、比例计算结束日期、备注、最后修改人/时间。
+   本原型以「按配件号确定性生成」模拟历史需求处理-活动登记表主数据；活动零件拦截弹窗据此
+   按配件号读取登记的活动数量，辅助计划员决策下单量（复制活动数量为客户调整的计划数量）。 */
+function poRegHash(s){ let h=2166136261; for(let i=0;i<s.length;i++){ h^=s.charCodeAt(i); h=Math.imul(h,16777619); } return h>>>0; }
+const poRegActivityTypes = ['服务活动','促销活动'];
+const poRegActivityTable = matData.map((m, k)=>{
+  const h = poRegHash(m.material_code);
+  const type = poRegActivityTypes[h % 2];                        // 活动类型
+  const sm = 1 + (h % 6), sd = 1 + ((h>>>3) % 27);              // 开始月 1~6 / 日 1~27
+  const start = new Date(2026, sm-1, sd);
+  const end = new Date(start.getTime() + (30 + ((h>>>5) % 120)) * 86400000);  // 活动天数 30~149
+  const fmt = d => d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
+  const processPlan = type==='服务活动' ? '扣除活动销量剩余总销量按比例分摊' : '活动期间总销量按比例分摊';
+  let ratioStart='', ratioEnd='';
+  if(type==='促销活动'){                                          // 比例计算期间：仅促销活动维护
+    const rs = new Date(2026, 0, 1 + ((h>>>7) % 90));
+    const re = new Date(rs.getTime() + (30 + ((h>>>9) % 60)) * 86400000);
+    ratioStart = fmt(rs); ratioEnd = fmt(re);
+  }
+  return {
+    part_code: m.material_code,
+    part_name: m.material_name,
+    activity_type: type,
+    start_date: fmt(start),
+    end_date: fmt(end),
+    activity_qty: 50 + (h % 950),                               // 活动数量 50~999
+    process_plan: processPlan,
+    ratio_start: ratioStart,
+    ratio_end: ratioEnd,
+    remark: (h % 3 === 0) ? '质量召回活动，需优先保障备货' : (type==='促销活动' ? '门店促销活动，活动期间销量上浮' : '常规服务活动'),
+    last_modifier: '张伟（需求预测）',
+    last_modify_time: '2026-09-' + pad2(10 + (k % 9)) + ' 14:' + pad2(k % 60),
+  };
+});
+const poRegActivityMap = {}; poRegActivityTable.forEach(a=>{ poRegActivityMap[a.part_code]=a; });
+function poRegActReg(code){ return poRegActivityMap[code] || null; }
 /* 常规采购计划：变更记录（原型示意）
    每行计划按时间顺序记录变更日志，字段口径：
    变更类型 / 变更内容（合并 变更字段+变更前+变更后，按变更类型格式化）/ 变更来源 / 变更人 / 变更时间 / 变更原因 */
@@ -6741,6 +6802,9 @@ const app = createApp({
       '直供件':'直供件，计划员无需处理',
     };
     const poRegEditBlockNote = computed(()=> poRegEditBlockNoteMap[poRegEditRow.value ? poRegEditRow.value.block_reason : ''] || '');
+    // 活动零件拦截：按配件号读取活动登记表中登记的记录（历史需求处理-活动登记表）
+    const poRegEditActReg = computed(()=>{ const r=poRegEditRow.value; return r ? (poRegActivityMap[r.part_code] || null) : null; });
+    function poRegCopyActivityQty(){ const reg=poRegEditActReg.value; const r=poRegEditRow.value; if(reg && r){ r.adjust_qty = reg.activity_qty; poRegEditErr.adjustQty=''; msg('已复制活动数量 '+reg.activity_qty+' 至调整计划数量','success'); } }
     function poRegSaveEdit(){
       const row = poRegEditRow.value; if(!row) return;
       let ok = true;
@@ -6758,7 +6822,7 @@ const app = createApp({
         else poRegEditErr.contract='';
       }
       if(reason==='活动零件'){
-        if(!row.activity_no || !row.activity_no.trim()){ poRegEditErr.activity='请填写活动名称/编号'; ok=false; } else poRegEditErr.activity='';
+        if(row.adjust_qty===null || row.adjust_qty===undefined || row.adjust_qty < 0 || !Number.isInteger(row.adjust_qty)){ poRegEditErr.adjustQty='调整计划数量必须为非负整数'; ok=false; } else poRegEditErr.adjustQty='';
       }
       if(reason==='联合MOQ凑单超量' || reason==='成套采购凑单超量'){
         if(row.adjust_qty===null || row.adjust_qty===undefined || row.adjust_qty < 0 || !Number.isInteger(row.adjust_qty)){ poRegEditErr.adjustQty='调整计划数量必须为非负整数'; ok=false; } else poRegEditErr.adjustQty='';
@@ -6800,9 +6864,16 @@ const app = createApp({
           pushLog('数量调整','调整计划数量', t.adjust_qty, row.adjust_qty, '人工', row.adjust_reason||'下调凑单超量');
           pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','调整数量后拦截消除');
         } else if(reason==='活动零件'){
-          // 「登记活动信息」同理归入 解除拦截(系统)，明细写入变更原因
-          upd.activity_no = row.activity_no; upd.is_blocked='否'; upd.block_reason='—';
-          pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','登记活动信息（'+row.activity_no+'）后拦截消除');
+          // 活动零件：依据活动登记表登记的活动数量决策下单量；净效果＝解除拦截
+          const reg = poRegActReg(row.part_code);
+          const actQty = reg ? reg.activity_qty : '—';
+          const actType = reg ? reg.activity_type : '—';
+          upd.adjust_qty = row.adjust_qty; upd.adjust_reason = row.adjust_reason;
+          upd.is_blocked='否'; upd.block_reason='—';
+          if(t.adjust_qty !== row.adjust_qty){
+            pushLog('数量调整','调整计划数量', t.adjust_qty, row.adjust_qty, '人工', '参考活动登记表活动数量（'+actType+' '+actQty+'）调整');
+          }
+          pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','登记活动信息（'+actType+'，活动数量 '+actQty+'）后拦截消除');
         } else {
           // 系统自动拦截（计划员无需处理）：仅更新备注，维持拦截。
           // 备注变更不属于目录内任何变更类型，故不落变更日志（明细保留在「调整原因」列）
@@ -10605,7 +10676,7 @@ const app = createApp({
       poRegCanSubmit, poRegCanApprove, poRegCanReject, poRegRowSelection, poRegCustomRow, poRegBillColor,
       poRegSubmit, poRegApproveOpen, poRegApproveRemark, poRegApproveErr, poRegApproveConfirm,
       poRegRejectOpen, poRegRejectRemark, poRegRejectErr, poRegRejectConfirm,
-      poRegEditOpen, poRegEditRow, poRegEditErr, poRegEditErrList, poRegOpenEdit, poRegSaveEdit, poRegEditCurSupplier, poRegEditBlockNote, poRegOpenDetail, poRegDetailOpen, poRegDetailRow,
+      poRegEditOpen, poRegEditRow, poRegEditErr, poRegEditErrList, poRegOpenEdit, poRegSaveEdit, poRegEditCurSupplier, poRegEditBlockNote, poRegEditActReg, poRegCopyActivityQty, poRegOpenDetail, poRegDetailOpen, poRegDetailRow,
       poRegChgOpen, poRegChgRow, poRegOpenChgLog, poRegChgColumns, poRegChgColor,
       poRegImportOpen, poRegDoImport, poRegExportOpen, poRegExportMode, poRegExportFields, poRegToggleExportField,
       poRegExportCsv, poRegExportSource, poRegDoExport, poRegPush, poRegMoreMenu, poRegPlanTypes, poRegReceiveModes, poRegStatuses, poRegPurchaseTypes, poRegBlockReasonOptions, poRegPushStatuses,

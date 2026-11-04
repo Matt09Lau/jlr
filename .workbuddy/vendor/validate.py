@@ -165,6 +165,21 @@ def check_po_pages():
         details.append("残留字段:" + ",".join(field_left))
     return {"key":"po-4pages","ok":all_ok,"msg":' '.join(details)}
 
+def check_po_regular_activity():
+    """采购计划-活动零件拦截弹窗：按需求第8条(历史数据处理-活动登记表)展示该配件登记的活动数量，
+    并提供「复制活动数量」按钮将登记量填入调整计划数量（客户调整的计划数量）。
+    源码级断言：存在活动登记表主数据(poRegActivityTable)、按配件号查找(poRegActReg/poRegEditActReg)、
+    复制按钮(poRegCopyActivityQty)、展示面板标识(活动登记信息/活动数量（客户调整量）/复制活动数量)；
+    且旧版「活动名称 / 编号 / 请输入活动名称或编号 / activity_no」已彻底移除。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    need = ["poRegActivityTable", "poRegActReg", "poRegEditActReg", "poRegCopyActivityQty",
+            "活动登记信息", "活动数量（客户调整量）", "复制活动数量"]
+    miss = [k for k in need if k not in src]
+    bad = [k for k in ["活动名称 / 编号", "请输入活动名称或编号", "activity_no", "row.activity_no"] if k in src]
+    ok = (not miss) and (not bad)
+    detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
+    return {"key":"po-regular-活动零件","ok":ok,"msg":detail}
+
 def check_fc_buyout_btns():
     """一次买断预测结果：默认展示态，工具栏含「编辑」「生成All time buy计划」；「生成bridge buy计划」已移至长周期预测报表，不应残留；亦不应有「生成采购计划」「保存」（保存仅在编辑态出现）。"""
     dump("fc-buyout")
@@ -1752,6 +1767,10 @@ def main():
         r = check_po_archive()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-archive    {r['msg']}")
+    if only in (None, 'po-regular-activity', 'po'):
+        r = check_po_regular_activity()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-regular-活动零件 {r['msg']}")
     print("==== 汇总:", "全部通过" if all_ok else "存在失败", "====")
 
 if __name__ == "__main__":
