@@ -1505,18 +1505,26 @@ def check_po_archive():
     for col in po_full_extra:
         if not has_col(rh, col):
             bad.append("po-history(列未与采购计划全量一致,缺:" + col + ")")
-    # 筛选区：默认 5 项可见，车型代码 / ABC分类 收在「展开」折叠里（与采购计划一致）
+    # 筛选区：默认 8 项可见，与采购计划（po-regular）完全一致（含当前采购件号 / 是否拦截 / 拦截原因）；
+    # 车型代码 / ABC分类 / 采购类别 / 计划员 / 单据状态 / 计划批次 / 当前可用天数 收在「展开」折叠里
     fi = rh.find('<div class="filter-row"')
     fr = rh[fi:rh.find('<div class="toolbar-row"')] if fi >= 0 else ""
     vis = re.findall(r'class="f-label"[^>]*>([^<]+)<', fr)
-    for need in ["配件号", "配件名称", "建储仓库编码", "建储仓库名称", "计划类型"]:
+    for need in ["配件号", "配件名称", "当前采购件号", "建储仓库编码", "建储仓库名称", "计划类型", "是否拦截", "拦截原因"]:
         if need not in vis:
             bad.append("po-history(筛选默认缺:" + need + ")")
-    for hidden in ["车型代码", "ABC分类"]:
+    for hidden in ["车型代码", "ABC分类", "采购类别", "计划员", "单据状态", "计划批次", "当前可用天数"]:
         if hidden in vis:
             bad.append("po-history(" + hidden + "应收在展开折叠里)")
     if "展开" not in fr and "收起" not in fr:
         bad.append("po-history(缺展开/收起切换)")
+    # 源码级：历史页筛选条件须与采购计划全量一致（v-model 绑定全部字段，含展开项）
+    tpl = open(HTML, encoding="utf-8", errors="replace").read()
+    for bind in ["poHistFilters.cur_purchase_code", "poHistFilters.is_blocked", "poHistFilters.block_reason",
+                 "poHistFilters.purchase_type", "poHistFilters.planner", "poHistFilters.bill_status",
+                 "poHistFilters.plan_batch", "poHistFilters.cover_days"]:
+        if bind not in tpl:
+            bad.append("po-history(筛选缺绑定:" + bind + ")")
     # 行操作：详情 + 变更记录（变更记录沿用采购计划同一套 PRD 4.4.3.2 口径）
     acts = re.findall(r'class="link-btn"[^>]*>([^<]*)<', rh)
     if "变更记录" not in [a.strip() for a in acts]:

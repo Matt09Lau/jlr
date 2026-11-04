@@ -1380,6 +1380,8 @@ mark {
                     <a-input v-model:value="poHistFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="poHistFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">当前采购件号</span>
+                    <a-input v-model:value="poHistFilters.cur_purchase_code" placeholder="当前采购件号" style="width:150px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">建储仓库编码</span>
                     <a-input v-model:value="poHistFilters.wh_code" placeholder="建储仓库编码" style="width:130px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">建储仓库名称</span>
@@ -1387,12 +1389,31 @@ mark {
                   <div class="f-item"><span class="f-label">计划类型</span>
                     <a-select v-model:value="poHistFilters.plan_type" placeholder="计划类型" style="width:140px" allow-clear
                       :options="poRegPlanTypes.map(v=>({value:v,label:v}))"/></div>
+                  <div class="f-item"><span class="f-label">是否拦截</span>
+                    <a-select v-model:value="poHistFilters.is_blocked" placeholder="是否拦截" style="width:110px" allow-clear
+                      :options="[{value:'是',label:'是'},{value:'否',label:'否'}]"/></div>
+                  <div class="f-item"><span class="f-label">拦截原因</span>
+                    <a-select v-model:value="poHistFilters.block_reason" placeholder="拦截原因" style="width:180px" allow-clear
+                      :options="poHistBlockReasonOptions"/></div>
                   <template v-if="poHistFilterExpanded">
                     <div class="f-item"><span class="f-label">车型代码</span>
                       <a-input v-model:value="poHistFilters.vehicle_code" placeholder="车型代码" style="width:130px" allow-clear/></div>
                     <div class="f-item"><span class="f-label">ABC分类</span>
-                      <a-select v-model:value="poHistFilters.abc_class" placeholder="ABC分类" style="width:110px" allow-clear
+                      <a-select v-model:value="poHistFilters.abc_class" placeholder="ABC分类" style="width:110px" allow-clear"
                         :options="[{value:'A',label:'A'},{value:'B',label:'B'},{value:'C',label:'C'}]"/></div>
+                    <div class="f-item"><span class="f-label">采购类别</span>
+                      <a-select v-model:value="poHistFilters.purchase_type" placeholder="采购类别" style="width:120px" allow-clear"
+                        :options="poRegPurchaseTypes.map(v=>({value:v,label:v}))"/></div>
+                    <div class="f-item"><span class="f-label">计划员</span>
+                      <a-select v-model:value="poHistFilters.planner" placeholder="计划员" style="width:110px" allow-clear"
+                        :options="fcPlanners.map(v=>({value:v,label:v}))"/></div>
+                    <div class="f-item"><span class="f-label">单据状态</span>
+                      <a-select v-model:value="poHistFilters.bill_status" placeholder="单据状态" style="width:120px" allow-clear"
+                        :options="poRegStatuses.map(v=>({value:v,label:v}))"/></div>
+                    <div class="f-item"><span class="f-label">计划批次</span>
+                      <a-input v-model:value="poHistFilters.plan_batch" placeholder="计划批次" style="width:130px" allow-clear/></div>
+                    <div class="f-item"><span class="f-label">当前可用天数</span>
+                      <a-input v-model:value="poHistFilters.cover_days" placeholder="当前可用天数" style="width:120px" allow-clear/></div>
                   </template>
                 </div>
                 <div class="filter-actions">
@@ -5328,19 +5349,18 @@ function poRegGenBatch(){
 const poRegularData = Vue.reactive([]);
 // 供应商主数据池（原型示意）：一个配件可对应多个供应商，各自 MOQ / 开通起始时间不同
 // 拦截原因枚举（依据 PRD 4.4.2「计划拦截规则」表 + 4.5.2 字段表口径）
-// planner=true：需计划员处理（待处理）；planner=false：计划员无需处理（全部-其他拦截原因）
+// 采购计划（po-regular）：仅需计划员「人工审核」的 4 类拦截原因（截图标注为需审核项）
 const poRegBlockReasons = [
-  { group:'待处理（需计划员处理）', items:[
-    '零件无计划员','无有效合同','多供应商',
-    '联合MOQ凑单超量','成套采购凑单超量','活动零件'
-  ]},
-  { group:'全部（其他拦截原因）', items:[
-    '非计划日','库存充足','替代拦截','一次买断件','直供件'
+  { group:'需审核的拦截原因', items:[
+    '多供应商','联合MOQ凑单超量','成套采购凑单超量','活动零件'
   ]}
 ];
 const poRegBlockReasonOptions = poRegBlockReasons.map(g=>({ label:g.group, title:g.group, options:g.items.map(v=>({ value:v, label:v })) }));
-// 待提交记录分配拦截原因时的候选池：PRD 4.4.2.10 全部 11 条原因，去掉「多供应商」（多供应商由场景单独判定）
-const poRegBlockReasonAssignPool = poRegBlockReasons.flatMap(g=>g.items).filter(v=>v!=='多供应商');
+// 待提交记录分配拦截原因时的候选池：仅这 4 类需审核原因（多供应商由场景单独判定，亦含于候选池内演示）
+const poRegBlockReasonAssignPool = poRegBlockReasons.flatMap(g=>g.items);
+// 历史采购计划（po-history）：归档计划保留全部拦截原因取值（含无需审核类），保证各类值都有演示数据
+const poAllBlockReasons = ['多供应商','联合MOQ凑单超量','成套采购凑单超量','活动零件','零件无计划员','无有效合同','非计划日','库存充足','替代拦截','一次买断件','直供件'];
+const poHistBlockReasonOptions = [{ label:'全部拦截原因', title:'全部拦截原因', options: poAllBlockReasons.map(v=>({ value:v, label:v })) }];
 const poRegSuppliers = [
   { code:'V001', name:'博世汽车部件（苏州）有限公司', moq:50, since:'2021-03-15' },
   { code:'V002', name:'采埃孚（中国）投资有限公司', moq:100, since:'2022-06-01' },
@@ -5491,9 +5511,8 @@ for(let i=0;i<64;i++){
   // 已改选供应商（演示）：历史上由多供应商改选其一并已解除拦截
   // 其余拦截行按 PRD 4.4.2.10 拦截原因枚举循环演示，覆盖「待处理」与「全部」两组
   const isMultiBlock = (i % 9 === 0);
-  const isMissingBlock = (!isMultiBlock && i % 11 === 0);
-  const demoSupplier = (!isMultiBlock && !isMissingBlock && i % 17 === 0);
-  const wasBlockedOther = (!isMultiBlock && !isMissingBlock && !demoSupplier && i % 13 === 0);
+  const demoSupplier = (!isMultiBlock && i % 17 === 0);
+  const wasBlockedOther = (!isMultiBlock && !demoSupplier && i % 13 === 0);
   const sIdx = i % poRegSuppliers.length;
   const primary = Object.assign({}, poRegSuppliers[sIdx], { moq: moq });
   let suppliers = [ primary ];
@@ -5502,19 +5521,18 @@ for(let i=0;i<64;i++){
     suppliers.push(Object.assign({}, poRegSuppliers[(sIdx+2)%poRegSuppliers.length]));
   }
   const multiSupplier = suppliers.length > 1 ? '是' : '否';
-  // 待提交记录：是否计划拦截固定为「是」，拦截原因必须有值（取值 PRD 4.4.2.10 计划拦截）
-  // 非待提交记录：沿用场景化拦截（多供应商 / 缺计划员等），保持演示多样
+  // 待提交记录：是否计划拦截固定为「是」，拦截原因必须从 4 类需审核原因取值（不再含零件无计划员 / 无有效合同）
+  // 非待提交记录：仅「多供应商」场景保持拦截，其余已解除（拦截原因置「—」）
   let isBlocked, blockReason, multiSupplierBlock;
   if(billStatus==='待提交'){
     isBlocked = '是';
     if(isMultiBlock) blockReason = '多供应商';
-    else if(isMissingBlock) blockReason = '零件无计划员';
     else blockReason = poRegBlockReasonAssignPool[poRegPendingSeq % poRegBlockReasonAssignPool.length];
     poRegPendingSeq++;
     multiSupplierBlock = isMultiBlock ? '是' : '否';
   } else {
-    isBlocked = (isMultiBlock || isMissingBlock) ? '是' : '否';
-    blockReason = isMultiBlock ? '多供应商' : (isMissingBlock ? '零件无计划员' : '—');
+    isBlocked = isMultiBlock ? '是' : '否';
+    blockReason = isMultiBlock ? '多供应商' : '—';
     multiSupplierBlock = isMultiBlock ? '是' : '否';
   }
   const wasBlocked = (demoSupplier || wasBlockedOther) ? '是' : '否';
@@ -5612,8 +5630,9 @@ function poBuildFullRow(i, opts){
   const isMultiBlock = (i % 9 === 0);
   if(isMultiBlock){ suppliers.push(Object.assign({}, poRegSuppliers[(sIdx+1)%poRegSuppliers.length])); suppliers.push(Object.assign({}, poRegSuppliers[(sIdx+2)%poRegSuppliers.length])); }
   const multiSupplier = suppliers.length > 1 ? '是' : '否';
-  const isBlocked = opts.forceApproved ? '否' : (isMultiBlock ? '是' : '否');
-  const blockReason = isBlocked==='是' ? '多供应商' : '—';
+  // 历史归档计划：均为已审批通过、已解除拦截（是否计划拦截＝否）；拦截原因保留历史取值，循环覆盖全部 11 类，保证各类值都有演示数据
+  const isBlocked = '否';
+  const blockReason = poAllBlockReasons[i % poAllBlockReasons.length];
   const multiSupplierBlock = isMultiBlock ? '是' : '否';
   const curSupplier = suppliers[0];
   const adjustQty = (i % 7 === 3) ? suggestQty + 60 : suggestQty;
@@ -6950,8 +6969,8 @@ const app = createApp({
     const poHistScrollX = computed(()=> poHistVisibleColumns.value.reduce((s,c)=>s+(c.width||100),0));
     function poHistToggleCol(k){ const i=poHistHiddenCols.value.indexOf(k); if(i>=0) poHistHiddenCols.value.splice(i,1); else poHistHiddenCols.value.push(k); }
     const poHistFilterExpanded = ref(false);   // 与采购计划一致：ABC分类 / 车型代码 收在「展开」里
-    const poHistFilters = reactive({ part_code:'', part_name:'', wh_code:'', wh_name:'', plan_type:undefined, abc_class:undefined, vehicle_code:'' });
-    const poHistApplied = reactive({ part_code:'', part_name:'', wh_code:'', wh_name:'', plan_type:undefined, abc_class:undefined, vehicle_code:'' });
+    const poHistFilters = reactive({ part_code:'', part_name:'', cur_purchase_code:'', wh_code:'', wh_name:'', plan_type:undefined, is_blocked:undefined, block_reason:'', abc_class:undefined, vehicle_code:'', purchase_type:undefined, planner:undefined, bill_status:undefined, plan_batch:'', cover_days:'' });
+    const poHistApplied = reactive({ part_code:'', part_name:'', cur_purchase_code:'', wh_code:'', wh_name:'', plan_type:undefined, is_blocked:undefined, block_reason:'', abc_class:undefined, vehicle_code:'', purchase_type:undefined, planner:undefined, bill_status:undefined, plan_batch:'', cover_days:'' });
     const poHistFav = ref(false);
     const poHistPage = reactive({ current:1, size:15 });
     const poHistSelectedKeys = ref([]);
@@ -6964,11 +6983,19 @@ const app = createApp({
     const poHistQueryFiltered = computed(()=> poHistData.filter(r=>{
       if(poHistApplied.part_code && !r.part_code.toLowerCase().includes(poHistApplied.part_code.toLowerCase())) return false;
       if(poHistApplied.part_name && !r.part_name.includes(poHistApplied.part_name)) return false;
+      if(poHistApplied.cur_purchase_code && !r.cur_purchase_code.toLowerCase().includes(poHistApplied.cur_purchase_code.toLowerCase())) return false;
       if(poHistApplied.wh_code && !r.wh_code.toLowerCase().includes(poHistApplied.wh_code.toLowerCase())) return false;
       if(poHistApplied.wh_name && !r.wh_name.includes(poHistApplied.wh_name)) return false;
       if(poHistApplied.plan_type && r.plan_type!==poHistApplied.plan_type) return false;
-      if(poHistApplied.abc_class && r.abc_class!==poHistApplied.abc_class) return false;
+      if(poHistApplied.is_blocked && r.is_blocked!==poHistApplied.is_blocked) return false;
+      if(poHistApplied.block_reason && !(r.block_reason||'').includes(poHistApplied.block_reason)) return false;
       if(poHistApplied.vehicle_code && !r.vehicle_code.toLowerCase().includes(poHistApplied.vehicle_code.toLowerCase())) return false;
+      if(poHistApplied.abc_class && r.abc_class!==poHistApplied.abc_class) return false;
+      if(poHistApplied.purchase_type && r.purchase_type!==poHistApplied.purchase_type) return false;
+      if(poHistApplied.planner && r.planner!==poHistApplied.planner) return false;
+      if(poHistApplied.bill_status && r.bill_status!==poHistApplied.bill_status) return false;
+      if(poHistApplied.plan_batch && !r.plan_batch.toLowerCase().includes(poHistApplied.plan_batch.toLowerCase())) return false;
+      if(poHistApplied.cover_days && String(r.cover_days)!==String(poHistApplied.cover_days)) return false;
       return true;
     }));
     const poHistFiltered = computed(()=> poHistQueryFiltered.value);
@@ -10690,7 +10717,7 @@ const app = createApp({
       poRegExportCsv, poRegExportSource, poRegDoExport, poRegPush, poRegMoreMenu, poRegPlanTypes, poRegReceiveModes, poRegStatuses, poRegPurchaseTypes, poRegBlockReasonOptions, poRegPushStatuses,
       // 历史采购计划（po-history）
       poHistColumns, poHistHiddenCols, poHistVisibleColumns, poHistScrollX, poHistToggleCol,
-      poHistFilters, poHistApplied, poHistFilterExpanded, poHistFav, poHistDoSearch, poHistResetFilters, poHistToggleFav,
+      poHistFilters, poHistApplied, poHistFilterExpanded, poHistFav, poHistDoSearch, poHistResetFilters, poHistToggleFav, poHistBlockReasonOptions,
       poHistPage, poHistSelectedKeys, poHistFiltered, poHistPaged, poHistSelected, poHistRowSelection, poHistCustomRow,
       poHistOpenDetail, poHistDetailOpen, poHistDetailRow, poHistBillColor, poHistDoExport,
       poHistChgOpen, poHistChgRow, poHistOpenChgLog,
