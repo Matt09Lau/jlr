@@ -99,7 +99,7 @@ function transition(rows,action,role,reason){
  if(t&&role!==t.role)throw Error('请切换为'+t.role+'角色');
  if(['驳回','撤回'].includes(action)){if(!['待计划经理确认','待库存控制高级经理确认'].includes(rows[0].status))throw Error('仅审批中的记录支持'+action);if(action==='驳回'&&role!==(rows[0].status==='待计划经理确认'?'计划经理':'库存控制高级经理'))throw Error('请切换为当前审批角色');if(action==='撤回'&&role!=='操作人')throw Error('请切换为操作人');if(action==='驳回'&&!String(reason||'').trim())throw Error('请填写驳回原因');}
  if(!t&&!['驳回','撤回'].includes(action))throw Error('不支持该操作');
- return rows.map(r=>{const next=JSON.parse(JSON.stringify(r));if(action==='确认'){next.submission={role:highestApplicantRole(r),applicant:r.applicant,at:stamp(),path:highestApplicantRole(r)==='计划经理'?['库存控制高级经理']:['计划经理','库存控制高级经理']};}next.status=t?(action==='确认'&&next.submission.role==='计划经理'?'待库存控制高级经理确认':t.to):action==='驳回'?'已驳回':'已撤回';if(next.status==='审批通过'){next.approvedVersions=next.approvedVersions||[];if(next.approved)next.approvedVersions.push({...next.approved});next.approved={days:next.days,start:next.start,end:next.end};}next.history=next.history||[];next.history.push({at:stamp(),action,role,actor:'超级管理员',fromStatus:r.status,toStatus:next.status,reason:reason||'',after:{days:r.days,start:r.start,end:r.end,reason:r.reason||''}});next.modifier=role;next.updated=stamp();return next;});
+ return rows.map(r=>{const next=JSON.parse(JSON.stringify(r));if(action==='确认'){next.submission={role:highestApplicantRole(r),applicant:r.applicant,at:stamp(),path:highestApplicantRole(r)==='计划经理'?['库存控制高级经理']:['计划经理','库存控制高级经理']};}next.status=t?(action==='确认'&&next.submission.role==='计划经理'?'待库存控制高级经理确认':t.to):action==='驳回'?'已驳回':'已撤回';if(next.status==='审批通过'){next.approvedVersions=next.approvedVersions||[];if(next.approved)next.approvedVersions.push({...next.approved});next.approved={days:next.days,start:next.start,end:next.end};}next.history=next.history||[];next.history.push({at:stamp(),action,role,actor:action==='撤回'?r.applicant:'超级管理员',fromStatus:r.status,toStatus:next.status,reason:reason||'',after:{days:r.days,start:r.start,end:r.end,reason:r.reason||''}});next.modifier=role;next.updated=stamp();return next;});
 }
 function csvEncode(rows,cols){return '\ufeff'+[cols.map(c=>c.label),...rows.map(r=>cols.map(c=>r[c.key]??''))].map(row=>row.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\r\n');}
 function csvParse(text){const rows=[];let row=[],cell='',quoted=false;for(let i=0;i<text.length;i++){let c=text[i];if(c==='"'){if(quoted&&text[i+1]==='"'){cell+='"';i++;}else quoted=!quoted;}else if(c===','&&!quoted){row.push(cell);cell='';}else if((c==='\n'||c==='\r')&&!quoted){if(c==='\r'&&text[i+1]==='\n')i++;row.push(cell);if(row.some(v=>v!==''))rows.push(row);row=[];cell='';}else cell+=c;}if(quoted)throw Error('CSV引号未闭合');row.push(cell);if(row.some(v=>v!==''))rows.push(row);if(rows[0])rows[0][0]=rows[0][0].replace(/^\ufeff/,'');return rows;}
@@ -107,11 +107,11 @@ function mockApprovalHistory(r){
  const manager=highestApplicantRole(r)==='计划经理',content={days:r.days,start:r.start,end:r.end,reason:r.reason};
  const base='2026-10-26 ';
  const events=[{action:'新增申请',at:base+'09:00:00',actor:r.applicant,role:manager?'计划经理':'计划员',toStatus:'待审批',after:content}];
- const add=(action,time,actor,status,reason='')=>events.push({action,at:base+time,actor,toStatus:status,reason,after:{...content}});
+ const add=(action,time,actor,status,reason='')=>events.push({action,at:base+time,actor,fromStatus:events.at(-1).toStatus,toStatus:status,reason,after:{...content}});
  if(r.status!=='待审批')add('确认','09:10:00',r.applicant,manager?'待库存控制高级经理确认':'待计划经理确认');
  if(!manager&&['待库存控制高级经理确认','审批通过'].includes(r.status))add('计划经理确认','10:00:00','王经理','待库存控制高级经理确认');
  if(r.status==='审批通过')add('库存控制高级经理确认','11:00:00','陈经理','审批通过');
- if(r.status==='已驳回')add('驳回','10:00:00','王经理','已驳回','请补充旺季需求依据');
+ if(r.status==='已驳回')add('驳回','10:00:00',manager?'陈经理':'王经理','已驳回','请补充旺季需求依据');
  if(r.status==='已撤回')add('撤回','09:30:00',r.applicant,'已撤回','调整申请有效期后重新提交');
  return events;
 }
@@ -125,7 +125,12 @@ function applicationLogs(row){
  }
  return groups.reverse().map((g,i)=>({number:groups.length-i,fields:[
   ['申请增储天数',g.content?.days??'—'],['申请生效日期',g.content?.start||'—'],['申请失效日期',g.content?.end||'—'],['申请原因',g.content?.reason||'—'],
-  ...g.events.flatMap(h=>[[h.action+'时间',h.at||'—'],[h.action+'操作人',h.actor||h.by||'—'],...(['计划经理确认','库存控制高级经理确认'].includes(h.action)?[]:[[h.action+'角色',h.role||'—']]),[h.action+'后状态',h.toStatus||'—'],...(['确认','计划经理确认','库存控制高级经理确认'].includes(h.action)?[]:[[h.action+'意见',h.reason||'—']])])
+  ...g.events.flatMap(h=>{
+   const rejectionRole=h.role||(h.fromStatus==='待计划经理确认'?'计划经理':h.fromStatus==='待库存控制高级经理确认'?'库存控制高级经理':'');
+   const action=h.action==='驳回'?rejectionRole+'驳回':h.action==='撤回'?'申请人撤回':h.action;
+   const actor=h.action==='撤回'?row.applicant||h.actor||h.by:h.actor||h.by;
+   return [[action+'时间',h.at||'—'],[action+'操作人',actor||'—'],...(['驳回','撤回'].includes(h.action)?[[action+'原因',h.reason||'—']]:[])];
+  })
  ]}));
 }
 const api={applicationLogs,cycleOptions,highestApplicantRole,allowedActions,normalQuantile,schemas,seed,validate,normalize,transition,effective,effectiveFields,uniqueKey,csvParse,csvEncode,isDisabled,required,actionRole,migrate,isoWeekVersion,resultPeriod};
