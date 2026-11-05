@@ -40,6 +40,7 @@ PAGES = [
     ("po-bridge",       "Bridge Buy 计划",   "属地预期库存",  False),
     ("po-ref",          "参考零件采购计划",  "参考车型",      False),
     ("po-roll",         "给供应商的滚动计划", "同步状态", False),
+    ("activity-register", "活动登记表",      "按月销量", False),
 ]
 
 def file_url(path, fragment=""):
@@ -166,12 +167,44 @@ def check_po_regular_activity():
     且旧版「活动名称 / 编号 / 请输入活动名称或编号 / activity_no」已彻底移除。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
     need = ["poRegActivityTable", "poRegActReg", "poRegEditActReg",
-            "活动登记信息", "活动数量（客户调整量）"]
+            "活动登记信息", "活动数量（客户调整量）",
+            "poRegEditActMonths", "活动销量按月填充（来自活动登记表"]
     miss = [k for k in need if k not in src]
     bad = [k for k in ["活动名称 / 编号", "请输入活动名称或编号", "activity_no", "row.activity_no"] if k in src]
     ok = (not miss) and (not bad)
     detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
     return {"key":"po-regular-活动零件","ok":ok,"msg":detail}
+
+def check_activity_register():
+    """历史需求处理-活动登记表：复刻 UAT capp.CappActivityRegister + 跨月活动销量按月填充。
+    源码级断言：月份切分/按天数占比分摊/跨月判定/按月销量列均存在。
+    渲染级断言：菜单组、页面标题、按月销量列，以及跨月样例
+      （2026-02-01 ~ 2026-03-02，活动数量 414；2 月 28 天 / 3 月 2 天，
+        按天数占比得 386 / 28，末月承接余数保证合计 414）。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    need = ["actRegMonthSpans", "actRegAllocate", "actRegIsCrossMonth",
+            "actRegMonthCols", "按月销量（优化）",
+            "actRegTotalQty", "actRegTotalLabel",
+            "actRegForm.activity_type==='服务活动'", "比例计算结束日期由系统自动带出"]
+    miss = [k for k in need if k not in src]
+    dump("activity-register")
+    data = open(DUMP, encoding="utf-8", errors="replace").read()
+    if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
+        return {"key":"activity-register","ok":False,"msg":"渲染失败/错误页"}
+    r = rendered(data)
+    checks = {
+        "菜单组": "历史需求处理" in r,
+        "页面标题": "活动登记表" in r,
+        "按月销量列": "按月销量" in r,
+        "2月填充": "2026-02：386 件" in r,
+        "3月填充": "2026-03：28 件" in r,
+        "活动数量": "414" in r,
+        "表格行": r.count("ant-table-row") > 0,
+    }
+    bad = [k for k, v in checks.items() if not v]
+    ok = (not miss) and (not bad)
+    return {"key":"activity-register", "ok":ok,
+            "msg":f"源码缺失={miss if miss else '无'} 渲染失败项={bad if bad else '无'} rows={r.count('ant-table-row')}"}
 
 def check_fc_buyout_btns():
     """一次买断预测结果：默认展示态，工具栏含「编辑」「生成All time buy计划」；「生成bridge buy计划」已移至长周期预测报表，不应残留；亦不应有「生成采购计划」「保存」（保存仅在编辑态出现）。"""
@@ -1084,10 +1117,11 @@ def check_menu():
                  "配件组管理",
                  "计划管理", "采购计划", "历史采购计划", "采购计划导出", "调拨计划", "调拨计划导出", "调拨计划汇总", "给仓库的预计调拨计划",
                  "All Time Buy 计划", "Bridge Buy 计划", "参考零件采购计划",
-                 "给供应商的滚动计划"]
+                 "给供应商的滚动计划",
+                 "历史需求处理", "活动登记表", "数据感知任务", "订单监控预警"]
     miss = [k for k in must_have if k not in r]
     # 不应出现（已移除的纯占位菜单 / 已更名的旧称）
-    must_not = ["历史需求处理", "准确率报表", "预测回测配置",
+    must_not = ["准确率报表", "预测回测配置",
                 "售后订单管理", "【本地测试页面】", "计划层级管理3",
                 "全新车型配件预测", "参考零件采购计划（首储）",
                 "常规采购计划", "本周调拨计划", "下周调拨计划", "给仓库的滚动调拨计划"]
@@ -1603,6 +1637,10 @@ def main():
         r = check_po_regular_activity()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-regular-活动零件 {r['msg']}")
+    if only in (None, 'activity-register'):
+        r = check_activity_register()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] activity-register {r['msg']}")
     print("==== 汇总:", "全部通过" if all_ok else "存在失败", "====")
 
 if __name__ == "__main__":
