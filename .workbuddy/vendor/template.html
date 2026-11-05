@@ -2317,8 +2317,8 @@
                 <a-button v-if="isFcLongBuyout && !fcEditMode" @click="fcEditMode=true">编辑</a-button>
                 <a-button v-if="isFcLongBuyout && fcEditMode" type="primary" @click="fcSaveForecast">保存</a-button>
                 <a-button v-if="activeMenu==='fc-wh-regular'" @click="fcSaveForecast">保存</a-button>
-                <a-button v-if="activeMenu==='fc-buyout' || activeMenu==='fc-buyout-draft'" @click="fcAllTimeOpen=true">生成All time buy计划</a-button>
-                <a-button v-if="activeMenu==='fc-long' || activeMenu==='fc-long-draft'" :disabled="!fcLongSel.length" @click="fcBridgeOpen=true;fcBridgeDone=false">生成bridge buy计划</a-button>
+                <a-button v-if="activeMenu==='fc-buyout' || (activeMenu==='fc-buyout-draft' && draftEnabled.value)" @click="fcAllTimeOpen=true">生成All time buy计划</a-button>
+                <a-button v-if="activeMenu==='fc-long' || (activeMenu==='fc-long-draft' && draftEnabled.value)" :disabled="!fcLongSel.length" @click="fcBridgeOpen=true;fcBridgeDone=false">生成bridge buy计划</a-button>
                 <a-button v-if="fcBatchable" :disabled="!fcBatchSelIds.length" @click="fcLongBatchM.open=true">批量圆整（{{ fcBatchSelIds.length }}）</a-button>
                 <a-button v-if="activeMenu==='fc-regular' || activeMenu==='fc-wh-regular'" @click="fcGenRegularPo">生成采购计划</a-button>
                 <a-button v-if="activeDef.isExtension" type="default" @click="genImportOpen=true">⬆ 导入</a-button>
@@ -2729,7 +2729,7 @@
           </template>
 
           <!-- ============ 计划层级管理（计划员 → 计划组 → 供应商） ============ -->
-          <template v-else-if="activeMenu==='plan-hier'">
+          <template v-else-if="activeMenu==='plan-hier' && draftEnabled.value">
             <div class="toolbar-row">
               <a-input v-model:value="planKeyword" placeholder="搜索计划员 / 计划组 / 供应商" style="width:260px" allow-clear>
                 <template #prefix>🔍</template>
@@ -2871,7 +2871,7 @@
             </a-modal>
           </template>
 
-          <template v-else-if="activeMenu==='plan-hier-2'">
+          <template v-else-if="activeMenu==='plan-hier-2' && draftEnabled.value">
             <div class="toolbar-row">
               <a-input v-model:value="plan2Keyword" placeholder="搜索计划员姓名 / 编码" style="width:240px" allow-clear>
                 <template #prefix>🔍</template>
@@ -3236,7 +3236,7 @@
           </template>
 
           <!-- ============ 需求预测 / 参考零件需求预测（参考件预测流程） ============ -->
-          <template v-else-if="activeMenu==='fc-new' || activeMenu==='fc-new-draft'">
+          <template v-else-if="activeMenu==='fc-new' || (activeMenu==='fc-new-draft' && draftEnabled.value)">
             <div class="card fc-new-card">
               <div class="fc-new-body">
                 <!-- 左：流程步骤 -->
@@ -3556,17 +3556,17 @@
           </template>
 
           <!-- ============ 需求预测 / 预测模拟（Backtest） ============ -->
-          <template v-else-if="activeMenu==='fc-backtest' || activeMenu==='fc-backtest-draft'">
+          <template v-else-if="activeMenu==='fc-backtest' || activeMenu==='fc-backtest-draft' && draftEnabled.value">
             <div class="card bt-card">
               <!-- 面包屑 + 标题 -->
               <div class="bt-hd">
-                <a-breadcrumb class="bt-crumb" v-if="btView!=='list' || activeMenu==='fc-backtest-draft'">
+                <a-breadcrumb class="bt-crumb" v-if="btView!=='list' || activeMenu==='fc-backtest-draft' && draftEnabled.value">
                   <a-breadcrumb-item>
                     <span :class="{link:true, 'bt-crumb-link': btView!=='list'}" @click="btBackToList">预测模拟</span>
                   </a-breadcrumb-item>
                   <a-breadcrumb-item v-if="btView!=='list'">{{ btSubTitle }}</a-breadcrumb-item>
                 </a-breadcrumb>
-                <div class="bt-hd-t" v-if="btView!=='list' || activeMenu==='fc-backtest-draft'">{{ btPageTitle }}</div>
+                <div class="bt-hd-t" v-if="btView!=='list' || activeMenu==='fc-backtest-draft' && draftEnabled.value">{{ btPageTitle }}</div>
                 <div class="bt-hd-d" v-if="btPageDesc">{{ btPageDesc }}</div>
               </div>
 
@@ -3599,7 +3599,7 @@
                 <div class="toolbar-row bt-bar">
                   <a-button type="primary" @click="btOpenCreate">＋ 创建任务</a-button>
                   <a-button @click="btExportTasks">⬇ 导出</a-button>
-                  <span class="bt-note" v-if="activeMenu==='fc-backtest-draft'">共 {{ btTaskFiltered.length }} 条；行内操作支持执行 / 编辑 / 指标 / 删除，其中编辑与指标为二级页面</span>
+                  <span class="bt-note" v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value">共 {{ btTaskFiltered.length }} 条；行内操作支持执行 / 编辑 / 指标 / 删除，其中编辑与指标为二级页面</span>
                 </div>
 
                 <a-table :columns="btTaskCols" :data-source="btTaskFiltered" :pagination="{ pageSize:10, size:'small', showTotal:t=>'共 '+t+' 条', showSizeChanger:true, pageSizeOptions:['10','15','30','50'] }" :size="tableSize" row-key="id" :scroll="{x:1240}">
@@ -3614,8 +3614,8 @@
                       <a-tag :color="btStatusColor(record.status)" style="margin:0;">{{ record.status }}</a-tag>
                     </template>
                     <template v-else-if="column.key==='act'">
-                      <span v-if="activeMenu==='fc-backtest-draft'" class="link-btn" @click.stop="btRunTask(record)">执行</span>
-                      <span v-if="activeMenu==='fc-backtest-draft' || (activeMenu==='fc-backtest' && (record.status==='未执行'||record.status==='执行中'))" class="link-btn" @click.stop="btOpenEdit(record)">编辑</span>
+                      <span v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value" class="link-btn" @click.stop="btRunTask(record)">执行</span>
+                      <span v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value || (activeMenu==='fc-backtest' && (record.status==='未执行'||record.status==='执行中'))" class="link-btn" @click.stop="btOpenEdit(record)">编辑</span>
                       <span v-if="activeMenu==='fc-backtest' && (record.status==='已完成'||record.status==='执行失败')" class="link-btn" @click.stop="btOpenMetric(record)">查看</span>
                       <span class="link-btn" @click.stop="btOpenMetric(record)">{{ activeMenu==='fc-backtest' ? '结果' : '指标' }}</span>
                       <a-popconfirm title="确认删除该回测任务？" ok-text="删除" cancel-text="取消" @confirm="btDelTask(record)">
@@ -3636,7 +3636,7 @@
                   <a-form :label-col="{span:4}" :wrapper-col="{span:16}" class="bt-form-v">
                     <a-form-item label="任务编号"><a-input :value="btCfg.code" disabled style="width:200px"/></a-form-item>
                     <a-form-item label="任务名称" required><a-input v-model:value="btCfg.name" placeholder="请输入任务名称" style="width:340px"/></a-form-item>
-                    <a-form-item label="回测区间" required v-if="activeMenu==='fc-backtest-draft'">
+                    <a-form-item label="回测区间" required v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value">
                       <a-range-picker v-model:value="btCfg.range" value-format="YYYY-MM-DD" style="width:280px" :placeholder="['开始日期','结束日期']"/>
                       <span class="bt-tip">开始日期 + 结束日期，覆盖历史训练 / 验证样本</span>
                     </a-form-item>
@@ -3644,9 +3644,9 @@
                       <a-radio-group v-model:value="btCfg.dim" button-style="solid" size="small">
                         <a-radio-button v-for="o in btDimOpts" :key="o.value" :value="o.value">{{ o.label }}</a-radio-button>
                       </a-radio-group>
-                      <span class="bt-tip" v-if="activeMenu==='fc-backtest-draft'">决定指标结果按配件还是按仓库汇总</span>
+                      <span class="bt-tip" v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value">决定指标结果按配件还是按仓库汇总</span>
                     </a-form-item>
-                    <a-form-item label="预测粒度" v-if="activeMenu==='fc-backtest-draft'">
+                    <a-form-item label="预测粒度" v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value">
                       <a-radio-group v-model:value="btCfg.gran" button-style="solid" size="small">
                         <a-radio-button value="周">周</a-radio-button>
                         <a-radio-button value="月">月</a-radio-button>
@@ -3654,7 +3654,7 @@
                       </a-radio-group>
                       <span class="bt-tip">决定回测输出与指标计算的时间聚合口径</span>
                     </a-form-item>
-                    <a-form-item label="评价指标" v-if="activeMenu==='fc-backtest-draft'">
+                    <a-form-item label="评价指标" v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value">
                       <span class="bt-tip" style="margin-left:0;">无需选择：清单内每个配件的预测结果均同时计算 <b>bias</b>、<b>MAPE</b>、<b>WAPE</b> 三项指标</span>
                     </a-form-item>
                   </a-form>
@@ -3705,13 +3705,13 @@
                 </div>
 
 
-                  <div class="bt-sec-t">回测配件清单<span class="bt-sec-sub" v-if="activeMenu==='fc-backtest-draft'">每个任务单独维护配件清单，仅对清单内配件执行预测并计算指标，清单外配件不参与本次回测</span></div>
+                  <div class="bt-sec-t">回测配件清单<span class="bt-sec-sub" v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value">每个任务单独维护配件清单，仅对清单内配件执行预测并计算指标，清单外配件不参与本次回测</span></div>
                   <div class="toolbar-row bt-bar">
-                    <a-button type="primary" v-if="activeMenu==='fc-backtest-draft'" @click="btOpenPicker">＋ 添加配件</a-button>
+                    <a-button type="primary" v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value" @click="btOpenPicker">＋ 添加配件</a-button>
                     <a-button :type="activeMenu==='fc-backtest' ? 'primary' : 'default'" @click="btImportParts">⬆ 导入清单</a-button>
                     <a-button @click="btDownloadTpl">⬇ 下载模板</a-button>
                     <a-button danger @click="btClearParts" :disabled="!btCfg.parts.length">清空</a-button>
-                    <span class="bt-note">已选 {{ btCfg.parts.length }} 个配件<span v-if="activeMenu==='fc-backtest-draft'">；指标结果仅输出清单内配件</span></span>
+                    <span class="bt-note">已选 {{ btCfg.parts.length }} 个配件<span v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value">；指标结果仅输出清单内配件</span></span>
                   </div>
                   <a-table :columns="btPartCols" :data-source="btPartRows" :pagination="{ pageSize:8, size:'small', showTotal:t=>'共 '+t+' 条' }" :size="tableSize" row-key="code" :scroll="{x:820}">
                     <template #bodyCell="{ column, record }">
@@ -3725,7 +3725,7 @@
                 </div>
 
                 <!-- 草稿：数据集切分（百分比，旧版） -->
-                <div class="bt-sec" v-if="activeMenu==='fc-backtest-draft'">
+                <div class="bt-sec" v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value">
                   <div class="bt-sec-t">数据集切分<span class="bt-sec-sub">输入：历史实际需求（历史销量表 A_i）、历史预测值（预测快照 F_i），按时间顺序切分为训练、验证两段</span></div>
                   <div class="bt-split">
                     <div class="bt-split-lab">训练 / 验证 两段比例</div>
@@ -3742,9 +3742,9 @@
                 </div>
                 <div class="bt-foot">
                   <a-button type="primary" @click="btSaveForm">保存配置</a-button>
-                  <a-button v-if="activeMenu==='fc-backtest-draft'" @click="btSaveForm(true)" style="margin-left:8px;">保存并执行回测</a-button>
+                  <a-button v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value" @click="btSaveForm(true)" style="margin-left:8px;">保存并执行回测</a-button>
                   <a-button style="margin-left:8px;" @click="btBackToList">返回列表</a-button>
-                  <span class="bt-note" v-if="activeMenu==='fc-backtest-draft'">触发时机：回测任务执行时（按需）；输出至回测指标结果表与准确率验证表，供模型择优与参数优化使用</span>
+                  <span class="bt-note" v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value">触发时机：回测任务执行时（按需）；输出至回测指标结果表与准确率验证表，供模型择优与参数优化使用</span>
                 </div>
               </template>
 
@@ -3760,11 +3760,11 @@
                   <span>预测粒度：<b>{{ btCtx.gran }}</b></span>
                   <span>配件数：<b>{{ btCtx.parts }}</b> 个</span>
                   <span>状态：<a-tag :color="btStatusColor(btCtx.status)" style="margin:0 0 0 4px;">{{ btCtx.status }}</a-tag></span>
-                  <a-button size="small" v-if="activeMenu==='fc-backtest-draft'" type="primary" @click="btRun1(btCtx)">执行回测</a-button>
+                  <a-button size="small" v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value" type="primary" @click="btRun1(btCtx)">执行回测</a-button>
                   <a-button size="small" @click="btBackToList" style="margin-left:8px;">返回列表</a-button>
                 </div>
 
-                <div class="bt-sec" v-if="activeMenu==='fc-backtest-draft'">
+                <div class="bt-sec" v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value">
                   <div class="bt-sec-t">指标概览<span class="bt-sec-sub">计算口径：e_i = F_i − A_i；bias = (1/n)Σe_i；MAPE = (1/n)Σ|A_i−F_i|/A_i×100%；WAPE = Σ|F_i−A_i| ÷ ΣA_i×100%</span></div>
                   <div class="bt-kpis">
                     <div class="bt-kpi" v-for="k in btOverview" :key="k.label">
@@ -3779,8 +3779,8 @@
                 <a-tabs v-model:activeKey="btSubTab" size="small">
                   <a-tab-pane key="metric" :tab="activeMenu==='fc-backtest' ? '结果' : '指标结果'">
                     <div class="toolbar-row">
-                      <span class="bt-lab" v-if="activeMenu==='fc-backtest-draft'">预测维度</span>
-                      <a-radio-group v-if="activeMenu==='fc-backtest-draft'" v-model:value="btCfg.dim" button-style="solid" size="small">
+                      <span class="bt-lab" v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value">预测维度</span>
+                      <a-radio-group v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value" v-model:value="btCfg.dim" button-style="solid" size="small">
                         <a-radio-button value="part">单品维度</a-radio-button>
                         <a-radio-button value="wh">仓库维度</a-radio-button>
                       </a-radio-group>
@@ -3805,7 +3805,7 @@
                     </a-table>
                   </a-tab-pane>
 
-                  <a-tab-pane v-if="activeMenu==='fc-backtest-draft'" key="anomaly" tab="异常分析">
+                  <a-tab-pane v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value" key="anomaly" tab="异常分析">
                     <div class="toolbar-row">
                       <a-input v-model:value="btAnoKw" placeholder="配件编码 / 名称" style="width:180px" allow-clear/>
                       <a-select v-model:value="btAnoType" placeholder="异常类型" style="width:140px" allow-clear :options="btAnoTypes.map(v=>({value:v,label:v}))"/>
@@ -3853,11 +3853,11 @@
               <div v-if="btDrill.row" class="bt-drill-legend">
                 <span><i class="ln a"></i>历史实际需求</span>
                 <span><i class="ln f"></i>各候选模型预测曲线（★ 为最佳模型）</span>
-                <span v-if="activeMenu==='fc-backtest-draft'"><i class="ln d"></i>偏差 e_i = F_i − A_i（正=高估 / 负=低估）</span>
+                <span v-if="activeMenu==='fc-backtest-draft' && draftEnabled.value"><i class="ln d"></i>偏差 e_i = F_i − A_i（正=高估 / 负=低估）</span>
                 <span><i class="ln s"></i>三段区间：训练集 / 验证集 / 预测集</span>
               </div>
               <div id="btDrillChart" style="width:100%;height:380px;"></div>
-              <div v-if="btDrill.row && activeMenu==='fc-backtest-draft'" class="bt-drill-cause">
+              <div v-if="btDrill.row && activeMenu==='fc-backtest-draft' && draftEnabled.value" class="bt-drill-cause">
                 <div class="bt-drill-cause-t">根因分析</div>
                 <div class="bt-drill-cause-d">{{ btDrill.row.cause || '该配件在验证集区间内预测值系统性高于实际需求，建议复核模型季节性因子与促销活动标记，并结合 WAPE 指标重跑回测对比。' }}</div>
               </div>
@@ -4932,9 +4932,6 @@ const fcRegularDef = {
     ...fcRegMonths.map((d,i)=> Object.assign(fcNumCol(d, 'w'+(i+1), 110), { render:'editnum' })), fcReasonCol ],
   data: fcRegularData,
 };
-/* 常规预测草稿：冻结变更前版本，供对照参考；数据与列均克隆，后续对 fcRegularDef 的改动不影响本草稿 */
-const fcRegularDataDraft = fcRegularData.map(function(r){ return Object.assign({}, r); });
-const fcRegularDefDraft = Object.assign({}, fcRegularDef, { data: fcRegularDataDraft, columns: fcRegularDef.columns.slice() });
 /* 常规预测新增：多模型预测结果（Dealer / Trader 各 11 个模型）；初始预测结果 = Dealer 第1模型 + Trader 第1模型 之和 */
 const fcModelNames = ['ES（指数平滑）','Holt-Winters','WMA（加权移动平均）','STL（时序分解）','Prophet','ARIMA','Transformer','RNN（循环神经网络）','XGBoost（回归）','LightGBM（GBDT）','集成模型（Stacking）'];
 function fcGenModelFct(seed){
@@ -5835,16 +5832,10 @@ const pageDefs = {
   'part-group': partGroupDef,
   'fc-long': fcLongDef,
   'fc-buyout': fcBuyoutDef,
-  'fc-long-draft': fcLongDef,
-  'fc-buyout-draft': fcBuyoutDef,
   'fc-regular': fcRegularDef,
-  'fc-regular-draft': fcRegularDefDraft,
   'fc-wh-regular': fcWhRegularDef,
   'fc-best': fcBestDef,
   'po-regular': poRegularDef,
-  'po-eop': poEopDef,
-  'po-approval': poApprovalDef,
-  'po-issue': poIssueDef,
 };
 
 const { createApp, reactive, ref, computed, watch } = Vue;
@@ -5853,6 +5844,7 @@ const app = createApp({
   setup(){
     const zhCN = (window.antd && antd.locales) ? antd.locales.zh_CN : undefined;
     const msg = (t, type) => antd.message[type||'info'](t);
+    const draftEnabled = ref(false);
 
     /* ---- 顶部 Tab ---- */
     const topTab = ref('wh-abc');
@@ -5874,10 +5866,10 @@ const app = createApp({
     /* ---- 菜单 ---- */
     const collapsed = ref(false);
     const menuKeyword = ref('');
-    const openGroups = reactive({ base:true, strategy:true, draft:false, report:false });
-    const VALID_KEYS = ['strategy-purchase','strategy-service','strategy-stocking','strategy-transfer','strategy-increase','strategy-cycle','strategy-risk','strategy-riskRule','strategy-result','strategy-result-po','strategy-result-sto','mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier','plan-hier-2','plan-hier-3','gp-params','svc-dash','all-time-buy-report',
-      'fc-new','fc-new-draft','fc-long','fc-long-draft','fc-buyout','fc-buyout-draft','fc-regular','fc-regular-draft','fc-wh-regular','fc-best','fc-backtest','fc-backtest-draft',
-      'part-group','po-regular','po-history','po-export','po-eop','po-approval','po-issue','sto-week','sto-export','sto-summary','sto-next',
+    const openGroups = reactive({ base:true, strategy:true, report:false });
+    const VALID_KEYS = ['strategy-purchase','strategy-service','strategy-stocking','strategy-transfer','strategy-increase','strategy-cycle','strategy-risk','strategy-riskRule','strategy-result','strategy-result-po','strategy-result-sto','mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier-3','gp-params','svc-dash','all-time-buy-report',
+      'fc-new','fc-long','fc-buyout','fc-regular','fc-wh-regular','fc-best','fc-backtest',
+      'part-group','po-regular','po-history','po-export','sto-week','sto-export','sto-summary','sto-next',
       'po-atb','po-bridge','po-ref','po-roll'];
     function keyFromHash(){
       const h = (window.location.hash||'').replace(/^#/,'').trim();
@@ -5935,23 +5927,13 @@ const app = createApp({
       { type:'group', key:'report', title:'报表' },
       { type:'item', key:'svc-dash', parent:'report', title:'服务水平dashboard', icon:'📊' },
       { type:'item', key:'all-time-buy-report', parent:'report', title:'All time buy跟踪报表', icon:'📊' },
-      { type:'group', key:'draft', title:'草稿' },
-      { type:'item', key:'plan-hier', parent:'draft', title:'计划层级管理', icon:'🧩' },
-      { type:'item', key:'plan-hier-2', parent:'draft', title:'计划层级管理2', icon:'📋' },
-      { type:'item', key:'fc-long-draft', parent:'draft', title:'长周期预测报表(草稿)', icon:'📈' },
-      { type:'item', key:'fc-buyout-draft', parent:'draft', title:'一次买断预测结果(草稿)', icon:'🛒' },
-      { type:'item', key:'fc-new-draft', parent:'draft', title:'参考零件需求预测(草稿)', icon:'🚗' },
-      { type:'item', key:'fc-backtest-draft', parent:'draft', title:'预测模拟(草稿)', icon:'🧪' },
-      { type:'item', key:'fc-regular-draft', parent:'draft', title:'常规预测(草稿)', icon:'📊' },
-      { type:'item', key:'po-eop', parent:'draft', title:'停产最后采购量', icon:'🔚' },
-      { type:'item', key:'po-approval', parent:'draft', title:'采购计划审批', icon:'✅' },
-      { type:'item', key:'po-issue', parent:'draft', title:'采购订单下达', icon:'📤' },
     ];
     /* 注意：genericKeys 每增一个 key，必须同步在 pageDefs 中提供定义，否则 setup 初始化 genFilters 时会抛错导致白屏 */
-    const genericKeys = ['mat-master','mat-ext','wh-master','dealer-ext','supplier','supplier-ext','part-supplier','replace','fc-long','fc-long-draft','fc-buyout','fc-buyout-draft','fc-regular','fc-regular-draft','fc-wh-regular','fc-best',
-      'part-group','po-regular','po-eop','po-approval','po-issue'];
-    const isFcLongBuyoutDraft = computed(()=> activeMenu.value==='fc-long-draft' || activeMenu.value==='fc-buyout-draft');
-    const isFcNewDraft = computed(()=> activeMenu.value==='fc-new-draft');
+    const genericKeys = ['mat-master','mat-ext','wh-master','dealer-ext','supplier','supplier-ext','part-supplier','replace','fc-long','fc-buyout','fc-regular','fc-wh-regular','fc-best',
+      'part-group','po-regular'];
+    const isFcLongBuyoutDraft = computed(()=> activeMenu.value==='fc-long-draft' && draftEnabled.value || activeMenu.value==='fc-buyout-draft' && draftEnabled.value);
+    const isFcNewDraft = computed(()=> activeMenu.value==='fc-new-draft' && draftEnabled.value);
+    /* DRAFT_INJECT_SCRIPT */
     /* 支持手工调整预测值的结果页（草稿页只读） */
     const fcEditableKeys = ['fc-long','fc-buyout','fc-regular','fc-wh-regular'];
     const canEditFc = computed(()=> fcEditableKeys.includes(activeMenu.value));
@@ -6009,7 +5991,7 @@ const app = createApp({
     });
     function switchMenu(k){
       activeMenu.value = k;
-      if(k === 'fc-backtest' || k === 'fc-backtest-draft'){ btView.value = 'list'; }
+      if(k === 'fc-backtest' || (k === 'fc-backtest-draft' && draftEnabled.value)){ btView.value = 'list'; }
       if(('#'+k) !== window.location.hash) window.location.hash = k;
       if(genericKeys.includes(k)){
         genHiddenCols.value = [];
@@ -9112,8 +9094,8 @@ const app = createApp({
       return sum >= 10 ? Math.ceil(v) : (Math.round(v*100)/100);
     }
     /* 长周期/一次买断页面：圆整视图开关、勾选行、批量调整弹窗状态 */
-    const isFcLong = computed(()=> activeMenu.value==='fc-long' || activeMenu.value==='fc-long-draft');
-    const isFcBuyoutOnly = computed(()=> activeMenu.value==='fc-buyout' || activeMenu.value==='fc-buyout-draft');
+    const isFcLong = computed(()=> activeMenu.value==='fc-long' || (activeMenu.value==='fc-long-draft' && draftEnabled.value));
+    const isFcBuyoutOnly = computed(()=> activeMenu.value==='fc-buyout' || (activeMenu.value==='fc-buyout-draft' && draftEnabled.value));
     // 批量调整（稀疏件圆整）在长周期与一次买断两个结果页均可用
     const fcBatchable = computed(()=> isFcLong.value || isFcBuyoutOnly.value);
     const fcLongSel = ref([]);
@@ -9701,7 +9683,7 @@ const app = createApp({
     });
     const btSubTitle = computed(()=> btView.value==='form' ? (btMode.value==='edit' ? '编辑回测任务' : '创建回测任务') : '回测任务指标结果');
     const btPageDesc = computed(()=>{
-      const isDraft = activeMenu.value==='fc-backtest-draft';
+      const isDraft = activeMenu.value==='fc-backtest-draft' && draftEnabled.value;
       if(btView.value==='list'){
         if(isDraft) return '对应需求 S-F-24 预测准确率验证（bias / MAPE / WAPE）、S-F-25 回测与异常分析：本页为任务主界面，可按条件查询回测任务并执行 / 编辑 / 查看指标 / 删除；每个任务单独维护回测配件清单，仅对清单内配件执行回测，且每个配件的预测结果均计算 bias、MAPE、WAPE 三项指标；创建任务、任务编辑与指标结果均为二级页面，趋势图为弹窗。';
         return '';
@@ -9719,7 +9701,7 @@ const app = createApp({
     const btQ = reactive({ code:'', name:'', range:null, status:undefined, dim:undefined, gran:undefined, owner:undefined });
     function btResetQ(){ btQ.code=''; btQ.name=''; btQ.range=null; btQ.status=undefined; btQ.dim=undefined; btQ.gran=undefined; btQ.owner=undefined; }
     /* 预测维度：统一取值 part / wh。原页面文案=配件 / 配件+仓库；草稿保留旧版文案=单品 / 仓库 */
-    const btDimOpts = computed(()=> activeMenu.value==='fc-backtest-draft'
+    const btDimOpts = computed(()=> activeMenu.value==='fc-backtest-draft' && draftEnabled.value
       ? [{ value:'part', label:'单品' }, { value:'wh', label:'仓库' }]
       : [{ value:'part', label:'配件' }, { value:'wh', label:'配件+仓库' },
          { value:'dlrtype', label:'经销商类型+配件' }, { value:'jxwh', label:'经销商类型+配件+仓库' }]);
@@ -9733,7 +9715,7 @@ const app = createApp({
       ? '经销商类型 / 配件编码 / 配件名称'
       : btCfg.dim==='part'
       ? '配件编码 / 名称'
-      : (activeMenu.value==='fc-backtest-draft' ? '仓库编码 / 名称' : '配件编码 / 名称 / 仓库编码 / 仓库名称'));
+      : (activeMenu.value==='fc-backtest-draft' && draftEnabled.value ? '仓库编码 / 名称' : '配件编码 / 名称 / 仓库编码 / 仓库名称'));
     function btSearch(){ antd.message.success('已按查询条件筛选回测任务（设计稿示意）'); }
 
     /* 回测任务列表 */
@@ -9758,7 +9740,7 @@ const app = createApp({
         { title:'任务名称', key:'name', dataIndex:'name', width:240, ellipsis:true },
         { title:'回测区间', key:'range', dataIndex:'range', width:250 },
       ];
-      if(activeMenu.value==='fc-backtest-draft'){ cols.push({ title:'数据集切分', key:'split', width:150 }); }
+      if(activeMenu.value==='fc-backtest-draft' && draftEnabled.value){ cols.push({ title:'数据集切分', key:'split', width:150 }); }
       cols.push(
         { title:'预测维度', key:'dim', dataIndex:'dim', width:170 },
         { title:'预测粒度', key:'gran', dataIndex:'gran', width:95, sorter:(a,b)=>a.gran.localeCompare(b.gran) },
@@ -9938,7 +9920,7 @@ const app = createApp({
         { title:'配件编码', key:'code', dataIndex:'code', width:150 },
         { title:'配件名称', key:'name', dataIndex:'name', width:230, ellipsis:true },
       ];
-      if(activeMenu.value==='fc-backtest-draft'){ cols.push({ title:'base', key:'base', dataIndex:'base', width:170 }); }
+      if(activeMenu.value==='fc-backtest-draft' && draftEnabled.value){ cols.push({ title:'base', key:'base', dataIndex:'base', width:170 }); }
       cols.push({ title:'操作', key:'act', width:90, fixed:'right' });
       return cols;
     });
@@ -10153,7 +10135,7 @@ const app = createApp({
       { title:'操作', key:'act', width:110, fixed:'right' },
     ];
     const btMetricCols = computed(()=>{
-      const isDraft = activeMenu.value==='fc-backtest-draft';
+      const isDraft = activeMenu.value==='fc-backtest-draft' && draftEnabled.value;
       if(btCfg.dim==='jxwh') return btMetricColsJxwh;
       if(btCfg.dim==='dlrtype') return btMetricColsDlrType;
       if(btCfg.dim==='part'){ return isDraft ? btMetricColsPart : btMetricColsPart2; }
@@ -10163,7 +10145,7 @@ const app = createApp({
       if(btCfg.dim==='jxwh') return btJxWhMetrics.value;
       if(btCfg.dim==='dlrtype') return btDlrTypeMetrics.value;
       if(btCfg.dim==='part') return btPartMetrics.value;
-      return activeMenu.value==='fc-backtest-draft' ? btWhMetrics : btPartWhMetrics.value;
+      return activeMenu.value==='fc-backtest-draft' && draftEnabled.value ? btWhMetrics : btPartWhMetrics.value;
     });
     const btMetricFiltered = computed(()=> btMetricRows.value.filter(r=> !btMetricKw.value
       || (String(r.code||'').includes(btMetricKw.value)) || (String(r.name||'').includes(btMetricKw.value))
@@ -10511,6 +10493,7 @@ const app = createApp({
       btDrill, btOpenTrend, btCloseDrill, btDisabledStartDate, btDisabledEndDate,
       btRangeCalc, btRangeHint, btOnRangeChange,
       lcCoeffs, lcSaveCoeffs, lcCoefOpen, lcOpenCoeffModal,
+      draftEnabled,
     };
   }
 });

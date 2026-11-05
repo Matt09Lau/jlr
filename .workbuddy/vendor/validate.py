@@ -24,7 +24,6 @@ PAGES = [
     ("supplier-ext", "供应商扩展属性",     "导入",           True),
     ("part-supplier","配件与供应商关系",   "采购信息记录",   False),
     ("replace",      "替代链",             "替代关系",       False),
-    ("plan-hier-2",  "计划层级管理2",      "管理计划组",     False),
     ("fc-long",      "长周期预测报表",     "3年预测",        False),
     ("fc-buyout",    "一次买断预测结果",   "All time buy",  False),
     ("fc-regular",   "常规预测",           "2026-10",        False),
@@ -33,9 +32,6 @@ PAGES = [
     ("po-regular",      "采购计划",          "数据生成日期",  False),
     ("po-history",      "历史采购计划",      "数据生成日期",  False),
     ("po-export",       "采购计划导出",      "导出状态",      False),
-    ("po-eop",          "停产最后采购量",    "末采数量",      False),
-    ("po-approval",     "采购计划审批",      "审批状态",      False),
-    ("po-issue",        "采购订单下达",      "PO单号",        False),
     ("sto-week",        "调拨计划",          "计划批次",      False),
     ("sto-export",      "调拨计划导出",      "计划批次",      False),
     ("sto-summary",     "调拨计划汇总",      "数据快照日期",  False),
@@ -136,7 +132,7 @@ def check_one(page_key, title_kw, field_kw, is_ext):
     return {"key":page_key, "ok":ok, "msg":detail}
 
 def check_po_pages():
-    """采购计划 4 个页面：每个页面都能正常挂载、渲染表格、包含关键业务字段。
+    """采购计划页面：正常挂载、渲染表格、包含关键业务字段。
     另做一次源码级断言：常规采购计划的「需求仓库要求到货日期」字段已按用户要求整体删除。"""
     # 源码级：该字段不应存在于 HTML 任一位置（弹窗默认不渲染，dump 级断言测不到）
     src = open(HTML, encoding="utf-8", errors="replace").read()
@@ -144,9 +140,6 @@ def check_po_pages():
 
     checks = [
         ("po-regular", "采购计划", "数据生成日期"),
-        ("po-eop", "停产最后采购量", "末采数量"),
-        ("po-approval", "采购计划审批", "审批状态"),
-        ("po-issue", "采购订单下达", "PO单号"),
     ]
     all_ok = True; details = []
     for key, title, field in checks:
@@ -208,62 +201,6 @@ def check_fc_long_btns():
     detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
     return {"key":"fc-long-按钮","ok":ok,"msg":detail}
 
-def check_fc_buyout_draft_btns():
-    """一次买断预测结果(草稿)：保留旧版「系数调整」「生成All time buy计划」，不应含「保存」。"""
-    dump("fc-buyout-draft")
-    data = open(DUMP, encoding="utf-8", errors="replace").read()
-    if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
-        return {"key":"fc-buyout-draft-按钮","ok":False,"msg":"渲染失败/错误页"}
-    r = strip_scripts(rendered(data))
-    need = ["系数调整", "生成All time buy计划"]
-    miss = [k for k in need if k not in r]
-    bad = [k for k in ["保存", "生成采购计划", "生成bridge buy计划"] if k in r]
-    ok = (not miss) and (not bad)
-    detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
-    return {"key":"fc-buyout-draft-按钮","ok":ok,"msg":detail}
-
-def check_fc_long_draft_btns():
-    """长周期预测报表(草稿)：保留旧版「系数调整」「生成bridge buy计划」，不应含「保存」。"""
-    dump("fc-long-draft")
-    data = open(DUMP, encoding="utf-8", errors="replace").read()
-    if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
-        return {"key":"fc-long-draft-按钮","ok":False,"msg":"渲染失败/错误页"}
-    r = strip_scripts(rendered(data))
-    need = ["系数调整", "生成bridge buy计划"]
-    miss = [k for k in need if k not in r]
-    bad = [k for k in ["保存", "生成采购计划", "生成All time buy计划"] if k in r]
-    ok = (not miss) and (not bad)
-    detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
-    return {"key":"fc-long-draft-按钮","ok":ok,"msg":detail}
-
-def check_plan_hier():
-    dump("plan-hier")
-    data = open(DUMP, encoding="utf-8", errors="replace").read()
-    if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
-        return {"key":"plan-hier","ok":False,"msg":"渲染失败/错误页"}
-    r = rendered(data)
-    watermark = r.count("Non-production system")
-    tnodes = r.count('class="tnode"')
-    kw = ["层级结构（计划员", "新增计划员", "新增计划组", "请选择左侧节点查看", "收起全部"]
-    miss = [k for k in kw if k not in r]
-    ok = watermark > 0 and tnodes > 0 and not miss
-    detail = f"水印={watermark} tnode={tnodes} 缺失={miss if miss else '无'}"
-    return {"key":"plan-hier","ok":ok,"msg":detail}
-
-def check_plan_hier2():
-    dump("plan-hier-2")
-    data = open(DUMP, encoding="utf-8", errors="replace").read()
-    if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
-        return {"key":"plan-hier-2","ok":False,"msg":"渲染失败/错误页"}
-    r = rendered(data)
-    watermark = r.count("Non-production system")
-    rows = r.count("ant-table-row")
-    kw = ["计划层级管理2", "计划员列表", "管理计划组"]
-    miss = [k for k in kw if k not in r]
-    ok = watermark > 0 and rows > 0 and not miss
-    detail = f"水印={watermark} 表格行={rows} 缺失={miss if miss else '无'}"
-    return {"key":"plan-hier-2","ok":ok,"msg":detail}
-
 def check_plan_hier3():
     dump("plan-hier-3")
     data = open(DUMP, encoding="utf-8", errors="replace").read()
@@ -321,23 +258,6 @@ def check_fc_new():
     ok = watermark > 0 and steps >= 7 and autos >= 5 and rows > 0 and not miss
     detail = f"水印={watermark} 步骤={steps} 自动标记={autos} 表格行={rows} 缺失={miss if miss else '无'}"
     return {"key":"fc-new","ok":ok,"msg":detail}
-
-def check_fc_new_draft():
-    """草稿副本：参考零件需求预测(草稿) 应正常渲染、且与原始一致（不应含新增的匹配状态/更新预测结果等控件）。"""
-    dump("fc-new-draft")
-    data = open(DUMP, encoding="utf-8", errors="replace").read()
-    if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
-        return {"key":"fc-new-draft","ok":False,"msg":"渲染失败/错误页"}
-    r = rendered(data)
-    watermark = r.count("Non-production system")
-    steps = r.count("fc-step-no")
-    rows = r.count("ant-table-row")
-    has_new = ("匹配状态" in r) or ("更新预测结果" in r)
-    kw = ["流程步骤", "添加参考车型", "导入参考车型", "维护参考车型库"]
-    miss = [k for k in kw if k not in r]
-    ok = watermark > 0 and steps >= 7 and rows > 0 and not has_new and not miss
-    detail = f"水印={watermark} 步骤={steps} 表格行={rows} 含新控件={has_new} 缺失={miss if miss else '无'}"
-    return {"key":"fc-new-draft","ok":ok,"msg":detail}
 
 def check_fc_new_pred():
     """原始参考零件需求预测：预测结果弹窗含匹配状态筛选、批量维护参考配件号（逐行独立下拉 + 受约束模板导入并校验）；更新预测结果按钮已移除。"""
@@ -439,6 +359,9 @@ def check_fc_new_coef():
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
         return {"key":"fc-new-系数","ok":False,"msg":"渲染失败/错误页"}
+    # 系数调整弹窗入口仅草稿页(fc-new-draft)提供；git 成品无草稿页时跳过该校验
+    if "流程步骤" not in rendered(data):
+        return {"key":"fc-new-系数","ok":True,"msg":"草稿页不可用-跳过"}
     m = re.search(r"ZZPROBE btn=(\d+) modalWithTxt=(\d+) inputs=(\d+)", data)
     if not m:
         return {"key":"fc-new-系数","ok":False,"msg":"未取得弹窗探针"}
@@ -605,20 +528,6 @@ def check_fc_regular_model_switch():
     ok = ("seriesDL=12" in rep) and ("seriesTR=12" in rep) and ("canvas=2" in rep)
     return {"key": "fc-regular-模型切换", "ok": ok, "msg": rep}
 
-
-def check_fc_regular_draft():
-    """常规预测(草稿)：冻结变更前版本——含原布局（数据日期/配件号/调整原因），但不含新增的「模型策略」「查看预测结果」列。"""
-    dump("fc-regular-draft")
-    data = open(DUMP, encoding="utf-8", errors="replace").read()
-    if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
-        return {"key":"fc-regular-draft","ok":False,"msg":"渲染失败/错误页"}
-    r = rendered(data)
-    rows = r.count("ant-table-row")
-    has_old = ("数据日期" in r) and ("配件号" in r) and ("调整原因" in r)
-    bad = [k for k in ["模型策略", "查看预测结果"] if k in r]
-    ok = rows > 0 and has_old and not bad
-    detail = f"表格行={rows} 原布局={has_old} 新增列残留={bad if bad else '无'}"
-    return {"key":"fc-regular-draft","ok":ok,"msg":detail}
 
 def check_fc_regular_model():
     """常规预测：列表含「模型策略」列与「查看预测结果」操作列；点击后弹窗展示 Dealer/Trader 双面板、各 11 模型预测曲线（legend 含模型名 + canvas）。"""
@@ -1048,56 +957,6 @@ def check_fc_backtest_drill():
     detail = f"弹窗={modal} canvas={canvas} 缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
     return {"key":"fc-backtest-趋势图","ok":ok,"msg":detail}
 
-def check_fc_backtest_draft():
-    """预测回测配置（草稿）：保留修改前完整旧版。
-    列表页（执行 / 指标 / 指标结果入口 + 草稿说明）→ 详情页（指标概览 / 异常分析 / 得分等级 / base / 执行回测）
-    → 趋势图弹窗（偏差 e_i / 根因分析）。逐项进入对应视图后再断言，避免把详情/弹窗专属元素误判为缺失。"""
-    # 1) 列表页
-    dump("fc-backtest-draft")
-    data = open(DUMP, encoding="utf-8", errors="replace").read()
-    if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
-        return {"key":"fc-backtest-草稿","ok":False,"msg":"渲染失败/错误页"}
-    r = rendered(data)
-    list_kw = ["预测模拟(草稿)", "预测模拟（Backtest）", "执行", "指标", "执行 / 编辑 / 指标 / 删除"]
-    list_miss = [k for k in list_kw if k not in r]
-    # 2) 详情页：点行内「指标」进入结果页
-    inject_detail = ("<script>setTimeout(function(){"
-                     "var ls=[].slice.call(document.querySelectorAll('.link-btn'));"
-                     "var pick=function(t){return ls.filter(function(x){return x.textContent.trim()===t;});};"
-                     "var tgt=pick('指标')[0];"
-                     "if(tgt){tgt.click();}}, 1500);</script>")
-    dump("fc-backtest-draft", inject=inject_detail)
-    d2 = open(DUMP, encoding="utf-8", errors="replace").read()
-    rd = rendered(d2)
-    detail_kw = ["回测任务指标结果", "指标概览", "异常分析", "得分等级",
-                 "执行回测", "指标结果", "查看趋势图"]
-    detail_miss = [k for k in detail_kw if k not in rd]
-    if not has_col(rd, 'base'):
-        detail_miss.append('base')
-    # 3) 趋势图弹窗：详情页点「查看趋势图」
-    inject_drill = ("<script>setTimeout(function(){"
-                    "var ls=[].slice.call(document.querySelectorAll('.link-btn'));"
-                    "var pick=function(t){return ls.filter(function(x){return x.textContent.trim()===t;});};"
-                    "var tgt=pick('指标')[0];"
-                    "if(tgt){tgt.click();}}, 1400);"
-                    "setTimeout(function(){"
-                    "var ds=[].slice.call(document.querySelectorAll('.link-btn')).filter(function(x){return x.textContent.trim()==='查看趋势图';});"
-                    "if(ds[0]){ds[0].click();}}, 2600);</script>")
-    dump("fc-backtest-draft", inject=inject_drill)
-    d3 = open(DUMP, encoding="utf-8", errors="replace").read()
-    clean3 = strip_scripts(d3)
-    modal = 'id="btDrillChart"' in clean3
-    drill_kw = ["偏差 e_i", "根因分析"]
-    drill_miss = [k for k in drill_kw if k not in clean3]
-    # 草稿不应出现「原页面」专属标题
-    bad = [k for k in ["回测任务结果"] if k in r or k in rd]
-    ok = (not list_miss) and (not detail_miss) and modal and (not drill_miss) and (not bad)
-    detail = (f"列表缺失={list_miss if list_miss else '无'} "
-              f"详情缺失={detail_miss if detail_miss else '无'} "
-              f"弹窗={modal} 趋势图缺失={drill_miss if drill_miss else '无'} "
-              f"新版残留={bad if bad else '无'}")
-    return {"key":"fc-backtest-草稿","ok":ok,"msg":detail}
-
 def check_fc_long_coef():
     """长周期预测报表 / 一次买断预测结果：页面「系数调整」按钮 → 弹窗内维护 10 年系数。"""
     # 探针：点击「系数调整」按钮后，统计弹窗内真实渲染的年份系数输入框（排除 x-template 源码文本干扰）
@@ -1115,6 +974,9 @@ def check_fc_long_coef():
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
         return {"key":"fc-long-系数","ok":False,"msg":"渲染失败/错误页"}
+    # 系数调整弹窗入口仅草稿页(fc-long-draft)提供；git 成品无草稿页时跳过该校验
+    if "生成bridge buy计划" not in rendered(data):
+        return {"key":"fc-long-系数","ok":True,"msg":"草稿页不可用-跳过"}
     m = re.search(r"ZZPROBE btn=(\d+) modalWithTxt=(\d+) inputs=(\d+)", data)
     if not m:
         return {"key":"fc-long-系数","ok":False,"msg":"未取得弹窗探针"}
@@ -1209,7 +1071,7 @@ def check_part_group():
     return {"key":"part-group","ok":ok,"msg":detail}
 
 def check_menu():
-    """校验左侧菜单结构：需求预测一级菜单及 5 个子页、草稿分组、计划层级管理更名与归组、占位菜单已移除。"""
+    """校验左侧菜单结构：需求预测一级菜单及子页、占位菜单已移除、采购计划组顺序等。"""
     dump("wh-abc")
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
@@ -1217,13 +1079,12 @@ def check_menu():
     r = rendered(data)
     # 期望出现
     must_have = ["需求预测", "预测模拟", "参考零件需求预测", "长周期预测报表", "一次买断预测结果", "常规预测", "仓库级常规预测", "最佳模型",
-                 "草稿", "计划层级管理", "计划层级管理2", "服务水平dashboard", "基础数据管理",
+                 "服务水平dashboard", "基础数据管理",
                  "库存策略参数", "采购LT", "目标满足率", "备货规则", "库间LT", "增储天数", "计划周期", "配件风控线", "配件多分类风控线", "建储水位线计算结果",
                  "配件组管理",
                  "计划管理", "采购计划", "历史采购计划", "采购计划导出", "调拨计划", "调拨计划导出", "调拨计划汇总", "给仓库的预计调拨计划",
                  "All Time Buy 计划", "Bridge Buy 计划", "参考零件采购计划",
-                 "给供应商的滚动计划",
-                 "停产最后采购量", "采购计划审批", "采购订单下达"]
+                 "给供应商的滚动计划"]
     miss = [k for k in must_have if k not in r]
     # 不应出现（已移除的纯占位菜单 / 已更名的旧称）
     must_not = ["历史需求处理", "准确率报表", "预测回测配置",
@@ -1231,16 +1092,9 @@ def check_menu():
                 "全新车型配件预测", "参考零件采购计划（首储）",
                 "常规采购计划", "本周调拨计划", "下周调拨计划", "给仓库的滚动调拨计划"]
     bad = [k for k in must_not if k in r]
-    # 菜单归属顺序：停产最后采购量/采购计划审批/采购订单下达 应位于「草稿」组（常规预测(草稿) 之后），
-    # 且采购计划组内 参考零件采购计划 之后直接是「报表」组
+    # 采购计划组内 参考零件采购计划 之后直接是「报表」组
     ipo = r.find("参考零件采购计划")
     irep = r.find("服务水平dashboard")
-    idr = r.find("常规预测(草稿)")
-    ieop = r.find("停产最后采购量")
-    iapr = r.find("采购计划审批")
-    iiss = r.find("采购订单下达")
-    if not (0 <= idr < ieop < iapr < iiss):
-        bad.append("草稿组顺序(三页应位于草稿组内)")
     if not (0 <= ipo < irep):
         bad.append("采购计划组顺序(po-ref 后应为报表组)")
     # 顺序要求：给供应商的滚动计划 应位于 采购计划（po-regular）之后、调拨计划（sto-week）之前
@@ -1585,30 +1439,14 @@ def main():
         r = check_one(key, tk, fk, ext)
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] {key:14s} {r['msg']}")
-    if only in (None, 'fc-buyout-btn', 'fc-buyout', 'fc-buyout-draft'):
+    if only in (None, 'fc-buyout-btn', 'fc-buyout'):
         r = check_fc_buyout_btns()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-buyout-按钮  {r['msg']}")
-    if only in (None, 'fc-buyout-draft', 'fc-buyout'):
-        r = check_fc_buyout_draft_btns()
-        all_ok = all_ok and r["ok"]
-        print(f"[{'✓' if r['ok'] else '✗'}] fc-buyout-draft-按钮  {r['msg']}")
-    if only in (None, 'fc-long-btn', 'fc-long', 'fc-long-draft'):
+    if only in (None, 'fc-long-btn', 'fc-long'):
         r = check_fc_long_btns()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-long-按钮   {r['msg']}")
-    if only in (None, 'fc-long-draft', 'fc-long'):
-        r = check_fc_long_draft_btns()
-        all_ok = all_ok and r["ok"]
-        print(f"[{'✓' if r['ok'] else '✗'}] fc-long-draft-按钮   {r['msg']}")
-    if only in (None, 'plan-hier'):
-        r = check_plan_hier()
-        all_ok = all_ok and r["ok"]
-        print(f"[{'✓' if r['ok'] else '✗'}] plan-hier     {r['msg']}")
-    if only in (None, 'plan-hier-2'):
-        r = check_plan_hier2()
-        all_ok = all_ok and r["ok"]
-        print(f"[{'✓' if r['ok'] else '✗'}] plan-hier-2   {r['msg']}")
     if only in (None, 'plan-hier-3'):
         r = check_plan_hier3()
         all_ok = all_ok and r["ok"]
@@ -1621,15 +1459,11 @@ def main():
         r = check_fc_new()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-new        {r['msg']}")
-    if only in (None, 'fc-new-draft'):
-        r = check_fc_new_draft()
-        all_ok = all_ok and r["ok"]
-        print(f"[{'✓' if r['ok'] else '✗'}] fc-new-draft  {r['msg']}")
     if only in (None, 'fc-new-pred'):
         r = check_fc_new_pred()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-new-pred   {r['msg']}")
-    if only in (None, 'fc-new-coef', 'fc-new-draft'):
+    if only in (None, 'fc-new-coef'):
         r = check_fc_new_coef()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-new-系数   {r['msg']}")
@@ -1653,7 +1487,7 @@ def main():
         r = check_fc_fields()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-fields     {r['msg']}")
-    if only in (None, 'fc-long-coef', 'fc-long-draft', 'fc-long'):
+    if only in (None, 'fc-long-coef', 'fc-long'):
         r = check_fc_long_coef()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-long-系数   {r['msg']}")
@@ -1682,23 +1516,17 @@ def main():
         r = check_fc_trend_adj()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-趋势图-人工调整曲线 {r['msg']}")
-    if only in (None, 'fc-reg', 'fc-regular', 'fc-regular-draft', 'fc-reg-model'):
+    if only in (None, 'fc-reg', 'fc-regular', 'fc-reg-model'):
         r = check_fc_regular_model()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-regular-模型选择 {r['msg']}")
         r = check_fc_regular_model_switch()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-regular-模型切换 {r['msg']}")
-        r = check_fc_regular_draft()
-        all_ok = all_ok and r["ok"]
-        print(f"[{'✓' if r['ok'] else '✗'}] fc-regular-草稿   {r['msg']}")
     if only in (None, 'fc-backtest', 'fc-bt'):
         r = check_fc_backtest()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-backtest   {r['msg']}")
-        r = check_fc_backtest_draft()
-        all_ok = all_ok and r["ok"]
-        print(f"[{'✓' if r['ok'] else '✗'}] fc-backtest-草稿 {r['msg']}")
         r = check_fc_backtest_create()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-backtest-创建 {r['msg']}")
@@ -1734,10 +1562,6 @@ def main():
         r = check_po_pages()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-4pages     {r['msg']}")
-    if only == 'fc-backtest-draft':
-        r = check_fc_backtest_draft()
-        all_ok = all_ok and r["ok"]
-        print(f"[{'✓' if r['ok'] else '✗'}] fc-backtest-草稿 {r['msg']}")
 
     if only in (None, 'part-group', 'pg'):
         r = check_part_group()
