@@ -48,6 +48,23 @@ def main():
             continue
         html = html.replace(ph, content)
 
+    # 草稿模块注入：本地存在 fragment 片段且未被环境变量关闭时注入到锚点；
+    # 否则（git 仓库无 fragment，或显式 JLR_DRAFT=off）仅保留空注释占位，保证 git 成品无草稿。
+    # 提交无草稿版：JLR_DRAFT=off python3 assemble.py  （即使 fragment 存在也跳过注入）
+    fragment_path = os.path.join(VENDOR_DIR, "draft-script.fragment.js")
+    anchor = "/* DRAFT_INJECT_SCRIPT */"
+    draft_on = os.environ.get("JLR_DRAFT", "on").lower() not in ("0", "off", "false", "no")
+    if draft_on and os.path.exists(fragment_path):
+        with open(fragment_path, "r", encoding="utf-8") as ff:
+            fragment_js = ff.read()
+        if anchor in html:
+            html = html.replace(anchor, fragment_js, 1)
+        else:
+            print("WARN anchor not found:", anchor, file=sys.stderr)
+    else:
+        # git 仓库场景：无 fragment 文件，或显式关闭草稿 → 仅保留空注释占位
+        html = html.replace(anchor, "/* no draft module */", 1)
+
     # 检查是否还有未替换的占位符
     leftover = [p for p in PLACEHOLDERS if p in html]
     if leftover:
