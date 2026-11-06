@@ -4089,7 +4089,7 @@ mark {
               <!-- 列表页 -->
               <template v-if="gpView==='list'">
                 <a-form layout="inline" class="bt-form bt-query">
-                  <a-form-item label="建储类型"><a-select v-model:value="gpQ.buildType" style="width:160px" :options="[{value:'',label:'全部'},{value:'PO 建储',label:'PO 建储'},{value:'STO 建储',label:'STO 建储'},{value:'通用',label:'通用'}]"/></a-form-item>
+                  <a-form-item label="类型"><a-select v-model:value="gpQ.buildType" style="width:160px" :options="[{value:'',label:'全部'},{value:'PO 建储',label:'PO 建储'},{value:'STO 建储',label:'STO 建储'},{value:'通用',label:'通用'}]"/></a-form-item>
                   <a-form-item label="参数代码"><a-input v-model:value="gpQ.kw" placeholder="参数代码" style="width:220px" allow-clear/></a-form-item>
                   <a-form-item style="margin-left:auto;"><a-button type="primary" @click="gpSearch">搜 索</a-button></a-form-item>
                 </a-form>
@@ -4118,7 +4118,7 @@ mark {
                   <a-form layout="vertical" class="gp-form" style="max-width:1080px;">
                     <a-row :gutter="24">
                       <a-col :span="12">
-                        <a-form-item label="建储类型" required><a-input :value="gpEdit.buildType" readonly/></a-form-item>
+                        <a-form-item label="类型" required><a-input :value="gpEdit.buildType" readonly/></a-form-item>
                       </a-col>
                       <a-col :span="12">
                         <a-form-item label="参数代码"><a-input :value="gpEdit.code" readonly/></a-form-item>
@@ -4594,7 +4594,7 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 <script src="stocking-rules.js?v=20261026-create"></script>
 <script src="global-parameters.js?v=20261026-derived-service"></script>
 <script src="inventory-results.js?v=20261104-log-diff"></script>
-<script src="inventory-strategy.js?v=20261104-approval-actions"></script>
+<script src="inventory-strategy.js?v=20261106-increase-form"></script>
 <script>
 /* ================= 模拟数据（确定性随机，每次打开一致） ================= */
 let _seed = 20260918;
@@ -10540,7 +10540,7 @@ const app = createApp({
     const gpFiltered=computed(()=>gpRaw.filter(r=>(!gpQ.buildType||r.buildType===gpQ.buildType)&&(!gpQ.kw||r.code.toLowerCase().includes(gpQ.kw.trim().toLowerCase()))));
     function gpSearch(){}
     const gpCols = [
-      {title:'建储类型',dataIndex:'buildType',key:'buildType',width:130},
+      {title:'类型',dataIndex:'buildType',key:'buildType',width:130},
       {title:'参数代码',dataIndex:'code',key:'code',width:280},
       {title:'参数描述',dataIndex:'desc',key:'desc',width:200},
       {title:'默认值',dataIndex:'def',key:'def',width:130},
