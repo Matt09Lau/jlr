@@ -40,7 +40,7 @@ PAGES = [
     ("po-bridge",       "Bridge Buy 计划",   "属地预期库存",  False),
     ("po-ref",          "参考零件采购计划",  "参考车型",      False),
     ("po-roll",         "给供应商的滚动计划", "同步状态", False),
-    ("activity-register", "活动登记表",      "按月销量", False),
+    ("activity-register", "活动登记表",      "活动名称", False),
 ]
 
 def file_url(path, fragment=""):
@@ -163,30 +163,158 @@ def check_po_regular_activity():
     """采购计划-活动零件拦截弹窗：按需求第8条(历史数据处理-活动登记表)展示该配件登记的活动数量，
     供计划员参考后手动填写调整计划数量（客户调整的计划数量）。
     源码级断言：存在活动登记表主数据(poRegActivityTable)、按配件号查找(poRegActReg/poRegEditActReg)、
-    展示面板标识(活动登记信息/活动数量（客户调整量）)；
-    且旧版「活动名称 / 编号 / 请输入活动名称或编号 / activity_no」已彻底移除。"""
+    展示面板标识(活动登记信息/活动数量（客户调整量）)，并展示唯一主键字段「活动名称」；
+    旧版合并输入框「活动名称 / 编号 / 请输入活动名称或编号 / activity_no」已彻底移除。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
-    need = ["poRegActivityTable", "poRegActReg", "poRegEditActReg",
-            "活动登记信息", "活动数量（客户调整量）",
-            "poRegEditActMonths", "活动销量按月填充（来自活动登记表"]
+    need = ["poRegActivityTable", "poRegActReg", "poRegEditActReg", "poRegEditActReg.activity_name",
+            "活动登记信息", "活动数量（客户调整量）", "活动状态", "actRegStatusColor"]
     miss = [k for k in need if k not in src]
-    bad = [k for k in ["活动名称 / 编号", "请输入活动名称或编号", "activity_no", "row.activity_no"] if k in src]
+    bad = [k for k in ["活动名称 / 编号", "请输入活动名称或编号", "activity_no", "row.activity_no",
+                       "poRegEditActMonths", "活动销量按月填充（来自活动登记表"] if k in src]
     ok = (not miss) and (not bad)
     detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
     return {"key":"po-regular-活动零件","ok":ok,"msg":detail}
 
-def check_activity_register():
-    """历史需求处理-活动登记表：复刻 UAT capp.CappActivityRegister + 跨月活动销量按月填充。
-    源码级断言：月份切分/按天数占比分摊/跨月判定/按月销量列均存在。
-    渲染级断言：菜单组、页面标题、按月销量列，以及跨月样例
-      （2026-02-01 ~ 2026-03-02，活动数量 414；2 月 28 天 / 3 月 2 天，
-        按天数占比得 386 / 28，末月承接余数保证合计 414）。"""
+def check_po_order():
+    """采购计划-创建订单弹窗（2026-11-06）：
+    ① 按截图去掉「交付提前期」列；该字段仅不再展示，后台仍必须带出 lead_days 用于自动计算
+       要求到货日期（eta_date = 下单日期 + 提前期），否则生成的采购订单到货日期会失真；
+    ② 多供应商（同一配件在「配件与供应商关系」中有多条）时，供应商代码列改为可搜索下拉，
+       改选后供应商名称与提前期同步切换；单供应商仍只读自动带出。
+    源码级断言：弹窗与 7 列仍在、提前期计算链完整、供应商下拉与联动函数齐备、无旧单条取值残留。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
-    need = ["actRegMonthSpans", "actRegAllocate", "actRegIsCrossMonth",
-            "actRegMonthCols", "按月销量（优化）",
-            "actRegTotalQty", "actRegTotalLabel",
-            "actRegForm.activity_type==='服务活动'", "比例计算结束日期由系统自动带出"]
+    need = ["创建订单 · 采购计划", "poOrderCols", "poOrderRows", "poOrderOnPart", "poOrderEta",
+            "poOrderSubmit", "title:'订单数量'", "title:'备注'",
+            "eta_date:poOrderEta(issueDate, r.lead_days)",
+            "poOrderSupplierOptions", "poOrderOnSupplier", "supplier_options:[]",
+            "record.supplier_options.length>1", ':options="record.supplier_options"',
+            'option-label-prop="value"', ":dropdown-match-select-width=\"false\"",
+            "@change=\"v=>poOrderOnSupplier(record, v)\"",
+            "r.lead_days = opts.length ? opts[0].delivery_lead_time"]
+    bad = ["title:'交付提前期'", "column.key==='lead_days'",
+           "title:'交付提前期', key:'lead_days'",
+           "const rel = code ? partSupplierData.find"]
     miss = [k for k in need if k not in src]
+    stale = [k for k in bad if k in src]
+    ok = (not miss) and (not stale)
+    detail = f"缺失={miss if miss else '无'} 残留={stale if stale else '无'}"
+    return {"key":"po-regular-创建订单", "ok":ok, "msg":detail}
+
+def check_po_manual_order():
+    """采购计划-手工下单拦截类型（2026-11-07）：
+    针对「手工创建订单」产生的行，新增拦截原因＝手工下单（无需计划员处理、编辑弹窗只读），
+    备注写明单独下单原因（如某活动单独下单）；手工下单备注不附「不推荐出单」标签。
+    源码级断言：枚举/只读集合/不推荐出单集合/筛选分组/编辑提示/保存只读判定/订单提交回写/演示数据齐备。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    need = ["'直供件','手工下单']",
+            "poNoActionReasons = ['非计划日','库存充足','替代拦截','一次买断件','直供件','手工下单']",
+            "poNoIssueReasons = poNoActionReasons.filter(v=>v!=='手工下单')",
+            "poNoActionReasons.includes(reason)",
+            "无需审核（手工下单）",
+            "'手工下单':'该配件已由计划员手工创建订单单独下单",
+            "poManualOrderNotes",
+            "p.block_reason='手工下单'",
+            "p.remark=(r.remark",
+            "备注（如：某某活动单独下单）"]
+    bad = ["poNoIssueReasons = ['非计划日','库存充足','替代拦截','一次买断件','直供件','手工下单']",
+           "无需审核（不推荐出单）"]
+    miss = [k for k in need if k not in src]
+    stale = [k for k in bad if k in src]
+    ok = (not miss) and (not stale)
+    return {"key":"po-regular-手工下单", "ok":ok, "msg":f"缺失={miss if miss else '无'} 残留={stale if stale else '无'}"}
+
+def check_po_detail_layout():
+    """采购计划 / 历史采购计划详情弹窗（2026-11-07）：
+    取消「调整与拦截信息 + 全量字段」双块，改为单块 a-descriptions，
+    字段按列表列定义 poRegColumns / poHistColumns 的顺序依次排列。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    need = ["v-for=\"c in poRegColumns.filter(x=>x.key!=='action')\"",
+            "v-for=\"c in poHistColumns.filter(x=>x.key!=='action')\"",
+            "字段与列表列定义 poRegColumns 同序",
+            "字段与列表列定义 poHistColumns 同序"]
+    bad = ["调整与拦截信息", "全量字段"]
+    miss = [k for k in need if k not in src]
+    stale = [k for k in bad if k in src]
+    ok = (not miss) and (not stale)
+    return {"key":"po-详情弹窗单块", "ok":ok, "msg":f"缺失={miss if miss else '无'} 残留={stale if stale else '无'}"}
+
+def check_po_edit_modal():
+    """采购计划「调整 · 采购计划」弹窗（2026-11-07）：
+    ① 弹窗内不再提供「备注（人工填写，选填）」文本域，备注只由「创建订单」回写 / 系统派生；
+    ② 仅当单据状态＝待提交 且 本行拦截尚未处理过 且 仍有待处理拦截原因时，才按拦截原因
+       展示一次性处理内容（选供应商 / 指定计划员 / 确认合同 / 调数量 / 活动登记面板）；
+    ③ 处理完成（handled 置位、拦截解除）或单据已流转出待提交后，再次打开仅保留
+       「调整计划数量」「调整原因」2 个可编辑字段，不再重复要求选供应商等一次性动作，
+       也不再展示「拦截已处理」状态提示条；
+    ④ 再次调整保存时写回这 2 个字段并追加「数量调整」变更记录。
+    源码级断言：待处理判定 / 两种形态模板 / handled 标记 / 通用保存分支齐备，旧备注输入已清除。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    need = ["const poRegEditPending = computed(()=>{",
+            "r.bill_status==='待提交' && !r.handled && r.is_blocked==='是'",
+            'v-if="poRegEditPending"',
+            "poRegEditPending, poRegOpenEdit",
+            "Object.keys(poRegEditErr).forEach(k=>{ poRegEditErr[k]=''; });",
+            "仅保留 2 个通用调整字段，且不展示任何状态提示条",
+            "const isPending = poRegEditPending.value;",
+            "const upd = { modifier:'当前用户', update_time:ts, handled:true }",
+            "if(!isPending){",
+            "upd.adjust_qty = row.adjust_qty; upd.adjust_reason = row.adjust_reason;",
+            "pushLog('数量调整','调整计划数量', t.adjust_qty, row.adjust_qty, '人工', row.adjust_reason||'人工调整计划数量')",
+            "const needReason = isPending ? !isReadOnly : true;"]
+    bad = ["备注（人工填写，选填）", 'v-model:value="poRegEditRow.remark"',
+           "const upd = { modifier:'当前用户', update_time:ts, remark: row.remark }",
+           "可在下方填写备注说明", "备注由下方统一",
+           "拦截已处理（或单据已流转）", "可继续调整计划数量与调整原因"]
+    miss = [k for k in need if k not in src]
+    stale = [k for k in bad if k in src]
+    ok = (not miss) and (not stale)
+    return {"key":"po-调整弹窗两形态", "ok":ok, "msg":f"缺失={miss if miss else '无'} 残留={stale if stale else '无'}"}
+
+def check_activity_register():
+    """历史需求处理-活动登记表（2026-11-06 迭代口径）：
+      ① 取消按月维护活动数量（跨月分摊 / 按月填充表 / 按月销量列 / 查看结果按月汇总页签全部移除）；
+      ② 导入（Excel/CSV → 预览 → 按唯一主键「活动名称 + 配件号」upsert）＋ 导出（按筛选结果导出 CSV）；
+      ③ 活动截止日期选填；④ 关键字段缺失 → 活动状态「待补充信息」；
+      ⑤ 新增弹窗已去掉「活动期间」说明小字、附件描述副标题、底部整段状态说明；
+      ⑥ 新增「活动名称」＋配件号构成唯一主键：列表首列/筛选/表单必填/组合判重/详情/导入模板首列/导出列；
+         缺主键的导入行标「跳过」且不写回；
+      ⑦ 页面内字段统一称「配件号」（原「最新配件号」），按天明细同步称「配件名称」；
+         配件主数据详情页的「最新配件号」＝最新可采购件，属另一业务口径，不在本桶判定范围内；
+      附件图片仍与配件组管理共用通用交互（picture-card ≤5 张，全站唯一预览弹窗）。
+    源码级断言：新功能标识齐备、旧按月变量已清除（草稿副本用 dar* 前缀，不参与判定）。
+    说明文案的残留断言只在正本模板区间内做（本地草稿副本保留改造前原文，不能全文判）。
+    渲染级断言：菜单组 / 标题 / 导入与导出按钮 / 待补充信息标签 / 表格行，且正本页不再出现按月列与分月样例。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    a0 = src.find("<template v-else-if=\"activeMenu==='activity-register'\">")
+    a1 = src.find("<!-- 参考系统同组菜单占位", a0)
+    act_src = src[a0:a1] if a0 >= 0 and a1 > a0 else src
+    need = [">导入</a-button>", ">导出</a-button>", "actRegExportCsv", "导出成功，共",
+            "JLRS_活动登记表_", "actRegImportTemplate", "actRegImportFile", "actRegDoImport",
+            "actRegFindMatch", "actRegImportHeads", "actRegImportAddCount", "actRegImportSkipCount",
+            "activity_name", "活动名称", "请填写活动名称并选择配件号（唯一主键）",
+            "该「活动名称 + 配件号」组合已存在", "按唯一主键「活动名称 + 配件号」匹配",
+            "'活动名称','配件号','活动类型'", "主键缺失", "actRegDemoName",
+            '<span class="f-label">配件号</span>', "title:'配件号', key:'part_code'",
+            'label="配件号"', "title:'配件名称', key:'part_name'",
+            "待补充信息", "actRegStatusOf", "actRegIsComplete",
+            "结束日期（选填）",
+            "最多 5 张图片", "actRegImgMax = 5", "actRegBeforeImg", "actRegRemoveImg",
+            "images:(f.images||[]).slice()", "按天明细", "actRegDayCols",
+            "jlrsImgBefore", "jlrsImgPreviewOpen", "jlrsImgPreview.open",
+            'list-type="picture-card"', "pgImgMax = 6"]
+    miss = [k for k in need if k not in src]
+    stale = [k for k in ["actRegMonthSpans", "actRegAllocate", "actRegMonthCols",
+                         "actRegFormMonths", "actRegDetailMonths", "actRegResultMonths",
+                         "actRegResultTab", "actRegMonthText", "poRegEditActMonths",
+                         'v-model:open="pgPreview.open"',
+                         "actRegFindMatch(code, start)", "actRegFindMatch(part_code, start_date)",
+                         "actRegFindMatch(x.part_code, x.start_date)",
+                         "已导出导入模板（8 列）"] if k in src]
+    stale += [k for k in ["活动截止日期可留空，后续补充", "活动方案、海报或现场照片",
+                          "如有缺失，保存后活动状态自动标记为", "批量导入变更</a-button>",
+                          "按「配件号 + 开始日期」匹配", "模板列：配件号、活动类型",
+                          "按「配件号 + 开始日期」upsert",
+                          "最新配件号", "最新配件名称"] if k in act_src]
     dump("activity-register")
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
@@ -195,16 +323,22 @@ def check_activity_register():
     checks = {
         "菜单组": "历史需求处理" in r,
         "页面标题": "活动登记表" in r,
-        "按月销量列": "按月销量" in r,
-        "2月填充": "2026-02：386 件" in r,
-        "3月填充": "2026-03：28 件" in r,
-        "活动数量": "414" in r,
+        "活动名称列": has_col(r, "活动名称"),
+        "配件号列": has_col(r, "配件号"),
+        "无最新配件号": "最新配件号" not in r,
+        "导入按钮": has_col(r, "导入"),
+        "导出按钮": has_col(r, "导出"),
+        "无旧按钮名": "批量导入变更" not in r,
+        "待补充信息标签": "待补充信息" in r,
+        "无按月销量列": "按月销量（优化）" not in r,
+        "无分月填充样例": "2026-02：386 件" not in r,
         "表格行": r.count("ant-table-row") > 0,
     }
     bad = [k for k, v in checks.items() if not v]
-    ok = (not miss) and (not bad)
+    ok = (not miss) and (not bad) and (not stale)
     return {"key":"activity-register", "ok":ok,
-            "msg":f"源码缺失={miss if miss else '无'} 渲染失败项={bad if bad else '无'} rows={r.count('ant-table-row')}"}
+            "msg":f"源码缺失={miss if miss else '无'} 残留={stale if stale else '无'} "
+                  f"渲染失败项={bad if bad else '无'} rows={r.count('ant-table-row')}"}
 
 def check_fc_buyout_btns():
     """一次买断预测结果：默认展示态，工具栏含「编辑」「生成All time buy计划」；「生成bridge buy计划」已移至长周期预测报表，不应残留；亦不应有「生成采购计划」「保存」（保存仅在编辑态出现）。"""
@@ -1222,12 +1356,40 @@ def check_sto():
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
     return {"ok": True, "msg": "2 页渲染正常，字段口径对齐 PRD 6.3.4 计算输出"}
 
+def check_sto_detail_no_remark():
+    """调拨计划 / 给仓库的预计调拨计划 共用详情弹窗（2026-11-07）：
+    两页详情弹窗已去掉「备注」功能——不再有备注编辑区、字数统计、保存备注按钮与 remark 字段，
+    弹窗为纯只读字段展示，底栏仅保留「关闭」。
+    源码级断言：只读弹窗注释 / 简化后的 stoOpenDetail / setup return 齐备；
+    全局与弹窗区间内均不得残留备注编辑相关实现。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    need = ["<!-- 详情弹窗：只读字段展示，不提供备注编辑 -->",
+            "/* 详情：纯只读字段展示，不提供备注编辑与保存入口 */",
+            "function stoOpenDetail(r){ stoDetailRow.value = r; stoDetailOpen.value = true; }",
+            "stoDetailOpen, stoDetailRow, stoOpenDetail,",
+            "详情弹窗为纯只读字段展示，不提供备注编辑与保存"]
+    bad = ["stoDetailRemark", "stoSaveRemark", "可在本弹窗内编辑并保存",
+           "保存备注", "备注已保存", "unmet_qty:unmetQty, remark:remark",
+           "备注支持在详情弹窗内编辑保存"]
+    m = re.search(r'<!-- 详情弹窗：只读字段展示.*?</a-modal>', src, re.S)
+    seg = m.group(0) if m else ""
+    # 注释本身含「备注」二字属正常，故只按具体 UI 元素判定残留
+    seg_bad = [k for k in ["<a-textarea", "bt-sec-t", "保存备注"] if k in seg]
+    miss = [k for k in need if k not in src]
+    stale = [k for k in bad if k in src]
+    if not seg:
+        stale.append("详情弹窗区间未定位")
+    ok = (not miss) and (not stale) and (not seg_bad)
+    return {"key": "sto-详情弹窗无备注", "ok": ok,
+            "msg": f"缺失={miss if miss else '无'} 残留={stale if stale else '无'} 弹窗区间残留={seg_bad if seg_bad else '无'}"}
+
 def check_sto_summary():
-    """调拨计划汇总（sto-summary）：PRD 6.5.2 汇总维度页面，导出后的「已执行计划」只读报表。
-    列结构严格按 6.4.3.2 计算逻辑表 39 列：数据快照日期 / 配件号 / 配件名称 + 每个区域仓 8 列
-    （是否备货标识、目标库存、STO分配率、STO计划量、预期库存、可用库存、Currenratio、SSQ Ratio）+ 中心仓 4 列
-    （{中心仓编码} 预期库存、STO分配后库存、STO分配总量、近3个月月均销量）。
-    断言：渲染出行、39 列齐备、三套仓网可切换、仅导出（无导入/无编辑/无审批），且旧指标名已移除。"""
+    """调拨计划汇总（sto-summary）：PRD 6.4.3 汇总维度页面，导出后的「已执行计划」只读报表。
+    列结构严格按 6.4.3.2 计算逻辑表：固定 3 列（数据快照日期 / 配件号 / 配件名称）+ 每个区域仓 9 列
+    （是否备货标识、目标库存、本次分配率、本次分配量、预期库存、现有库存、当前库存占比、
+    分配后库存占比、目标库存占比）+ 中心仓 4 列（{中心仓编码} 全网可用库存、STO分配后库存、
+    STO分配总量、近3个月月均销量）。CJLR / JLR＝43 列，JLRC＝34 列。
+    断言：渲染出行、43 列齐备、三套仓网可切换、仅导出（无导入/无编辑/无审批），且旧指标名已移除。"""
     r = rendered(dump("sto-summary"))
     bad = []
     if r.count("ant-table-row") <= 0:
@@ -1235,19 +1397,21 @@ def check_sto_summary():
     for c in ["数据快照日期", "配件号", "配件名称"]:
         if c not in r:
             bad.append("缺列:" + c)
-    # CJLR 仓网：中心仓 CJDC，区域仓 CJV0~CJV3，每组 8 列（指标名取自 6.4.3.2 计算逻辑表）
+    # CJLR 仓网：中心仓 CJDC，区域仓 CJV0~CJV3，每组 9 列（指标名取自 6.4.3.2 计算逻辑表）
     for reg in ["CJV0", "CJV1", "CJV2", "CJV3"]:
         if (reg + " 是否备货标识") not in r:
             bad.append("缺列:" + reg + " 是否备货标识")
-        for m in ["目标库存", "STO分配率", "STO计划量", "预期库存", "可用库存", "Currenratio", "SSQ Ratio"]:
+        for m in ["目标库存", "本次分配率", "本次分配量", "预期库存", "现有库存",
+                  "当前库存占比", "分配后库存占比", "目标库存占比"]:
             if (reg + " " + m) not in r:
                 bad.append("缺列:" + reg + " " + m)
-    for c in ["CJDC 预期库存", "CJDC STO分配后库存", "CJDC STO分配总量", "CJDC 近3个月月均销量"]:
+    for c in ["CJDC 全网可用库存", "CJDC STO分配后库存", "CJDC STO分配总量", "CJDC 近3个月月均销量"]:
         if c not in r:
             bad.append("缺列:" + c)
     # 旧指标名应已移除（严格对齐 6.4.3.2 计算逻辑表）
     for c in ["调拨占比", "调拨数量", "库存+在途", "潜在缺口", "当前占比", "目标占比",
-              "中心仓库存", "调拨后未分配量", "总需求", "已分配量"]:
+              "中心仓库存", "调拨后未分配量", "总需求", "已分配量",
+              "STO分配率", "STO计划量", "Currenratio", "SSQ Ratio"]:
         if c in r:
             bad.append("残留旧指标名:" + c)
     for n in ["CJLR", "JLR", "JLRC"]:
@@ -1259,40 +1423,58 @@ def check_sto_summary():
         bad.append("报表页不应有审批按钮")
     if bad:
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
-    return {"ok": True, "msg": "已执行计划汇总渲染正常（39 列严格对齐业务报表 / 三套仓网切换 / 仅导出无编辑）"}
+    return {"ok": True, "msg": "已执行计划汇总渲染正常（43 列严格对齐 6.4.3.2 计算逻辑表 / 三套仓网切换 / 仅导出无编辑）"}
 
 def check_sto_export():
-    """调拨计划导出（sto-export）：PRD 6.3.4 计算输出的精简列（已删库存诊断拆分列与取整前/近3月均销量/当前可用天数等中间过程字段）
-    + 导出时间，逻辑同「采购计划导出」：顶部仅「待导出」tab、勾选行或筛选全量导出、导出后自动标记已导出。
-    断言：渲染出行、精简列齐备（含 推荐计划数量(MPQ取整后)/推荐计划数量/导出状态/是否下单/导出时间）、
-    顶部仅一个 tab、无「已导出」tab、无导入/无审批/无编辑；且不得出现已删的库存拆分过程列。"""
-    r = rendered(dump("sto-export"))
+    """调拨计划导出（sto-export）：严格按 PRD 6.4.2.2「STO 下单模板」字段，列表＝10 模板列 + 导出状态 + 操作。
+    断言：列集/顺序与模板严格一致、SAP 固定值带出、查询条件 5 项与模板数据字段一致、模板外旧列不得残留、
+    顶部仅「待导出」tab、无导入/审批/新增、导出按钮存在。"""
+    re_ = rendered(dump("sto-export"))
     bad = []
-    if r.count("ant-table-row") <= 0:
-        bad.append("rows=0")
-    for c in ["数据生成日期", "配件号", "配件名称", "发货仓", "收货仓",
-              "收货仓最低风控线", "收货仓目标库存", "ABC分类", "车型代码", "计划员",
-              "计划批次", "计划行", "推荐计划数量(分配后)", "推荐计划数量(MPQ取整后)", "推荐计划数量",
-              "库间LT", "要求到货日期", "体积", "体积单位", "预计调拨体积", "导出状态", "是否下单"]:
-        if c not in r:
-            bad.append("缺列:" + c)
-    for c in ["导出状态", "是否下单", "导出时间"]:
-        if c not in r:
-            bad.append("缺列:" + c)
-    # 导出页应已删减的中间过程字段
-    for c in ["预期库存（发货仓）", "预期库存（收货仓）", "推荐计划数量(取整前)", "近3个月月均销量", "当前可用天数"]:
-        if c in r:
-            bad.append("导出页不应有中间过程列:" + c)
-    if "待导出" not in r:
-        bad.append("缺「待导出」tab")
-    if "已导出（" in r:
-        bad.append("不应有「已导出」tab")
+    if re_.count("ant-table-row") <= 0:
+        bad.append("sto-export(rows=0)")
+    ehds = [re.sub(r"<[^>]+>", "", h).strip() for h in re.findall(r"<th[^>]*>(.*?)</th>", re_, re.S)]
+    ehds = [h for h in ehds if h]  # 剔除勾选列的空表头
+    tpl_cols = ["Order Type (Purchasing)", "发货仓", "Purchasing Organization", "Purchasing Group",
+                "Company Code", "计划批次", "计划行", "配件号", "数量", "收货仓",
+                "导出状态", "操作"]
+    if ehds != tpl_cols:
+        bad.append("sto-export(列集/顺序与6.4.2.2模板不一致:" + " / ".join(ehds) + ")")
+    # SAP 固定值须在单元格中带出
+    for fixed in ["ZC", "CJV0", "CN01", "000", "CJLR", "CN02"]:
+        if fixed not in re_:
+            bad.append("sto-export(缺固定值:" + fixed + ")")
+    # 查询条件须与 6.4.2.2 模板数据字段一致：5 个筛选标签 配件号/发货仓/收货仓/计划批次/计划行
+    flabels = re.findall(r'class="f-label">([^<]*)</span>', re_)
+    for fl in ["配件号", "发货仓", "收货仓", "计划批次", "计划行"]:
+        if fl not in flabels:
+            bad.append("sto-export(查询条件缺:" + fl + ")")
+    # 模板外旧列不得残留（只查列头，避免命中筛选区同名标签）
+    for col in ["数据生成日期", "配件名称", "推荐计划数量(分配后)", "推荐计划数量(MPQ取整后)",
+                "推荐计划数量(取整前)", "收货仓最低风控线", "收货仓目标库存", "ABC分类", "车型代码",
+                "计划员", "体积", "体积单位", "预计调拨体积", "库间LT", "要求到货日期",
+                "预期库存（发货仓）", "预期库存（收货仓）", "可用库存数量（发货仓）", "可用库存数量（收货仓）",
+                "欠交数量（发货仓）", "欠交数量（收货仓）", "库间在途数量（发货仓）", "库间在途数量（收货仓）",
+                "缺货数量（发货仓）", "缺货数量（收货仓）", "近3个月月均销量", "当前可用天数", "导出时间", "是否下单"]:
+        if col in ehds:
+            bad.append("sto-export(不应出现模板外列:" + col + ")")
+    # 顶部 tab：仅 待导出（不应有「全部」「已导出」tab）
+    if "待导出" not in re_:
+        bad.append("sto-export(缺tab:待导出)")
+    if "已导出" in re_:
+        bad.append("sto-export(不应有「已导出」tab)")
+    if has_col(re_, "全部"):
+        bad.append("sto-export(不应有「全部」tab)")
+    # 无导入 / 审批 / 编辑按钮
     for b in ["导入", "审批通过", "驳回", "新增"]:
-        if b in r:
-            bad.append("导出页不应有:" + b)
+        if b in re_:
+            bad.append("sto-export(不应有:" + b + ")")
+    # antd 两字按钮会自动插空格（"导 出"），用正则匹配
+    if not re.search(r'>\s*导\s*出\s*<', re_):
+        bad.append("sto-export(缺「导出」按钮)")
     if bad:
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
-    return {"ok": True, "msg": "调拨计划导出渲染正常（字段对齐 6.3.4 / 仅待导出 tab / 导出后自动标记）"}
+    return {"ok": True, "msg": "调拨计划导出渲染正常（12 列＝6.4.2.2 模板 10 列＋导出状态/操作；仅 待导出 1 个tab、导出即自动记录导出时间）"}
 
 
 def check_po_plan():
@@ -1374,7 +1556,7 @@ def check_po_roll():
 def check_po_archive():
     """历史采购计划（po-history）+ 采购计划导出（po-export）两页渲染与口径校验。
     历史页：列表列须与采购计划全量一致（默认全量 57 数据列，仅去掉顶部状态tab，归档只读）；
-    导出页：精简为下单字段，含「导出状态」列与 仅 待导出 一个 tab（无「全部」「已导出」tab、无标记按钮），
+    导出页：列集严格按 4.4.6.2 PO下单模板 11 列 + 导出状态/操作，含 仅 待导出 一个 tab（无「全部」「已导出」tab、无标记按钮），
             导出按钮名为「导出」，导出成功后自动打「已导出」标签（不再显示在页面中）。"""
     bad = []
     # ---- 历史采购计划 ----
@@ -1417,12 +1599,10 @@ def check_po_archive():
     acts = re.findall(r'class="link-btn"[^>]*>([^<]*)<', rh)
     if "变更记录" not in [a.strip() for a in acts]:
         bad.append("po-history(缺变更记录入口)")
-    # ---- 采购计划导出 ----
+    # ---- 采购计划导出：列集严格按 4.4.6.2「PO下单模板」11 列 + 2 个页面控制列 ----
     re_ = rendered(dump("po-export"))
     if re_.count("ant-table-row") <= 0:
         bad.append("po-export(rows=0)")
-    if not has_col(re_, "导出状态"):
-        bad.append("po-export(缺导出状态列)")
     # 顶部 tab：仅 待导出（不应有「全部」「已导出」tab）
     for t in ["待导出"]:
         if t not in re_:
@@ -1431,38 +1611,121 @@ def check_po_archive():
         bad.append("po-export(不应有「已导出」tab)")
     if has_col(re_, "全部"):
         bad.append("po-export(不应有「全部」tab)")
-    # 精简后须保留的下单字段
-    for col in ["计划数量(最终计划)", "供应商名称", "采购LT(天)", "要求到货日期", "建储仓库", "计划批次", "计划行"]:
-        if not has_col(re_, col):
-            bad.append("po-export(缺列:" + col + ")")
-    # 不应残留计算过程 / 审批 / 调整 字段
-    for col in ["推荐计划数量(凑MOQ后)", "推荐计划数量(凑联合MOQ后)", "推荐计划数量(凑成套采购后)", "推荐计划数量(凑MPQ后)",
-                "审批意见", "调整原因", "最低风控线", "预期库存数量", "近 3 个月月均销量", "欠交数量", "库间在途数量", "缺货数量"]:
-        if has_col(re_, col):
-            bad.append("po-export(不应出现过程/审批/调整列:" + col + ")")
+    ehds = [re.sub(r"<[^>]+>", "", h).strip() for h in re.findall(r"<th[^>]*>(.*?)</th>", re_, re.S)]
+    ehds = [h for h in ehds if h]  # 剔除勾选列的空表头
+    tpl_cols = ["Order Type (Purchasing)", "供应商代码", "Purchasing Organization",
+                "Purchasing Group", "Company Code", "计划批次", "计划行", "配件号", "订单数量",
+                "Net Price in Purchasing Document (in Document Currency)", "Plant",
+                "导出状态", "操作"]
+    if ehds != tpl_cols:
+        bad.append("po-export(列集/顺序与4.4.6.2模板不一致:" + " / ".join(ehds) + ")")
+    # SAP 固定值须在单元格中带出
+    for fixed in ["ZDFP", "CJV0", "CJLR", "CJDC"]:
+        if fixed not in re_:
+            bad.append("po-export(缺固定值:" + fixed + ")")
+    # 查询条件须与 4.4.6.2 模板字段一致：4 个筛选标签 配件号/供应商代码/计划批次/计划行
+    flabels = re.findall(r'class="f-label">([^<]*)</span>', re_)
+    for fl in ["配件号", "供应商代码", "计划批次", "计划行"]:
+        if fl not in flabels:
+            bad.append("po-export(查询条件缺:" + fl + ")")
+    # 模板外旧列不得残留（只查列头，避免命中筛选区同名标签）
+    for col in ["数据生成日期", "计划类型", "配件名称", "当前采购件号", "当前采购配件名称",
+                "建储仓库", "计划数量(最终计划)", "供应商名称", "起订量", "采购LT(天)", "要求到货日期",
+                "推荐计划数量(凑MOQ后)", "推荐计划数量(凑联合MOQ后)", "推荐计划数量(凑成套采购后)",
+                "推荐计划数量(凑MPQ后)", "审批意见", "调整原因", "最低风控线", "预期库存数量",
+                "近 3 个月月均销量", "欠交数量", "库间在途数量", "缺货数量", "导出时间"]:
+        if col in ehds:
+            bad.append("po-export(不应出现模板外列:" + col + ")")
     # 无标记按钮 / 行内标记链接；导出按钮名为「导出」
     if "标记导出" in re_ or "标记已导出" in re_:
         bad.append("po-export(不应有标记导出按钮/链接)")
     # antd 两字按钮会自动插空格（"导 出"），用正则匹配；"导出状态"列头不会误命中
     if not re.search(r'>\s*导\s*出\s*<', re_):
         bad.append("po-export(缺「导出」按钮)")
-    # 第一屏列序与采购计划一致：当前采购件号 / 当前采购配件名称 必须排在 配件号 / 配件名称 之前
-    ehds = [re.sub(r"<[^>]+>", "", h).strip() for h in re.findall(r"<th[^>]*>(.*?)</th>", re_, re.S)]
-
-    def _idx(t):
-        return ehds.index(t) if t in ehds else -1
-    for t in ["当前采购件号", "当前采购配件名称", "配件号", "配件名称"]:
-        if _idx(t) < 0:
-            bad.append("po-export(缺列:" + t + ")")
-    if 0 <= _idx("当前采购件号") and 0 <= _idx("配件号") and not _idx("当前采购件号") < _idx("配件号"):
-        bad.append("po-export(当前采购件号应在配件号之前)")
-    if 0 <= _idx("当前采购配件名称") and 0 <= _idx("配件名称") and not _idx("当前采购配件名称") < _idx("配件名称"):
-        bad.append("po-export(当前采购配件名称应在配件名称之前)")
-    if "供应商代码" not in ehds:
-        bad.append("po-export(缺供应商代码列)")
     if bad:
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
-    return {"ok": True, "msg": "2 页渲染正常（历史列与采购计划全量一致；导出页仅 待导出 1 个tab、无全部/无标记按钮，导出即自动记录导出时间）"}
+    return {"ok": True, "msg": "2 页渲染正常（历史列与采购计划全量一致；导出页 13 列＝4.4.6.2 模板 11 列＋导出状态/操作，仅 待导出 1 个tab，导出即自动记录导出时间）"}
+
+def check_po_export_template():
+    """4.4.6.2 PO下单模板严格性：列表业务列与导出 CSV 表头为同一组 11 列，
+       6 项 SAP 固定值由 constVal 带出，导出不受列设置影响。"""
+    bad = []
+    tpl = open(HTML, encoding="utf-8", errors="replace").read()
+    heads = ["Order Type (Purchasing)", "供应商代码", "Purchasing Organization",
+             "Purchasing Group", "Company Code", "计划批次", "计划行", "配件号", "订单数量",
+             "Net Price in Purchasing Document (in Document Currency)", "Plant"]
+    m = re.search(r'const poExpTemplateColumns = \[(.*?)\n    \];', tpl, re.S)
+    if not m:
+        bad.append("缺 poExpTemplateColumns 定义")
+    else:
+        body = m.group(1)
+        for h in heads:
+            if "title:'" + h + "'" not in body:
+                bad.append("模板缺表头:" + h)
+        if body.count("constVal") != 6:
+            bad.append("固定值列数应为 6，实为 " + str(body.count("constVal")))
+        for f in ["'ZDFP'", "'CJV0'", "'CJLR'", "'CJDC'"]:
+            if f not in body:
+                bad.append("缺固定值:" + f)
+        if "导出状态" in body or "key:'action'" in body:
+            bad.append("模板列中混入了页面控制列")
+    # 导出 CSV 必须只用模板列，不得引用可见列（列设置不能影响 PO 模板）
+    m2 = re.search(r'function poExpCsv\(rows\)\{(.*?)\n    \}', tpl, re.S)
+    if not m2:
+        bad.append("缺 poExpCsv")
+    else:
+        b2 = m2.group(1)
+        if "poExpTemplateColumns" not in b2:
+            bad.append("导出未使用模板 11 列")
+        if "poExpVisibleColumns" in b2:
+            bad.append("导出受列设置影响（仍引用 poExpVisibleColumns）")
+        if "poExpVal(r, c)" not in b2:
+            bad.append("导出未走 poExpVal（固定值可能丢失）")
+    return {"ok": not bad,
+            "msg": "正常（11 列表头 + 6 项固定值；CSV 严格模板列、不受列设置影响）" if not bad else "异常: " + ", ".join(bad)}
+
+def check_sto_export_template():
+    """6.4.2.2 STO下单模板严格性：列表业务列与导出 CSV 表头为同一组 10 列，
+       4 项 SAP 固定值（Order Type=ZC、Purchasing Organization=CJV0/CN01、Purchasing Group=000、Company Code=CJLR/CN02）由 constVal 带出，
+       导出不受列设置影响。其中 Order Type 为纯常量、Purchasing Organization/Company Code 为随发货仓切换的函数式 constVal。"""
+    bad = []
+    tpl = open(HTML, encoding="utf-8", errors="replace").read()
+    heads = ["Order Type (Purchasing)", "发货仓", "Purchasing Organization", "Purchasing Group",
+             "Company Code", "计划批次", "计划行", "配件号", "数量", "收货仓"]
+    m = re.search(r'const stoExpTemplateColumns = \[(.*?)\n    \];', tpl, re.S)
+    if not m:
+        bad.append("缺 stoExpTemplateColumns 定义")
+    else:
+        body = m.group(1)
+        for h in heads:
+            if "title:'" + h + "'" not in body:
+                bad.append("模板缺表头:" + h)
+        # 4 个模板固定值列（Order Type=ZC / Purchasing Organization / Purchasing Group=000 / Company Code）
+        # + 2 个仓库列用 constVal 箭头函数抽取 plant code（与模板示例 CJDC/CJV1 一致），共 6 处 constVal
+        if body.count("constVal") != 6:
+            bad.append("constVal 列数应为 6（4 模板固定值 + 2 仓库代码抽取），实为 " + str(body.count("constVal")))
+        for f in ["'ZC'", "'000'", "stoExpOrgConst", "stoExpCompConst"]:
+            if f not in body:
+                bad.append("缺固定值/函数:" + f)
+        # 发货仓/收货仓须用 constVal 箭头函数抽取纯 plant code（去除名称），与模板示例一致
+        if body.count("constVal: r =>") != 2:
+            bad.append("发货仓/收货仓须各用 constVal 箭头函数抽取 plant code")
+        if "导出状态" in body or "key:'action'" in body:
+            bad.append("模板列中混入了页面控制列")
+    # 导出 CSV 必须只用模板列，不得引用可见列（列设置不能影响 STO 模板）
+    m2 = re.search(r'function stoExpCsv\(rows\)\{(.*?)\n    \}', tpl, re.S)
+    if not m2:
+        bad.append("缺 stoExpCsv")
+    else:
+        b2 = m2.group(1)
+        if "stoExpTemplateColumns" not in b2:
+            bad.append("导出未使用模板 10 列")
+        if "stoExpVisibleColumns" in b2:
+            bad.append("导出受列设置影响（仍引用 stoExpVisibleColumns）")
+        if "stoExpVal(r, c)" not in b2:
+            bad.append("导出未走 stoExpVal（固定值可能丢失）")
+    return {"ok": not bad,
+            "msg": "正常（10 列表头 + 4 项固定值；CSV 严格模板列、不受列设置影响）" if not bad else "异常: " + ", ".join(bad)}
 
 def main():
     only = sys.argv[1] if len(sys.argv) > 1 else None
@@ -1613,6 +1876,10 @@ def main():
         r = check_sto()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] sto-2pages    {r['msg']}")
+    if only in (None, 'sto-detail', 'sto', 'sto-week', 'sto-next'):
+        r = check_sto_detail_no_remark()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] sto-详情弹窗无备注 {r['msg']}")
     if only in (None, 'sto', 'sto-summary'):
         r = check_sto_summary()
         all_ok = all_ok and r["ok"]
@@ -1633,10 +1900,34 @@ def main():
         r = check_po_archive()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-archive    {r['msg']}")
+    if only in (None, 'po-export-template', 'po-export', 'po-archive'):
+        r = check_po_export_template()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-exp-tpl    {r['msg']}")
+    if only in (None, 'sto-export-template', 'sto-export', 'sto'):
+        r = check_sto_export_template()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] sto-exp-tpl   {r['msg']}")
     if only in (None, 'po-regular-activity', 'po'):
         r = check_po_regular_activity()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-regular-活动零件 {r['msg']}")
+    if only in (None, 'po-order', 'po-regular', 'po'):
+        r = check_po_order()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-regular-创建订单 {r['msg']}")
+    if only in (None, 'po-manual-order', 'po-order', 'po-regular', 'po'):
+        r = check_po_manual_order()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-regular-手工下单 {r['msg']}")
+    if only in (None, 'po-detail', 'po-regular', 'po-archive', 'po'):
+        r = check_po_detail_layout()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-详情弹窗单块 {r['msg']}")
+    if only in (None, 'po-edit-modal', 'po-regular', 'po'):
+        r = check_po_edit_modal()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-调整弹窗两形态 {r['msg']}")
     if only in (None, 'activity-register'):
         r = check_activity_register()
         all_ok = all_ok and r["ok"]

@@ -876,6 +876,9 @@
                   <template v-else-if="column.key==='is_blocked'">
                     <a-tag :color="record.is_blocked==='是'?'red':'green'" style="margin:0;">{{ record.is_blocked }}</a-tag>
                   </template>
+                  <template v-else-if="column.key==='remark'">
+                    <a-tag v-if="poRegIsNoIssue(record)" color="orange" style="margin:0 4px 0 0;">不推荐出单</a-tag><span>{{ record.remark || (poRegIsNoIssue(record) ? '' : '—') }}</span>
+                  </template>
                   <template v-else-if="column.key==='is_joint_moq' || column.key==='is_plan_day'">
                     <a-tag :color="record[column.dataIndex]==='是'?'blue':'default'" style="margin:0;">{{ record[column.dataIndex] }}</a-tag>
                   </template>
@@ -917,6 +920,8 @@
                   <a-descriptions-item label="拦截原因">{{ poRegEditRow.block_reason }}</a-descriptions-item>
                 </a-descriptions>
 
+                <!-- 待处理：仅「待提交」且存在尚未处理的拦截原因时，才按拦截原因展示对应处理内容 -->
+                <template v-if="poRegEditPending">
                 <!-- 多供应商：选择供应商（及其对应 MOQ）+ 调整原因 -->
                 <div v-if="poRegEditRow.block_reason==='多供应商'" class="jlrs-form-grid">
                   <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>选择供应商（及其对应 MOQ）</span>
@@ -963,10 +968,11 @@
                   <div class="jlrs-act-reg" style="grid-column:1 / -1;">
                     <div class="jlrs-act-reg-title">活动登记信息（来自历史需求处理 · 活动登记表）</div>
                     <a-descriptions bordered size="small" :column="2" v-if="poRegEditActReg">
+                      <a-descriptions-item label="活动名称">{{ poRegEditActReg.activity_name || '—' }}</a-descriptions-item>
                       <a-descriptions-item label="配件号">{{ poRegEditActReg.part_code }}</a-descriptions-item>
                       <a-descriptions-item label="配件名称">{{ poRegEditActReg.part_name }}</a-descriptions-item>
                       <a-descriptions-item label="活动类型">{{ poRegEditActReg.activity_type }}</a-descriptions-item>
-                      <a-descriptions-item label="活动期间">{{ poRegEditActReg.start_date }} ~ {{ poRegEditActReg.end_date }}</a-descriptions-item>
+                      <a-descriptions-item label="活动期间">{{ poRegEditActReg.start_date || '—' }} ~ {{ poRegEditActReg.end_date || '—' }}</a-descriptions-item>
                       <a-descriptions-item :label="poRegEditActReg.activity_type==='促销活动' ? '促销预估增量（客户调整量）' : '活动数量（客户调整量）'"><span class="jlrs-act-qty">{{ poRegEditActReg.activity_qty }}</span> 件</a-descriptions-item>
                       <a-descriptions-item label="处理方案">{{ poRegEditActReg.process_plan }}</a-descriptions-item>
                       <a-descriptions-item v-if="poRegEditActReg.activity_type==='促销活动'" label="比例计算期间">{{ poRegEditActReg.ratio_start }} ~ {{ poRegEditActReg.ratio_end }}</a-descriptions-item>
@@ -976,17 +982,9 @@
                       <a-descriptions-item label="最后修改时间">{{ poRegEditActReg.last_modify_time || poRegEditActReg.update_time || '—' }}</a-descriptions-item>
                     </a-descriptions>
                     <a-alert v-else type="info" :message="'未查询到配件 ' + poRegEditRow.part_code + ' 的活动登记记录'" show-icon style="margin-top:4px;"/>
-                    <div class="jlrs-act-reg-title" style="margin-top:14px;">活动销量按月填充（来自活动登记表，按自然日天数占比分摊）</div>
-                    <a-table v-if="poRegEditActMonths.length" :columns="actRegMonthCols" :data-source="poRegEditActMonths"
-                      row-key="month" :pagination="false" size="small" bordered :scroll="{x:660}">
-                      <template #bodyCell="{ column, record }">
-                        <template v-if="column.key==='qty'"><span class="jlrs-act-qty">{{ record.qty }}</span> 件</template>
-                        <template v-else>{{ record[column.dataIndex] }}</template>
-                      </template>
-                    </a-table>
-                    <a-alert v-else type="info" message="该活动登记为单月活动，无分月填充数据" show-icon style="margin-top:4px;"/>
-                    <div v-if="poRegEditActMonths.length" style="margin-top:8px;font-size:12px;color:#888;">
-                      共 {{ poRegEditActMonths.length }} 个月，各月销量合计 <b>{{ poRegEditActMonthSum }}</b> 件（与登记的活动销量一致），调整计划数量时可按月参考。
+                    <div v-if="poRegEditActReg" style="margin-top:10px;font-size:12px;color:#888;">
+                      活动状态：<a-tag :color="actRegStatusColor(poRegEditActReg.activity_status)">{{ poRegEditActReg.activity_status }}</a-tag>
+                      　活动数量取登记总量，不再按月分摊，调整计划数量时直接参考上方数量。
                     </div>
                   </div>
                   <label><span><b class="jlrs-req">*</b>调整计划数量（客户调整的计划数量）</span>
@@ -996,12 +994,22 @@
                     <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="活动零件须填写理由，100 字以内" :maxlength="100"/></label>
                 </div>
 
-                <!-- 其他（系统自动拦截，计划员无需处理）：仅记录备注 -->
+                <!-- 其他（系统自动拦截，计划员无需处理）：维持拦截，仅给出只读提示 -->
                 <div v-else class="jlrs-form-grid">
                   <a-alert type="info" :message="poRegEditBlockNote" show-icon style="grid-column:1 / -1; margin-bottom:8px;"/>
-                  <label style="grid-column:1 / -1;"><span>调整原因（备注）</span>
-                    <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="系统自动拦截，计划员无需处理，可填写备注，100 字以内" :maxlength="100"/></label>
                 </div>
+                </template>
+
+                <!-- 已处理 / 非待提交：不再按拦截原因展示处理内容，仅保留 2 个通用调整字段，且不展示任何状态提示条 -->
+                <template v-else>
+                  <div class="jlrs-form-grid">
+                    <label><span><b class="jlrs-req">*</b>调整计划数量</span>
+                      <a-input-number v-model:value="poRegEditRow.adjust_qty" :min="0" :precision="0" style="width:100%;" :placeholder="'推荐计划数量 ' + poRegEditRow.suggest_qty + '，可按实际下单量调整'"/></label>
+                    <label><span>推荐计划数量（只读）</span><a-input :value="poRegEditRow.suggest_qty" disabled/></label>
+                    <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>调整原因</span>
+                      <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="调整数量须填写原因，100 字以内" :maxlength="100"/></label>
+                  </div>
+                </template>
 
                 <div class="jlrs-modal-footer">
                   <a-button @click="poRegEditOpen=false">取消</a-button>
@@ -1054,31 +1062,11 @@
               </div>
             </a-modal>
 
-            <!-- 详情弹窗（统一居中弹窗，只读）：顶部突出调整与拦截关键字段，下方为全量字段 -->
+            <!-- 详情弹窗（统一居中弹窗，只读）：字段与列表列定义 poRegColumns 同序，单块依次排列 -->
             <a-modal v-model:open="poRegDetailOpen" title="详情 · 采购计划" :width="920" :footer="null" :mask-closable="false">
               <template v-if="poRegDetailRow">
-                <div class="bt-sec-t" style="margin:0 0 10px;">调整与拦截信息</div>
-                <a-descriptions bordered :column="2" size="small" style="margin-bottom:20px;">
-                  <a-descriptions-item label="调整前数量（系统推荐）">{{ poRegDetailRow.suggest_qty }}</a-descriptions-item>
-                  <a-descriptions-item label="调整后数量（最终计划）">
-                    <b :style="poRegDetailRow.adjust_qty!==poRegDetailRow.suggest_qty ? 'color:#fa8c16;' : ''">{{ poRegDetailRow.adjust_qty }}</b>
-                    <a-tag v-if="poRegDetailRow.adjust_qty!==poRegDetailRow.suggest_qty" color="orange" style="margin-left:8px;">已人工调整</a-tag>
-                  </a-descriptions-item>
-                  <a-descriptions-item label="是否拦截">
-                    <a-tag :color="poRegDetailRow.is_blocked==='是'?'red':'green'" style="margin:0;">{{ poRegDetailRow.is_blocked }}</a-tag>
-                  </a-descriptions-item>
-                  <a-descriptions-item label="拦截原因">{{ poRegDetailRow.block_reason || '—' }}</a-descriptions-item>
-                  <a-descriptions-item v-if="poRegDetailRow.multi_supplier==='是'" label="是否多供应商">
-                    <a-tag color="orange" style="margin:0;">{{ poRegDetailRow.multi_supplier }}</a-tag>
-                  </a-descriptions-item>
-                  <a-descriptions-item v-if="poRegDetailRow.multi_supplier==='是'" label="供应商名称及MOQ">
-                    {{ poRegDetailRow.cur_supplier_name }}（MOQ {{ poRegDetailRow.cur_supplier_moq }}）
-                  </a-descriptions-item>
-                  <a-descriptions-item label="调整原因" :span="2">{{ poRegDetailRow.adjust_reason || '—' }}</a-descriptions-item>
-                </a-descriptions>
-                <div class="bt-sec-t" style="margin:0 0 10px;">全量字段</div>
                 <a-descriptions bordered :column="2" size="small">
-                  <a-descriptions-item v-for="c in poRegColumns.filter(x=>x.key!=='action')" :key="c.key" :label="c.title">{{ poRegDetailRow[c.dataIndex] }}</a-descriptions-item>
+                  <a-descriptions-item v-for="c in poRegColumns.filter(x=>x.key!=='action')" :key="c.key" :label="c.title">{{ c.key==='remark' ? (poRegIsNoIssue(poRegDetailRow) ? '不推荐出单；' : '') + (poRegDetailRow.remark || '—') : poRegDetailRow[c.dataIndex] }}</a-descriptions-item>
                 </a-descriptions>
                 <div class="jlrs-modal-footer">
                   <a-button @click="poRegDetailOpen=false">关闭</a-button>
@@ -1128,7 +1116,7 @@
               </div>
             </a-modal>
 
-            <!-- 创建订单弹窗：配件号从配件主数据联想选择，其余字段自动带出；提交后生成「待审批」采购订单 -->
+            <!-- 创建订单弹窗：配件号从配件主数据联想选择；多供应商时供应商可下拉改选，其余字段自动带出；提交后生成「待审批」采购订单 -->
             <a-modal v-model:open="poOrderOpen" title="创建订单 · 采购计划" :width="1080" :footer="null" :mask-closable="false">
               <a-alert v-if="poOrderErr" type="error" :message="poOrderErr" show-icon style="margin-bottom:12px;"/>
               <div class="bt-sec-t" style="margin:0 0 8px;">订单明细（可添加多条，每行一个配件）</div>
@@ -1140,11 +1128,17 @@
                       @change="v=>poOrderOnPart(record, v)"/>
                   </template>
                   <template v-else-if="column.key==='part_name'"><span :style="record.part_name?'':'color:#bbb'">{{ record.part_name || '自动带出' }}</span></template>
-                  <template v-else-if="column.key==='supplier_code'"><span :style="record.supplier_code?'':'color:#bbb'">{{ record.supplier_code || '自动带出' }}</span></template>
+                  <template v-else-if="column.key==='supplier_code'">
+                    <a-select v-if="record.supplier_options && record.supplier_options.length>1"
+                      v-model:value="record.supplier_code" size="small" style="width:100%" show-search
+                      option-filter-prop="label" option-label-prop="value" :options="record.supplier_options"
+                      :dropdown-match-select-width="false" placeholder="选择供应商"
+                      @change="v=>poOrderOnSupplier(record, v)"/>
+                    <span v-else :style="record.supplier_code?'':'color:#bbb'">{{ record.supplier_code || '自动带出' }}</span>
+                  </template>
                   <template v-else-if="column.key==='supplier_name'"><span :style="record.supplier_name?'':'color:#bbb'">{{ record.supplier_name || '自动带出' }}</span></template>
-                  <template v-else-if="column.key==='lead_days'"><span :style="record.lead_days?'':'color:#bbb'">{{ record.lead_days ? record.lead_days+' 天' : '自动带出' }}</span></template>
                   <template v-else-if="column.key==='qty'"><a-input-number v-model:value="record.qty" size="small" :min="1" :precision="0" style="width:100%"/></template>
-                  <template v-else-if="column.key==='remark'"><a-input v-model:value="record.remark" size="small" placeholder="备注"/></template>
+                  <template v-else-if="column.key==='remark'"><a-input v-model:value="record.remark" size="small" placeholder="备注（如：某某活动单独下单）"/></template>
                   <template v-else-if="column.key==='_op'"><a @click="poOrderDelRow(record)" style="color:#ff4d4f;">删除</a></template>
                   <template v-else>{{ record[column.dataIndex] }}</template>
                 </template>
@@ -1270,6 +1264,9 @@
                   <template v-else-if="column.key==='is_blocked'">
                     <a-tag :color="record.is_blocked==='是'?'red':'green'" style="margin:0;">{{ record.is_blocked }}</a-tag>
                   </template>
+                  <template v-else-if="column.key==='remark'">
+                    <a-tag v-if="poRegIsNoIssue(record)" color="orange" style="margin:0 4px 0 0;">不推荐出单</a-tag><span>{{ record.remark || (poRegIsNoIssue(record) ? '' : '—') }}</span>
+                  </template>
                   <template v-else-if="column.key==='is_joint_moq' || column.key==='is_plan_day'">
                     <a-tag :color="record[column.dataIndex]==='是'?'blue':'default'" style="margin:0;">{{ record[column.dataIndex] }}</a-tag>
                   </template>
@@ -1295,34 +1292,11 @@
               </div>
             </div>
 
-            <!-- 详情弹窗（只读） -->
+            <!-- 详情弹窗（只读）：字段与列表列定义 poHistColumns 同序，单块依次排列 -->
             <a-modal v-model:open="poHistDetailOpen" title="详情 · 历史采购计划" :width="920" :footer="null" :mask-closable="false">
               <template v-if="poHistDetailRow">
-                <div class="bt-sec-t" style="margin:0 0 10px;">调整与拦截信息</div>
-                <a-descriptions bordered :column="2" size="small" style="margin-bottom:20px;">
-                  <a-descriptions-item label="调整前数量（系统推荐）">{{ poHistDetailRow.suggest_qty }}</a-descriptions-item>
-                  <a-descriptions-item label="调整后数量（最终计划）">
-                    <b :style="poHistDetailRow.adjust_qty!==poHistDetailRow.suggest_qty ? 'color:#fa8c16;' : ''">{{ poHistDetailRow.adjust_qty }}</b>
-                    <a-tag v-if="poHistDetailRow.adjust_qty!==poHistDetailRow.suggest_qty" color="orange" style="margin-left:8px;">已人工调整</a-tag>
-                  </a-descriptions-item>
-                  <a-descriptions-item label="是否拦截">
-                    <a-tag :color="poHistDetailRow.is_blocked==='是'?'red':'green'" style="margin:0;">{{ poHistDetailRow.is_blocked }}</a-tag>
-                  </a-descriptions-item>
-                  <a-descriptions-item label="拦截原因">{{ poHistDetailRow.block_reason || '—' }}</a-descriptions-item>
-                  <a-descriptions-item v-if="poHistDetailRow.multi_supplier==='是'" label="是否多供应商">
-                    <a-tag color="orange" style="margin:0;">{{ poHistDetailRow.multi_supplier }}</a-tag>
-                  </a-descriptions-item>
-                  <a-descriptions-item v-if="poHistDetailRow.multi_supplier==='是'" label="供应商代码">
-                    {{ poHistDetailRow.cur_supplier_code }}
-                  </a-descriptions-item>
-                  <a-descriptions-item v-if="poHistDetailRow.multi_supplier==='是'" label="供应商名称及MOQ">
-                    {{ poHistDetailRow.cur_supplier_name }}（MOQ {{ poHistDetailRow.cur_supplier_moq }}）
-                  </a-descriptions-item>
-                  <a-descriptions-item label="调整原因" :span="2">{{ poHistDetailRow.adjust_reason || '—' }}</a-descriptions-item>
-                </a-descriptions>
-                <div class="bt-sec-t" style="margin:0 0 10px;">全量字段</div>
                 <a-descriptions bordered :column="2" size="small">
-                  <a-descriptions-item v-for="c in poHistColumns.filter(x=>x.key!=='action')" :key="c.key" :label="c.title">{{ poHistDetailRow[c.dataIndex] }}</a-descriptions-item>
+                  <a-descriptions-item v-for="c in poHistColumns.filter(x=>x.key!=='action')" :key="c.key" :label="c.title">{{ c.key==='remark' ? (poRegIsNoIssue(poHistDetailRow) ? '不推荐出单；' : '') + (poHistDetailRow.remark || '—') : poHistDetailRow[c.dataIndex] }}</a-descriptions-item>
                 </a-descriptions>
                 <div class="jlrs-modal-footer">
                   <a-button @click="poHistDetailOpen=false">关闭</a-button>
@@ -1361,7 +1335,7 @@
             </a-modal>
           </template>
 
-          <!-- ============ 采购计划导出（po-export）：客服下单用精简视图，含导出状态tab ============ -->
+          <!-- ============ 采购计划导出（po-export）：列集与导出模板严格按 4.4.6.2 PO下单模板 11 列，含导出状态tab ============ -->
           <template v-else-if="activeMenu==='po-export'">
 
             <!-- 顶部状态tab：仅 待导出 -->
@@ -1374,16 +1348,13 @@
               <div class="filter-row">
                 <div class="filter-items">
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-input v-model:value="poExpFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
-                  <div class="f-item"><span class="f-label">配件名称</span>
-                    <a-input v-model:value="poExpFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
-                  <div class="f-item"><span class="f-label">建储仓库编码</span>
-                    <a-input v-model:value="poExpFilters.wh_code" placeholder="建储仓库编码" style="width:130px" allow-clear/></div>
-                  <div class="f-item"><span class="f-label">供应商名称</span>
-                    <a-input v-model:value="poExpFilters.supplier" placeholder="供应商名称" style="width:200px" allow-clear/></div>
-                  <div class="f-item"><span class="f-label">计划类型</span>
-                    <a-select v-model:value="poExpFilters.plan_type" placeholder="计划类型" style="width:140px" allow-clear
-                      :options="poRegPlanTypes.map(v=>({value:v,label:v}))"/></div>
+                    <a-input v-model:value="poExpFilters.material" placeholder="配件号" style="width:140px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">供应商代码</span>
+                    <a-input v-model:value="poExpFilters.supplier_code" placeholder="供应商代码" style="width:130px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">计划批次</span>
+                    <a-input v-model:value="poExpFilters.plan_batch" placeholder="计划批次" style="width:150px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">计划行</span>
+                    <a-input v-model:value="poExpFilters.plan_line" placeholder="计划行" style="width:190px" allow-clear/></div>
                 </div>
                 <div class="filter-actions">
                   <a-button type="primary" @click="poExpDoSearch">搜索</a-button>
@@ -1414,7 +1385,7 @@
                     <template #overlay>
                       <a-card style="width:220px;max-height:460px;overflow:auto;" :body-style="{padding:'8px 12px'}">
                         <div style="font-weight:600;margin-bottom:6px;">列展示设置</div>
-                        <div class="col-set-item" v-for="c in poExpColumns.filter(x=>x.key!=='action' && x.key!=='export_status')" :key="c.key">
+                        <div class="col-set-item" v-for="c in poExpTemplateColumns" :key="c.key">
                           <a-checkbox :checked="!poExpHiddenCols.includes(c.key)" @change="poExpToggleCol(c.key)"/>{{ c.title }}
                         </div>
                       </a-card>
@@ -1435,10 +1406,7 @@
                 :custom-row="poExpCustomRow"
               >
                 <template #bodyCell="{ column, record }">
-                  <template v-if="column.key==='part_code'">
-                    <a @click.stop="poExpOpenDetail(record)">{{ record.part_code }}</a>
-                  </template>
-                  <template v-else-if="column.key==='cur_purchase_code'">
+                  <template v-if="column.key==='material'">
                     <a @click.stop="poExpOpenDetail(record)">{{ record.cur_purchase_code }}</a>
                   </template>
                   <template v-else-if="column.key==='export_status'">
@@ -1447,7 +1415,7 @@
                   <template v-else-if="column.key==='action'">
                     <span class="link-btn" @click.stop="poExpOpenDetail(record)">详情</span>
                   </template>
-                  <template v-else>{{ record[column.dataIndex] }}</template>
+                  <template v-else>{{ poExpVal(record, column) }}</template>
                 </template>
                 <template #emptyText><a-empty description="暂无数据"/></template>
               </a-table>
@@ -1468,21 +1436,8 @@
             <!-- 详情弹窗（下单关键信息，只读） -->
             <a-modal v-model:open="poExpDetailOpen" title="详情 · 采购计划导出" :width="920" :footer="null" :mask-closable="false">
               <template v-if="poExpDetailRow">
-                <div class="bt-sec-t" style="margin:0 0 10px;">下单关键信息</div>
                 <a-descriptions bordered :column="2" size="small" style="margin-bottom:20px;">
-                  <a-descriptions-item label="配件号">{{ poExpDetailRow.part_code }}</a-descriptions-item>
-                  <a-descriptions-item label="配件名称">{{ poExpDetailRow.part_name }}</a-descriptions-item>
-                  <a-descriptions-item label="当前采购件号">{{ poExpDetailRow.cur_purchase_code }}</a-descriptions-item>
-                  <a-descriptions-item label="当前采购配件名称">{{ poExpDetailRow.cur_purchase_name }}</a-descriptions-item>
-                  <a-descriptions-item label="建储仓库">{{ poExpDetailRow.wh_code }} {{ poExpDetailRow.wh_name }}</a-descriptions-item>
-                  <a-descriptions-item label="计划数量(最终计划)"><b>{{ poExpDetailRow.adjust_qty }}</b></a-descriptions-item>
-                  <a-descriptions-item label="供应商代码">{{ poExpDetailRow.cur_supplier_code }}</a-descriptions-item>
-                  <a-descriptions-item label="供应商名称">{{ poExpDetailRow.cur_supplier_name }}</a-descriptions-item>
-                  <a-descriptions-item label="起订量">{{ poExpDetailRow.cur_supplier_moq }}</a-descriptions-item>
-                  <a-descriptions-item label="采购LT(天)">{{ poExpDetailRow.purchase_lt }}</a-descriptions-item>
-                  <a-descriptions-item label="要求到货日期">{{ poExpDetailRow.required_arrival_date }}</a-descriptions-item>
-                  <a-descriptions-item label="计划批次">{{ poExpDetailRow.plan_batch }}</a-descriptions-item>
-                  <a-descriptions-item label="计划行">{{ poExpDetailRow.plan_line }}</a-descriptions-item>
+                  <a-descriptions-item v-for="c in poExpTemplateColumns" :key="c.key" :label="c.title">{{ poExpVal(poExpDetailRow, c) }}</a-descriptions-item>
                   <a-descriptions-item label="导出状态">
                     <a-tag :color="poExpDetailRow.export_status==='已导出'?'green':'orange'" style="margin:0;">{{ poExpDetailRow.export_status }}</a-tag>
                   </a-descriptions-item>
@@ -1789,7 +1744,7 @@
               </div>
             </div>
 
-            <!-- 详情弹窗：仅字段详情 + 备注编辑 -->
+            <!-- 详情弹窗：只读字段展示，不提供备注编辑 -->
             <a-modal v-model:open="stoDetailOpen" :width="920" :footer="null" :mask-closable="false"
               :title="'详情 · ' + (stoIsWeek ? '调拨计划' : '给仓库的预计调拨计划')">
               <template v-if="stoDetailRow">
@@ -1834,12 +1789,8 @@
                   <a-descriptions-item label="是否下单">{{ stoDetailRow.is_placed }}</a-descriptions-item>
                 </a-descriptions>
 
-                <div class="bt-sec-t" style="margin:18px 0 10px;">备注<span class="bt-sec-sub">可在本弹窗内编辑并保存，保存后同步至列表</span></div>
-                <a-textarea v-model:value="stoDetailRemark" :rows="3" :maxlength="200" show-count placeholder="请输入备注（选填）"/>
-
                 <div class="jlrs-modal-footer">
                   <a-button @click="stoDetailOpen=false">关闭</a-button>
-                  <a-button type="primary" @click="stoSaveRemark">保存备注</a-button>
                 </div>
               </template>
             </a-modal>
@@ -1874,41 +1825,21 @@
                 <div class="filter-items">
                   <div class="f-item"><span class="f-label">配件号</span>
                     <a-input v-model:value="stoExpFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
-                  <div class="f-item"><span class="f-label">配件名称</span>
-                    <a-input v-model:value="stoExpFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
-                  <div class="f-item"><span class="f-label">计划批次</span>
-                    <a-input v-model:value="stoExpFilters.plan_batch" placeholder="计划批次" style="width:130px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">发货仓</span>
-                    <a-select v-model:value="stoExpFilters.from_wh" placeholder="发货仓" style="width:150px" allow-clear
+                    <a-select v-model:value="stoExpFilters.from_wh" placeholder="发货仓" style="width:160px" allow-clear
                       :options="stoFromWhs.map(v=>({value:v,label:v}))"/></div>
                   <div class="f-item"><span class="f-label">收货仓</span>
-                    <a-select v-model:value="stoExpFilters.to_wh" placeholder="收货仓" style="width:150px" allow-clear
+                    <a-select v-model:value="stoExpFilters.to_wh" placeholder="收货仓" style="width:160px" allow-clear
                       :options="stoToWhs.map(v=>({value:v,label:v}))"/></div>
-                  <div class="f-item"><span class="f-label">计划类型</span>
-                    <a-select v-model:value="stoExpFilters.plan_type" placeholder="计划类型" style="width:130px" allow-clear
-                      :options="stoExpPlanTypes.map(v=>({value:v,label:v}))"/></div>
-                  <div class="f-item"><span class="f-label">ABC分类</span>
-                    <a-select v-model:value="stoExpFilters.abc_class" placeholder="ABC分类" style="width:110px" allow-clear
-                      :options="[{value:'A',label:'A'},{value:'B',label:'B'},{value:'C',label:'C'}]"/></div>
-                  <template v-if="stoExpFilterExpanded">
-                    <div class="f-item"><span class="f-label">仓网</span>
-                      <a-select v-model:value="stoExpFilters.network_id" placeholder="仓网" style="width:110px" allow-clear
-                        :options="stoNetworks.map(v=>({value:v,label:v}))"/></div>
-                    <div class="f-item"><span class="f-label">计划员</span>
-                      <a-select v-model:value="stoExpFilters.planner" placeholder="计划员" style="width:110px" allow-clear
-                        :options="fcPlanners.map(v=>({value:v,label:v}))"/></div>
-                    <div class="f-item"><span class="f-label">运输线路</span>
-                      <a-select v-model:value="stoExpFilters.route_code" placeholder="运输线路" style="width:140px" allow-clear
-                        :options="stoRouteCodes.map(v=>({value:v,label:v}))"/></div>
-                  </template>
+                  <div class="f-item"><span class="f-label">计划批次</span>
+                    <a-input v-model:value="stoExpFilters.plan_batch" placeholder="计划批次" style="width:130px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">计划行</span>
+                    <a-input v-model:value="stoExpFilters.plan_line" placeholder="计划行" style="width:130px" allow-clear/></div>
                 </div>
                 <div class="filter-actions">
                   <a-button type="primary" @click="stoExpDoSearch">搜索</a-button>
                   <a-button @click="stoExpResetFilters">重置</a-button>
                   <span class="act" :style="{color:stoExpFav?'#faad14':''}" @click="stoExpToggleFav">{{ stoExpFav ? '★' : '☆' }}</span>
-                  <span class="act" @click="stoExpFilterExpanded=!stoExpFilterExpanded">
-                    <span class="txt">{{ stoExpFilterExpanded ? '收起' : '展开' }}</span><span style="font-size:10px;">▾</span>
-                  </span>
                 </div>
               </div>
             </div>
@@ -1955,7 +1886,7 @@
                 :custom-row="stoExpCustomRow"
               >
                 <template #bodyCell="{ column, record }">
-                  <template v-if="column.key==='part_code'">
+                  <template v-if="column.key==='material'">
                     <a @click.stop="stoExpOpenDetail(record)">{{ record.part_code }}</a>
                   </template>
                   <template v-else-if="column.key==='export_status'">
@@ -1964,7 +1895,7 @@
                   <template v-else-if="column.key==='action'">
                     <span class="link-btn" @click.stop="stoExpOpenDetail(record)">详情</span>
                   </template>
-                  <template v-else>{{ record[column.dataIndex] }}</template>
+                  <template v-else>{{ stoExpVal(record, column) }}</template>
                 </template>
                 <template #emptyText><a-empty description="暂无待导出的调拨计划"/></template>
               </a-table>
@@ -1982,37 +1913,14 @@
               </div>
             </div>
 
-            <!-- 详情弹窗（29 字段 + 导出状态，只读） -->
-            <a-modal v-model:open="stoExpDetailOpen" title="详情 · 调拨计划导出" :width="920" :footer="null" :mask-closable="false">
+            <!-- 详情弹窗（与列表严格同源：10 个 STO 模板字段 + 导出状态，只读） -->
+            <a-modal v-model:open="stoExpDetailOpen" title="详情 · 调拨计划导出" :width="760" :footer="null" :mask-closable="false">
               <template v-if="stoExpDetailRow">
-                <div class="bt-sec-t" style="margin:0 0 10px;">计划信息</div>
                 <a-descriptions bordered :column="2" size="small" style="margin-bottom:20px;">
-                  <a-descriptions-item label="数据生成日期">{{ stoExpDetailRow.data_gen_date }}</a-descriptions-item>
-                  <a-descriptions-item label="计划类型">{{ stoExpDetailRow.plan_type }}</a-descriptions-item>
-                  <a-descriptions-item label="配件号">{{ stoExpDetailRow.part_code }}</a-descriptions-item>
-                  <a-descriptions-item label="配件名称">{{ stoExpDetailRow.part_name }}</a-descriptions-item>
-                  <a-descriptions-item label="发货仓">{{ stoExpDetailRow.from_wh }}</a-descriptions-item>
-                  <a-descriptions-item label="收货仓">{{ stoExpDetailRow.to_wh }}</a-descriptions-item>
-                  <a-descriptions-item label="收货仓最低风控线">{{ stoExpDetailRow.safety_stock }}</a-descriptions-item>
-                  <a-descriptions-item label="收货仓目标库存">{{ stoExpDetailRow.target_stock }}</a-descriptions-item>
-                  <a-descriptions-item label="ABC分类">{{ stoExpDetailRow.abc_class }}</a-descriptions-item>
-                  <a-descriptions-item label="车型代码">{{ stoExpDetailRow.vehicle_code }}</a-descriptions-item>
-                  <a-descriptions-item label="计划员">{{ stoExpDetailRow.planner }}</a-descriptions-item>
-                  <a-descriptions-item label="计划批次">{{ stoExpDetailRow.plan_batch }}</a-descriptions-item>
-                  <a-descriptions-item label="计划行">{{ stoExpDetailRow.plan_line }}</a-descriptions-item>
-                  <a-descriptions-item label="推荐计划数量(分配后)"><b>{{ stoExpDetailRow.alloc_qty }}</b></a-descriptions-item>
-                  <a-descriptions-item label="推荐计划数量(MPQ取整后)">{{ stoExpDetailRow.mpq_qty }}</a-descriptions-item>
-                  <a-descriptions-item label="推荐计划数量">{{ stoExpDetailRow.rec_qty }}</a-descriptions-item>
-                  <a-descriptions-item label="库间LT（天）">{{ stoExpDetailRow.transfer_lt }}</a-descriptions-item>
-                  <a-descriptions-item label="要求到货日期">{{ stoExpDetailRow.required_arrival_date }}</a-descriptions-item>
-                  <a-descriptions-item label="体积">{{ stoExpDetailRow.unit_volume }}</a-descriptions-item>
-                  <a-descriptions-item label="体积单位">{{ stoExpDetailRow.volume_unit }}</a-descriptions-item>
-                  <a-descriptions-item label="预计调拨体积">{{ stoExpDetailRow.est_volume }}</a-descriptions-item>
-                  <a-descriptions-item label="是否下单">{{ stoExpDetailRow.is_placed }}</a-descriptions-item>
+                  <a-descriptions-item v-for="c in stoExpTemplateColumns" :key="c.key" :label="c.title">{{ stoExpVal(stoExpDetailRow, c) }}</a-descriptions-item>
                   <a-descriptions-item label="导出状态">
                     <a-tag :color="stoExpDetailRow.export_status==='已导出'?'green':'orange'" style="margin:0;">{{ stoExpDetailRow.export_status }}</a-tag>
                   </a-descriptions-item>
-                  <a-descriptions-item label="导出时间">{{ stoExpDetailRow.exported_time || '—' }}</a-descriptions-item>
                 </a-descriptions>
                 <div class="jlrs-modal-footer">
                   <a-button @click="stoExpDetailOpen=false">关闭</a-button>
@@ -2109,8 +2017,11 @@
                     <span style="font-weight:600;color:#1f2d3d;">{{ record.part_code }}</span>
                   </template>
                   <template v-else-if="column.num">
-                    <span :style="{fontWeight: column.key.indexOf('_sto_qty')>0 && Number(record[column.key])>0 ? 600 : 400,
-                                    color: (column.key.indexOf('_potential')>0 && Number(record[column.key])>0) ? '#c0392b' : (column.key.indexOf('_sto_qty')>0 && Number(record[column.key])>0 ? '#c0501e' : '#1f2d3d')}">{{ stoSumFmt(record[column.key]) }}</span>
+                    <span :style="{fontWeight: column.key.indexOf('_alloc_qty')>0 && Number(record[column.key])>0 ? 600 : 400,
+                                    color: (column.key.indexOf('_onhand')>0 && Number(record[column.key]) < Number(record[column.key.replace('_onhand','_ssq')])) ? '#c0392b' : (column.key.indexOf('_alloc_qty')>0 && Number(record[column.key])>0 ? '#c0501e' : '#1f2d3d')}">{{ stoSumFmt(record[column.key]) }}</span>
+                  </template>
+                  <template v-else-if="column.pct">
+                    <span style="color:#1f2d3d;">{{ record[column.key] }}</span>
                   </template>
                   <template v-else-if="column.key.indexOf('_stock_flag')>0">
                     <a-tag :color="record[column.key]==='允许' ? 'green' : 'red'">{{ record[column.key] }}</a-tag>
@@ -2322,13 +2233,16 @@
             </a-modal>
           </template>
 
+          <!-- DRAFT_INJECT_TEMPLATE -->
           <!-- ============ 历史需求处理 / 活动登记表（复刻 UAT：capp.CappActivityRegister） ============ -->
           <template v-else-if="activeMenu==='activity-register'">
             <div class="card">
               <div class="filter-row">
                 <div class="filter-items">
-                  <div class="f-item"><span class="f-label">最新配件号</span>
-                    <a-input v-model:value="actRegFilters.part_code" placeholder="最新配件号" style="width:180px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">活动名称</span>
+                    <a-input v-model:value="actRegFilters.activity_name" placeholder="活动名称" style="width:180px" allow-clear/></div>
+                  <div class="f-item"><span class="f-label">配件号</span>
+                    <a-input v-model:value="actRegFilters.part_code" placeholder="配件号" style="width:180px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="actRegFilters.part_name" placeholder="配件名称" style="width:180px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">活动状态</span>
@@ -2345,6 +2259,8 @@
             <div class="card" style="margin-bottom:0;">
               <div class="toolbar-row">
                 <a-button type="primary" @click="actRegOpenCreate">＋ 新增</a-button>
+                <a-button @click="actRegOpenImport"><span style="margin-right:6px;">⬆</span>导入</a-button>
+                <a-button @click="actRegExportCsv"><span style="margin-right:6px;">⬇</span>导出</a-button>
                 <span style="margin-left:8px;color:#888;font-size:12px;">共 {{ actRegFiltered.length }} 条活动登记</span>
                 <div class="toolbar-icons">
                   <a-dropdown>
@@ -2366,7 +2282,7 @@
                   <template v-if="column.key==='part_code'"><a @click.stop="actRegOpenDetail(record)">{{ record.part_code }}</a></template>
                   <template v-else-if="column.key==='activity_type'"><a-tag :color="record.activity_type==='促销活动'?'blue':'cyan'">{{ record.activity_type }}</a-tag></template>
                   <template v-else-if="column.key==='activity_status'"><a-tag :color="actRegStatusColor(record.activity_status)">{{ record.activity_status }}</a-tag></template>
-                  <template v-else-if="column.key==='month_qty'"><span style="color:#1677ff;">{{ actRegMonthText(record) }}</span></template>
+                  <template v-else-if="column.key==='end_date'">{{ record.end_date || '—' }}</template>
                   <template v-else-if="column.key==='action'">
                     <span class="link-btn" @click.stop="actRegOpenResult(record)">查看结果</span>
                     <span class="link-btn" @click.stop="actRegOpenDetail(record)">详情</span>
@@ -2381,19 +2297,21 @@
               </div>
             </div>
 
-            <!-- 新增：基础信息（对齐 UAT 新增页） + 跨月活动销量按月填充（优化） -->
+            <!-- 新增：基础信息（对齐 UAT 新增页） + 附件（最多 5 张） -->
             <a-modal v-model:open="actRegFormOpen" title="新增 · 活动登记表" :width="960" :footer="null" :mask-closable="false">
               <a-alert v-if="actRegFormErr" type="error" :message="actRegFormErr" show-icon style="margin-bottom:12px;"/>
               <div class="bt-sec-t" style="margin:0 0 10px;">基础信息</div>
               <div class="jlrs-form-grid">
-                <label><span><b class="jlrs-req">*</b>最新配件号</span>
+                <label><span><b class="jlrs-req">*</b>活动名称</span>
+                  <a-input v-model:value="actRegForm.activity_name" placeholder="请输入活动名称" :maxlength="60"/></label>
+                <label><span><b class="jlrs-req">*</b>配件号</span>
                   <a-select v-model:value="actRegForm.part_code" show-search option-filter-prop="label"
                     placeholder="从配件主数据选择" :options="actRegPartOptions" @change="actRegOnPart"/></label>
-                <label><span><b class="jlrs-req">*</b>日期范围</span>
+                <label><span>活动期间</span>
                   <div style="display:flex;align-items:center;gap:8px;">
                     <a-date-picker v-model:value="actRegForm.start_date" value-format="YYYY-MM-DD" placeholder="开始日期" style="flex:1" @change="actRegOnDateChange"/>
                     <span>-</span>
-                    <a-date-picker v-model:value="actRegForm.end_date" value-format="YYYY-MM-DD" placeholder="结束日期" style="flex:1" @change="actRegOnDateChange"/>
+                    <a-date-picker v-model:value="actRegForm.end_date" value-format="YYYY-MM-DD" placeholder="结束日期（选填）" style="flex:1" @change="actRegOnDateChange"/>
                   </div></label>
                 <label><span><b class="jlrs-req">*</b>活动类型</span>
                   <a-select v-model:value="actRegForm.activity_type" :options="actRegTypes.map(v=>({value:v,label:v}))" @change="actRegOnType"/></label>
@@ -2401,13 +2319,13 @@
                 <!-- 服务活动：活动数量 + 备注（共 6 字段，不维护比例计算期间） -->
                 <template v-if="actRegForm.activity_type==='服务活动'">
                   <label><span><b class="jlrs-req">*</b>活动数量</span>
-                    <a-input-number v-model:value="actRegForm.activity_qty" :min="1" :precision="0" placeholder="活动数量" @change="actRegRecalcMonths"/></label>
+                    <a-input-number v-model:value="actRegForm.activity_qty" :min="1" :precision="0" placeholder="活动数量" /></label>
                   <label style="grid-column:1/-1;">备注<a-textarea v-model:value="actRegForm.remark" :rows="2" :maxlength="200" placeholder="备注"/></label>
                 </template>
                 <!-- 促销活动：促销预估增量 + 比例计算开始/结束日期 + 备注（共 8 字段，无活动数量） -->
                 <template v-else>
                   <label><span><b class="jlrs-req">*</b>促销预估增量</span>
-                    <a-input-number v-model:value="actRegForm.promo_increment" :min="1" :precision="0" placeholder="促销预估增量" @change="actRegRecalcMonths"/></label>
+                    <a-input-number v-model:value="actRegForm.promo_increment" :min="1" :precision="0" placeholder="促销预估增量" /></label>
                   <label><span><b class="jlrs-req">*</b>比例计算开始日期</span>
                     <a-date-picker v-model:value="actRegForm.ratio_start" value-format="YYYY-MM-DD" placeholder="比例计算开始日期" style="width:100%" @change="actRegOnRatioStart"/></label>
                   <label><span><b class="jlrs-req">*</b>比例计算结束日期</span>
@@ -2416,48 +2334,59 @@
                   <div style="grid-column:1/-1;font-size:12px;color:#999;margin-top:-4px;">比例计算结束日期由系统自动带出（活动开始日期前一日），无需手工填写。</div>
                 </template>
               </div>
-              <div v-if="actRegIsCrossMonth" style="margin-top:18px;">
-                <div class="bt-sec-t" style="margin:0 0 8px;">活动销量按月填充（活动时间跨 {{ actRegFormMonths.length }} 个月，按自然日天数占比自动分摊，可手工调整）</div>
-                <a-table :columns="actRegMonthCols" :data-source="actRegFormMonths" row-key="month" :pagination="false" size="small" bordered :scroll="{x:660}">
-                  <template #bodyCell="{ column, record }">
-                    <template v-if="column.key==='qty'"><a-input-number v-model:value="record.qty" :min="0" :precision="0" size="small" style="width:100%"/></template>
-                    <template v-else>{{ record[column.dataIndex] }}</template>
-                  </template>
-                </a-table>
-                <div style="margin-top:8px;font-size:13px;" :style="{color: actRegMonthSum===actRegTotalQty?'#389e0d':'#cf1322'}">
-                  各月活动销量合计 <b>{{ actRegMonthSum }}</b> / {{ actRegTotalLabel }} <b>{{ actRegTotalQty }}</b>
-                  <span v-if="actRegMonthSum!==actRegTotalQty">（请调整至一致后保存）</span>
+              <!-- 附件：与配件组管理「图片凭证」共用同一套上传 / 删除 / 放大预览交互，上限 5 张 -->
+              <div class="bt-sec-t" style="margin:18px 0 10px;">附件<span class="bt-sec-sub">最多 5 张图片</span></div>
+              <a-upload
+                list-type="picture-card"
+                multiple
+                accept="image/*"
+                :file-list="actRegForm.images"
+                :before-upload="actRegBeforeImg"
+                @remove="actRegRemoveImg"
+                @preview="jlrsImgPreviewOpen"
+              >
+                <div v-if="(actRegForm.images||[]).length < actRegImgMax">
+                  <div style="font-size:22px;line-height:1;">＋</div>
+                  <div style="margin-top:6px;">上传</div>
                 </div>
-              </div>
+              </a-upload>
               <div class="jlrs-modal-footer">
                 <a-button @click="actRegFormOpen=false">取消</a-button>
                 <a-button type="primary" @click="actRegSaveForm">确定</a-button>
               </div>
             </a-modal>
 
-            <!-- 详情：15 字段（对齐 UAT 详情页） + 按月销量 -->
+            <!-- 详情：基础信息 + 附件 -->
             <a-modal v-model:open="actRegDetailOpen" title="详情 · 活动登记表" :width="960" :footer="null" :mask-closable="false">
               <template v-if="actRegDetailRow">
                 <div class="bt-sec-t" style="margin:0 0 10px;">基础信息</div>
                 <a-descriptions bordered :column="2" size="small">
-                  <a-descriptions-item label="最新配件号">{{ actRegDetailRow.part_code }}</a-descriptions-item>
+                  <a-descriptions-item label="活动名称">{{ actRegDetailRow.activity_name || '—' }}</a-descriptions-item>
+                  <a-descriptions-item label="配件号">{{ actRegDetailRow.part_code }}</a-descriptions-item>
                   <a-descriptions-item label="配件名称">{{ actRegDetailRow.part_name }}</a-descriptions-item>
                   <a-descriptions-item v-if="actRegDetailRow.activity_type==='服务活动'" label="活动数量">{{ actRegDetailRow.activity_qty }}</a-descriptions-item>
                   <a-descriptions-item v-else label="促销预估增量">{{ actRegDetailRow.promo_increment || actRegDetailRow.activity_qty }}</a-descriptions-item>
                   <a-descriptions-item label="开始日期">{{ actRegDetailRow.start_date }}</a-descriptions-item>
-                  <a-descriptions-item label="结束日期">{{ actRegDetailRow.end_date }}</a-descriptions-item>
+                  <a-descriptions-item label="结束日期">{{ actRegDetailRow.end_date || '—' }}</a-descriptions-item>
                   <a-descriptions-item label="活动类型">{{ actRegDetailRow.activity_type }}</a-descriptions-item>
                   <a-descriptions-item label="处理方案">{{ actRegDetailRow.process_plan }}</a-descriptions-item>
                   <a-descriptions-item v-if="actRegDetailRow.activity_type==='促销活动'" label="比例计算开始日期">{{ actRegDetailRow.ratio_start || '—' }}</a-descriptions-item>
                   <a-descriptions-item v-if="actRegDetailRow.activity_type==='促销活动'" label="比例计算结束日期">{{ actRegDetailRow.ratio_end || '—' }}</a-descriptions-item>
+                  <a-descriptions-item label="活动状态"><a-tag :color="actRegStatusColor(actRegDetailRow.activity_status)">{{ actRegDetailRow.activity_status }}</a-tag></a-descriptions-item>
                   <a-descriptions-item label="备注">{{ actRegDetailRow.remark || '—' }}</a-descriptions-item>
                   <a-descriptions-item label="创建人名称">{{ actRegDetailRow.creator_name }}</a-descriptions-item>
                   <a-descriptions-item label="创建时间">{{ actRegDetailRow.create_time }}</a-descriptions-item>
                   <a-descriptions-item label="修改人名称">{{ actRegDetailRow.modifier_name }}</a-descriptions-item>
                   <a-descriptions-item label="更新时间">{{ actRegDetailRow.update_time }}</a-descriptions-item>
                 </a-descriptions>
-                <div class="bt-sec-t" style="margin:16px 0 8px;">活动销量按月填充（{{ actRegDetailMonths.length }} 个月）</div>
-                <a-table :columns="actRegMonthCols" :data-source="actRegDetailMonths" row-key="month" :pagination="false" size="small" bordered :scroll="{x:660}"/>
+                <!-- 附件：与配件组详情同构，缩略图点击后由全局预览弹窗放大 -->
+                <div class="bt-sec-t" style="margin:18px 0 10px;">附件（{{ (actRegDetailRow.images||[]).length }}）</div>
+                <a-empty v-if="!(actRegDetailRow.images||[]).length" description="暂无附件"/>
+                <div v-else style="display:flex;flex-wrap:wrap;gap:10px;">
+                  <img v-for="img in actRegDetailRow.images" :key="img.uid" :src="img.url" :alt="img.name"
+                       style="width:96px;height:96px;object-fit:cover;border:1px solid #f0f0f0;border-radius:6px;cursor:pointer;"
+                       @click="jlrsImgPreviewOpen(img)"/>
+                </div>
               </template>
               <div class="jlrs-modal-footer">
                 <a-button @click="actRegDetailOpen=false">关闭</a-button>
@@ -2465,29 +2394,54 @@
               </div>
             </a-modal>
 
-            <!-- 查看结果：按月汇总（优化） + 按天明细（对齐 UAT 查看结果页） -->
-            <a-modal v-model:open="actRegResultOpen" title="查看结果 · 活动登记表" :width="1080" :footer="null" :mask-closable="false">
-              <a-tabs v-model:activeKey="actRegResultTab" type="card">
-                <a-tab-pane key="month" tab="按月汇总"/>
-                <a-tab-pane key="day" tab="按天明细"/>
-              </a-tabs>
-              <div v-if="actRegResultTab==='month'">
-                <a-table :columns="actRegMonthCols" :data-source="actRegResultMonths" row-key="month" :pagination="false" size="small" bordered :scroll="{x:660}"/>
-                <div style="margin-top:8px;font-size:12px;color:#888;">合计 {{ actRegResultMonthSum }} 件，与活动数量一致；跨月登记时按月填充，供历史需求处理与预测取数。</div>
-              </div>
-              <div v-else>
-                <a-table :columns="actRegDayCols" :data-source="actRegResultDays" row-key="id" size="small" bordered
-                  :pagination="{pageSize:15,showTotal:t=>'共 '+t+' 条'}" :scroll="{x:1000}"/>
-              </div>
+            <!-- 查看结果：仅按天明细（取消按月汇总 / 按月填充） -->
+            <a-modal v-model:open="actRegResultOpen" title="查看结果 · 活动登记表（按天明细）" :width="1080" :footer="null" :mask-closable="false">
+              <div class="bt-sec-t" style="margin:0 0 8px;">按天明细<span class="bt-sec-sub">按活动期间逐日展开，活动数量取登记总量，不再按月分摊</span></div>
+              <a-alert v-if="actRegResultRow && !actRegResultRow.end_date" type="info" show-icon style="margin-bottom:12px;">
+                <template #message>该活动未填写截止日期，暂无按天明细；补全活动截止日期后自动生成。</template>
+              </a-alert>
+              <a-table v-else :columns="actRegDayCols" :data-source="actRegResultDays" row-key="id" size="small" bordered
+                :pagination="{pageSize:15,showTotal:t=>'共 '+t+' 条'}" :scroll="{x:1000}"/>
               <div class="jlrs-modal-footer"><a-button @click="actRegResultOpen=false">关闭</a-button></div>
             </a-modal>
 
             <!-- 删除二次确认 -->
             <a-modal v-model:open="actRegDeleteOpen" title="删除 · 活动登记表" :width="480" :footer="null" :mask-closable="false">
-              <p v-if="actRegDeleteRow">确认删除配件 <b>{{ actRegDeleteRow.part_code }}</b> 的活动登记？删除后按月填充的活动销量将一并移除。</p>
+              <p v-if="actRegDeleteRow">确认删除配件 <b>{{ actRegDeleteRow.part_code }}</b> 的活动登记？删除后该记录不可恢复。</p>
               <div class="jlrs-modal-footer">
                 <a-button @click="actRegDeleteOpen=false">取消</a-button>
                 <a-button danger type="primary" @click="actRegDoDelete">确认删除</a-button>
+              </div>
+            </a-modal>
+
+            <!-- 导入：Excel/CSV → 解析预览 → 按唯一主键「活动名称 + 配件号」upsert 写回 -->
+            <a-modal v-model:open="actRegImportOpen" title="导入 · 活动登记表" :width="960" :footer="null" :mask-closable="false">
+              <a-alert type="info" show-icon style="margin-bottom:12px;">
+                <template #message>按唯一主键「活动名称 + 配件号」匹配已有登记：匹配到则更新（变更），未匹配则新增。活动名称或配件号为空的行将被跳过；关键信息缺失的行导入后自动标记为「待补充信息」；活动截止日期可留空。</template>
+              </a-alert>
+              <a-alert v-if="actRegImportErr" type="error" :message="actRegImportErr" show-icon style="margin-bottom:12px;"/>
+              <div class="bt-sec-t" style="margin:0 0 10px;">Excel / CSV 导入<span class="bt-sec-sub">模板列：活动名称、配件号、活动类型、开始日期、结束日期、活动数量、促销预估增量、比例计算开始日期、备注</span></div>
+              <a-space>
+                <a-button @click="actRegImportTemplate"><span style="margin-right:6px;">⬇</span>导出模板</a-button>
+                <a-upload :before-upload="actRegImportFile" :show-upload-list="false" accept=".csv,.txt,.xlsx,.xls">
+                  <a-button><span style="margin-right:6px;">⬆</span>导入 Excel / CSV</a-button>
+                </a-upload>
+              </a-space>
+              <div v-if="actRegImportRows.length" style="margin-top:14px;">
+                <div class="bt-sec-sub" style="margin-bottom:6px;">
+                  已解析 {{ actRegImportRows.length }} 行 · 新增 {{ actRegImportAddCount }} 条 / 变更 {{ actRegImportUpdCount }} 条 / 跳过 {{ actRegImportSkipCount }} 行 / 待补充信息 {{ actRegImportPendingCount }} 条
+                </div>
+                <a-table :columns="actRegImportCols" :data-source="actRegImportRows" row-key="key" :pagination="false" size="small" bordered :scroll="{x:1460,y:240}">
+                  <template #bodyCell="{ column, record }">
+                    <template v-if="column.dataIndex==='_op'"><a-tag :color="record._op==='变更'?'blue':(record._op==='跳过'?'red':'green')">{{ record._op }}</a-tag></template>
+                    <template v-else-if="column.dataIndex==='_status'"><a-tag :color="record._status==='待补充信息'?'orange':(record._status==='主键缺失'?'red':'blue')">{{ record._status }}</a-tag></template>
+                    <template v-else>{{ record[column.dataIndex] || '—' }}</template>
+                  </template>
+                </a-table>
+              </div>
+              <div class="jlrs-modal-footer">
+                <a-button @click="actRegImportOpen=false">取消</a-button>
+                <a-button type="primary" @click="actRegDoImport">确认导入</a-button>
               </div>
             </a-modal>
           </template>
@@ -2897,6 +2851,8 @@
                 <a-form-item label="图片凭证（最多 6 张）">
                   <a-upload
                     list-type="picture-card"
+                    multiple
+                    accept="image/*"
                     :file-list="pgModal.form.images"
                     :before-upload="pgBeforeImgUpload"
                     @remove="pgRemoveImg"
@@ -4425,6 +4381,11 @@
       </template>
     </a-drawer>
 
+    <!-- ===== 通用图片附件预览（配件组管理「图片凭证」/ 活动登记表「附件」共用，全局唯一） ===== -->
+    <a-modal v-model:open="jlrsImgPreview.open" :title="jlrsImgPreview.title || '图片预览'" :footer="null" width="640">
+      <img v-if="jlrsImgPreview.src" :src="jlrsImgPreview.src" :alt="jlrsImgPreview.title" style="width:100%;display:block;"/>
+    </a-modal>
+
     <!-- ===== ABC规则说明 ===== -->
     <a-modal v-model:open="ruleOpen" title="ABC / XYZ 分类规则说明" :footer="null" width="620px">
       <div class="rule-steps">
@@ -4475,13 +4436,9 @@
           <div v-else style="display:flex;flex-wrap:wrap;gap:10px;">
             <img v-for="img in genDetailRow.images" :key="img.uid" :src="img.url" :alt="img.name"
                  style="width:96px;height:96px;object-fit:cover;border:1px solid #f0f0f0;border-radius:6px;cursor:pointer;"
-                 @click="pgPreviewImg(img)"/>
+                 @click="jlrsImgPreviewOpen(img)"/>
           </div>
-
-          <!-- 图片预览（编辑 / 详情共用，配件组页面下常驻） -->
-          <a-modal v-model:open="pgPreview.open" :title="pgPreview.title || '图片预览'" :footer="null" width="640">
-            <img v-if="pgPreview.src" :src="pgPreview.src" style="width:100%;display:block;"/>
-          </a-modal>
+          <!-- 图片预览弹窗已提升至全局（见「通用图片附件预览」），与活动登记表共用 -->
         </template>
         <div class="jlrs-modal-footer">
           <a-button @click="genDetailOpen=false">关闭</a-button>
@@ -5290,12 +5247,18 @@ const poRegBlockReasons = [
     '多供应商','联合MOQ凑单超量','成套采购凑单超量','活动零件'
   ]}
 ];
-const poRegBlockReasonOptions = poRegBlockReasons.map(g=>({ label:g.group, title:g.group, options:g.items.map(v=>({ value:v, label:v })) }));
+const poRegBlockReasonOptions = poRegBlockReasons.map(g=>({ label:g.group, title:g.group, options:g.items.map(v=>({ value:v, label:v })) }))
+  .concat([{ label:'无需审核（手工下单）', title:'无需审核（手工下单）', options:[{ value:'手工下单', label:'手工下单' }] }]);
 // 待提交记录分配拦截原因时的候选池：仅这 4 类需审核原因（多供应商由场景单独判定，亦含于候选池内演示）
 const poRegBlockReasonAssignPool = poRegBlockReasons.flatMap(g=>g.items);
 // 历史采购计划（po-history）：归档计划保留全部拦截原因取值（含无需审核类），保证各类值都有演示数据
-const poAllBlockReasons = ['多供应商','联合MOQ凑单超量','成套采购凑单超量','活动零件','零件无计划员','无有效合同','非计划日','库存充足','替代拦截','一次买断件','直供件'];
+const poAllBlockReasons = ['多供应商','联合MOQ凑单超量','成套采购凑单超量','活动零件','零件无计划员','无有效合同','非计划日','库存充足','替代拦截','一次买断件','直供件','手工下单'];
 const poHistBlockReasonOptions = [{ label:'全部拦截原因', title:'全部拦截原因', options: poAllBlockReasons.map(v=>({ value:v, label:v })) }];
+// 无需计划员处理的拦截原因：5 类系统自动拦截 + 「手工下单」（已由计划员手工创建订单单独下单）→ 编辑弹窗只读。
+const poNoActionReasons = ['非计划日','库存充足','替代拦截','一次买断件','直供件','手工下单'];
+// 备注列派生"不推荐出单"提示的范围：仅 5 类系统自动拦截；「手工下单」已单独出单，备注只展示人工填写的原因。
+const poNoIssueReasons = poNoActionReasons.filter(v=>v!=='手工下单');
+function poRegIsNoIssue(r){ return !!(r && poNoIssueReasons.includes(r.block_reason)); }
 const poRegSuppliers = [
   { code:'V001', name:'博世汽车部件（苏州）有限公司', moq:50, since:'2021-03-15' },
   { code:'V002', name:'采埃孚（中国）投资有限公司', moq:100, since:'2022-06-01' },
@@ -5516,7 +5479,8 @@ for(let i=0;i<64;i++){
     receive_mode:poRegReceiveModes[i%2],
     suppliers, multi_supplier:multiSupplier, multi_supplier_block:multiSupplierBlock,
     was_blocked:wasBlocked, demo_supplier_change:demoSupplier ? '是' : '否',
-    cur_supplier_code:curSupplierCode, cur_supplier_name:curSupplierName, cur_supplier_moq:curSupplierMoq
+    cur_supplier_code:curSupplierCode, cur_supplier_name:curSupplierName, cur_supplier_moq:curSupplierMoq,
+    remark:''
   };
   _row.chg_log = poRegMakeLog(_row);
   const _last = _row.chg_log[_row.chg_log.length-1];
@@ -5524,6 +5488,23 @@ for(let i=0;i<64;i++){
   _row.last_change_time = _last ? _last.time : '—';
   poRegularData.push(_row);
 }
+
+/* 手工下单拦截演示行：由「创建订单」功能手工单独下单产生，系统不再生成常规计划。
+   拦截原因＝手工下单（无需计划员处理），备注列只展示单独下单原因，不附"不推荐出单"。 */
+const poManualOrderNotes = [
+  '市场促销活动配件单独下单，已手工创建采购订单',
+  '客户紧急订单单独下单，已手工创建采购订单',
+  '新车型试装件单独下单，已手工创建采购订单'
+];
+poManualOrderNotes.forEach((txt,k)=>{
+  const base = poRegularData[k*5+2];
+  if(!base) return;
+  poRegularData.push(Object.assign({}, base, {
+    id:'PR-MO'+(k+1), plan_no:'PLN-2026-MO'+(k+1),
+    is_blocked:'是', block_reason:'手工下单', multi_supplier_block:'否',
+    adjust_reason:'', remark:txt, was_blocked:'否'
+  }));
+});
 
 /* ===== 采购计划归档 / 导出页共用：与常规采购计划同源口径的生成器 =====
    历史采购计划（po-history）：展示已审批通过并归档的计划（强制 bill_status=审批通过、已解除拦截）。
@@ -5606,7 +5587,8 @@ function poBuildFullRow(i, opts){
     receive_mode:poRegReceiveModes[i%2],
     suppliers, multi_supplier:multiSupplier, multi_supplier_block:multiSupplierBlock,
     was_blocked:'否', demo_supplier_change:'否',
-    cur_supplier_code:curSupplier.code, cur_supplier_name:curSupplier.name, cur_supplier_moq:curSupplier.moq
+    cur_supplier_code:curSupplier.code, cur_supplier_name:curSupplier.name, cur_supplier_moq:curSupplier.moq,
+    remark:blockReason==='手工下单' ? '某某活动配件单独下单，已手工创建采购订单' : ''
   };
   _row.chg_log = poRegMakeLog(_row);
   const _last = _row.chg_log[_row.chg_log.length-1];
@@ -5639,7 +5621,7 @@ const stoFromWhs = window.CSPPWarehouseNetwork.centers.map(c=>c+' '+window.CSPPW
    推荐计划数量(取整前) / 推荐计划数量(分配后) / 推荐计划数量(MPQ取整后) / 推荐计划数量 /
    库间LT / 要求到货日期 / 体积 / 体积单位 / 预计调拨体积 / 导出状态 / 导出时间 / 是否下单
    计划类型：本周＝紧急调拨计划/常规调拨计划（批次 EW/W），下周＝下周预计调拨计划（批次 W）；
-   工具栏仅保留「导出」；备注支持在详情弹窗内编辑保存；详情弹窗仅展示字段详情。 */
+   工具栏仅保留「导出」；详情弹窗为纯只读字段展示，不提供备注编辑与保存。 */
 const stoPlanData = Vue.reactive([]);
 (function buildStoPlan(){
   let id = 0;
@@ -5707,7 +5689,6 @@ const stoPlanData = Vue.reactive([]);
       const estVolume = Math.round(allocQty * unitVolume * 100) / 100;
       const transferLt = [1,2,3,5,7][id % 5];                                  // 库间LT（天）
       const reqArrival = new Date(new Date(genDate).getTime() + transferLt*86400000).toISOString().slice(0,10); // 要求到货日期＝计划生成日＋库间LT
-      const remark = planType==='紧急调拨计划' ? '客户紧急订单，需优先发运' : (unmetQty>0 ? '线路运力不足，未满足部分结转下周' : '');
       stoPlanData.push({
         id:'STO'+(1000+id), period:period,
         data_gen_date:genDate, plan_type:planType, plan_batch:planBatch, plan_line:planLine,
@@ -5724,7 +5705,7 @@ const stoPlanData = Vue.reactive([]);
         alloc_l1:l1, alloc_l2:l2, alloc_l3:l3, alloc_round:allocRound,
         alloc_ratio:Math.round(allocRatio*10000)/10000, cut_qty:cutQty, cap_qty:capQty,
         alloc_qty:allocQty, unit_volume:unitVolume, volume_unit:'m³', est_volume:estVolume,
-        unmet_qty:unmetQty, remark:remark,
+        unmet_qty:unmetQty,
         expected_stock_from:expectedStockFrom, avail_qty_from:availQtyFrom, owed_qty_from:owedQtyFrom,
         transit_qty_from:transitQtyFrom, shortage_qty_from:shortageQtyFrom,
         export_status:'待导出', is_placed:'否',
@@ -6119,6 +6100,8 @@ const app = createApp({
     const zhCN = (window.antd && antd.locales) ? antd.locales.zh_CN : undefined;
     const msg = (t, type) => antd.message[type||'info'](t);
     const draftEnabled = ref(false);
+    /* 本地草稿页面通过该对象把自身状态/函数暴露给模板；无草稿时为空对象（git 成品不含任何草稿代码） */
+    const draftExpose = {};
 
     /* ---- 顶部 Tab ---- */
     const topTab = ref('wh-abc');
@@ -6622,6 +6605,7 @@ const app = createApp({
       { title:'调整原因', key:'adjust_reason', dataIndex:'adjust_reason', width:150, ellipsis:true },
       { title:'是否计划拦截', key:'is_blocked', dataIndex:'is_blocked', width:96 },
       { title:'拦截原因', key:'block_reason', dataIndex:'block_reason', width:150, ellipsis:true },
+      { title:'备注', key:'remark', dataIndex:'remark', width:200, ellipsis:true },
       { title:'配件号', key:'part_code', dataIndex:'part_code', width:108, sorter:(a,b)=>a.part_code.localeCompare(b.part_code) },
       { title:'配件名称', key:'part_name', dataIndex:'part_name', width:132, ellipsis:true },
       { title:'推荐计划数量(取整前)', key:'suggest_raw_qty', dataIndex:'suggest_raw_qty', width:118 },
@@ -6672,7 +6656,7 @@ const app = createApp({
       { title:'审批时间', key:'approve_time', dataIndex:'approve_time', width:138 },
       { title:'操作', key:'action', width:170, fixed:'right' },
     ];
-    const poRegDefaultVisible = ['data_date','plan_type','part_code','part_name','suggest_raw_qty','adjust_qty','adjust_reason','is_blocked','block_reason','cur_purchase_code','cur_purchase_name','suggest_mpq_qty','bill_status','action'];
+    const poRegDefaultVisible = ['data_date','plan_type','part_code','part_name','suggest_raw_qty','adjust_qty','adjust_reason','is_blocked','block_reason','remark','cur_purchase_code','cur_purchase_name','suggest_mpq_qty','bill_status','action'];
     const poRegHiddenCols = ref([]);
     const poRegVisibleColumns = computed(()=> poRegColumns.filter(c=>!poRegHiddenCols.value.includes(c.key)));
     const poRegScrollX = poRegColumns.reduce((s,c)=>s+(c.width||100),0);
@@ -6763,29 +6747,48 @@ const app = createApp({
       { title:'配件名称', key:'part_name', dataIndex:'part_name', width:150 },
       { title:'供应商代码', key:'supplier_code', dataIndex:'supplier_code', width:120 },
       { title:'供应商名称', key:'supplier_name', dataIndex:'supplier_name', width:180 },
-      { title:'交付提前期', key:'lead_days', dataIndex:'lead_days', width:110 },
       { title:'订单数量', key:'qty', dataIndex:'qty', width:110 },
       { title:'备注', key:'remark', dataIndex:'remark', width:150 },
       { title:'操作', key:'_op', width:70, fixed:'right' },
     ];
     let poOrderSeq = 0;
-    function poOrderBlank(){ return { _id:'OR'+(++poOrderSeq)+'-'+Date.now(), part_code:'', part_name:'', supplier_code:'', supplier_name:'', lead_days:null, qty:null, remark:'' }; }
+    function poOrderBlank(){ return { _id:'OR'+(++poOrderSeq)+'-'+Date.now(), part_code:'', part_name:'', supplier_options:[], supplier_code:'', supplier_name:'', lead_days:null, qty:null, remark:'' }; }
     function poOrderAddRow(){ poOrderRows.value.push(poOrderBlank()); }
     function poOrderDelRow(r){ poOrderRows.value = poOrderRows.value.filter(x=>x._id!==r._id); }
-    // 选中配件号后，从配件主数据 / 配件与供应商关系 / 采购计划自动带出名称、供应商、提前期与建议订单数量
+    // 某配件在「配件与供应商关系」中的可选供应商（按供应商代码去重）；多于一家时订单明细支持下拉改选
+    function poOrderSupplierOptions(code){
+      if(!code) return [];
+      const out = [], seen = {};
+      partSupplierData.forEach(function(x){
+        if(x.part_code!==code || seen[x.supplier_code]) return;
+        seen[x.supplier_code] = 1;
+        out.push({ value:x.supplier_code, label:x.supplier_code+'  '+x.supplier_name,
+          supplier_name:x.supplier_name, delivery_lead_time:x.delivery_lead_time });
+      });
+      return out;
+    }
+    // 选中配件号后，自动带出名称、供应商与建议订单数量；提前期同样带出但仅在后台用于计算到货日期（表格不再展示）
     function poOrderOnPart(r, code){
       const m = code ? matData.find(x=>x.material_code===code) : null;
-      const rel = code ? partSupplierData.find(x=>x.part_code===code) : null;
+      const opts = poOrderSupplierOptions(code);
       const plan = code ? poRegularData.find(x=>x.part_code===code) : null;
       r.part_code = code || '';
       r.part_name = m ? m.material_name : '';
-      r.supplier_code = rel ? rel.supplier_code : (plan ? plan.cur_supplier_code : '');
-      r.supplier_name = rel ? rel.supplier_name : (plan ? plan.cur_supplier_name : '');
-      r.lead_days = rel ? rel.delivery_lead_time : (plan ? plan.purchase_lt : 15);
+      r.supplier_options = opts;
+      r.supplier_code = opts.length ? opts[0].value : (plan ? plan.cur_supplier_code : '');
+      r.supplier_name = opts.length ? opts[0].supplier_name : (plan ? plan.cur_supplier_name : '');
+      r.lead_days = opts.length ? opts[0].delivery_lead_time : (plan ? plan.purchase_lt : 15);
       r.qty = plan ? (plan.adjust_qty || plan.suggest_mpq_qty || plan.suggest_qty || 10) : 10;
     }
+    // 改选供应商：供应商名称与交付提前期同步切换（提前期影响自动计算的要求到货日期）
+    function poOrderOnSupplier(r, code){
+      const opt = (r.supplier_options||[]).find(x=>x.value===code);
+      r.supplier_code = code || '';
+      r.supplier_name = opt ? opt.supplier_name : '';
+      r.lead_days = opt ? opt.delivery_lead_time : 15;
+    }
     function poOrderOpenModal(){ poOrderErr.value=''; poOrderRows.value=[poOrderBlank()]; poOrderOpen.value=true; }
-    // 要求到货日期 = 下单日期 + 交付提前期（天），创建订单后由系统自动计算，无需填写
+    // 要求到货日期 = 下单日期 + 交付提前期（天）；提前期由配件主数据后台带出，不在订单明细表展示
     function poOrderEta(issueDate, leadDays){
       const d = new Date(issueDate + 'T00:00:00');
       d.setDate(d.getDate() + Number(leadDays || 15));
@@ -6808,15 +6811,35 @@ const app = createApp({
           way:'手工下单', status:'待审批', planner:'当前计划员',
           approve_remark:'—', approver:'—', approve_time:'—', remark:r.remark||'—'
         });
+        // 手工创建订单后，常规采购计划中同配件的计划行标记「手工下单」拦截，避免系统重复出单；
+        // 弹窗填写的备注同步带入计划行「备注」列（如：某某活动单独下单）。
+        poRegularData.forEach(p=>{
+          if(p.part_code===r.part_code){
+            p.is_blocked='是'; p.block_reason='手工下单';
+            p.remark=(r.remark && r.remark.trim()) ? r.remark.trim() : '手工创建订单单独下单';
+            p.update_time=now; p.modifier='当前用户';
+          }
+        });
         n++;
       });
       msg('已创建 '+n+' 张采购订单（待审批），可在「采购订单下达」中审批','success');
       poOrderOpen.value=false;
     }
 
-    /* ===== 历史需求处理 / 活动登记表（复刻 UAT capp.CappActivityRegister） =====
-       优化：活动时间跨月时，活动销量按自然日天数占比分摊到各月，末月承接余数，保证合计=活动数量。 */
-    const actRegStatuses = ['已受理','待处理','已完成'];
+    /* ===== 历史需求处理 / 活动登记表（复刻 UAT + 2026-11-06 迭代变更） =====
+       变更口径（用户确认）：
+         ① 取消按月维护活动数量：不再有跨月分摊、按月填充表、合计校验、按月销量列、查看结果按月汇总页签；
+         ② 新增「导入」：Excel/CSV 解析预览后，按「配件号 + 开始日期」upsert（匹配到＝变更，未匹配＝新增）；
+         ③ 活动截止日期默认可不填写（仅填写时校验不得早于开始日期，空值展示 —）；
+         ④ 活动状态：配件号 / 开始日期 / 活动数量（促销为预估增量）/ 促销的比例计算开始日期 任一缺失
+            →「待补充信息」，允许保存不完整记录；结束日期、备注、附件不参与判定；
+         ⑤ 工具栏「导入」＋「导出」（按当前筛选结果导出 CSV），新增弹窗不再显示说明性副标题与底部提示；
+         ⑥ 新增「活动名称」，与配件号共同构成唯一主键：表单必填＋组合判重拦截，导入模板首列加活动名称、
+            匹配键由「配件号 + 开始日期」改为「活动名称 + 配件号」，缺主键的行预览标「跳过」并在写回时忽略；
+         ⑦ 页面内「最新配件号」统一改称「配件号」，按天明细的「最新配件名称」同步改称「配件名称」
+            （配件主数据详情页的「最新配件号」＝最新可采购件，属另一业务口径，不改）。
+       改造前原版（含按月填充 + 附件 5 张）已另存为本地草稿副本，不随 git 提交。 */
+    const actRegStatuses = ['已受理','待处理','已完成','待补充信息'];
     const actRegTypes = ['服务活动','促销活动'];
     const actRegProcessPlans = {
       '服务活动':'扣除活动销量剩余总销量按比例分摊',
@@ -6824,44 +6847,39 @@ const app = createApp({
     };
     const actRegPartOptions = computed(()=> matData.map(m=>({ value:m.material_code, label:m.material_code+'  '+m.material_name })));
     function actRegFmtDate(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-    // 把 [start,end] 按自然月切成若干段，返回每段覆盖天数与区间
-    function actRegMonthSpans(start, end){
-      if(!start || !end || end < start) return [];
-      const s = new Date(start+'T00:00:00'), e = new Date(end+'T00:00:00');
-      const out = [];
-      let cur = new Date(s.getFullYear(), s.getMonth(), 1);
-      while(cur <= e){
-        const y = cur.getFullYear(), m = cur.getMonth();
-        const ms = new Date(y,m,1), me = new Date(y,m+1,0);
-        const a = s > ms ? s : ms, b = e < me ? e : me;
-        out.push({ month:y+'-'+String(m+1).padStart(2,'0'), from:actRegFmtDate(a), to:actRegFmtDate(b),
-                   range:actRegFmtDate(a)+' ~ '+actRegFmtDate(b), days:Math.round((b-a)/86400000)+1 });
-        cur = new Date(y,m+1,1);
-      }
-      return out;
+    // 比例计算结束日期：活动开始日期前一日（灰底只读自动带出）
+    function actRegCalcRatioEnd(start){
+      if(!start) return '';
+      const d = new Date(start+'T00:00:00'); d.setDate(d.getDate()-1);
+      return actRegFmtDate(d);
     }
-    // 按天数占比分摊活动数量：前 N-1 月向下取整，末月承接余数，Σ 严格等于活动数量
-    function actRegAllocate(start, end, qty){
-      const spans = actRegMonthSpans(start, end);
-      const total = spans.reduce((s,x)=>s+x.days,0) || 1;
-      const q = Number(qty)||0;
-      let acc = 0;
-      return spans.map((sp,i)=>{
-        let v = (i===spans.length-1) ? q-acc : Math.floor(q*sp.days/total);
-        if(v<0) v = 0;
-        acc += v;
-        return { month:sp.month, from:sp.from, to:sp.to, range:sp.range, days:sp.days,
-                 ratio:(sp.days/total*100).toFixed(2)+'%', qty:v };
-      });
+    // 关键字段完整性：结束日期 / 备注 / 附件不计入；返回是否可进入「待处理」
+    function actRegIsComplete(r){
+      const qty = Number(r.activity_type==='促销活动' ? r.promo_increment : r.activity_qty) || 0;
+      return !!r.part_code && !!r.start_date && qty>0 &&
+             (r.activity_type!=='促销活动' || !!r.ratio_start);
     }
+    function actRegStatusOf(r){ return actRegIsComplete(r) ? '待处理' : '待补充信息'; }
     const actRegData = Vue.reactive([]);
+    // 演示数据：活动名称 + 配件号 组合唯一，重名自动追加序号
+    const actRegNamePool = ['春季服务关怀活动','夏季空调检测活动','金秋保养优惠活动','年末客户回馈活动',
+      '新春安全检测活动','会员专享服务活动','双十一促销活动','元旦促销活动','售后焕新服务活动','车主课堂活动'];
+    function actRegDemoName(i, code){
+      const base = actRegNamePool[i % actRegNamePool.length];
+      if(!actRegData.some(x=>x.activity_name===base && x.part_code===code)) return base;
+      let n = 2, name = base + '（' + n + '）';
+      while(actRegData.some(x=>x.activity_name===name && x.part_code===code)){ n++; name = base + '（' + n + '）'; }
+      return name;
+    }
     poRegActivityTable.forEach((a,i)=>{
       const start = i===0 ? '2026-02-01' : (i===1 ? '2026-01-01' : a.start_date);
-      const end   = i===0 ? '2026-03-02' : (i===1 ? '2026-01-10' : a.end_date);
-      const qty   = i===0 ? 414 : (i===1 ? 120 : a.activity_qty);
-      const type  = i===0 ? '促销活动' : (i===1 ? '服务活动' : a.activity_type);
+      let end   = i===0 ? '2026-03-02' : (i===1 ? '2026-01-10' : a.end_date);
+      if(i===2) end = '';   // 演示：活动截止日期留空，但信息完整 → 状态仍为「已受理/待处理」
+      const qty  = i===0 ? 414 : (i===1 ? 120 : a.activity_qty);
+      const type = i===0 ? '促销活动' : (i===1 ? '服务活动' : a.activity_type);
       actRegData.push({
-        id:'AR'+(i+1), part_code:a.part_code, part_name:a.part_name,
+        id:'AR'+(i+1), activity_name:actRegDemoName(i, a.part_code),
+        part_code:a.part_code, part_name:a.part_name,
         start_date:start, end_date:end, activity_qty:qty,
         promo_increment: type==='促销活动' ? qty : 0,
         activity_type:type, activity_status: i%7===0 ? '待处理' : (i%5===0 ? '已完成' : '已受理'),
@@ -6870,15 +6888,27 @@ const app = createApp({
         ratio_end: i===0 ? '2025-11-30' : a.ratio_end,
         remark:a.remark, creator_name:'超级管理员', create_time:'2026-10-19 16:28:31',
         modifier_name:a.last_modifier, update_time:a.last_modify_time,
-        month_alloc: actRegAllocate(start,end,qty)
+        images:[]
       });
     });
-    const actRegFilters = reactive({ part_code:'', part_name:'', status:undefined });
-    const actRegApplied = reactive({ part_code:'', part_name:'', status:undefined });
+    // 演示一条「待补充信息」：活动数量未填、结束日期留空，便于直接看到橙色状态标签
+    actRegData.unshift({
+      id:'AR-PENDING', activity_name:'示例 · 信息待补充的活动',
+      part_code:'LR000000', part_name:'示例 · 信息待补充的活动',
+      start_date:'2026-11-06', end_date:'', activity_qty:null, promo_increment:0,
+      activity_type:'服务活动', activity_status:'待补充信息',
+      process_plan:actRegProcessPlans['服务活动'], ratio_start:'', ratio_end:'',
+      remark:'关键字段未填完整，保存后自动标记为待补充信息', images:[],
+      creator_name:'超级管理员', create_time:'2026-11-06 09:20:00',
+      modifier_name:'超级管理员', update_time:'2026-11-06 09:20:00'
+    });
+    const actRegFilters = reactive({ activity_name:'', part_code:'', part_name:'', status:undefined });
+    const actRegApplied = reactive({ activity_name:'', part_code:'', part_name:'', status:undefined });
     const actRegPage = reactive({ current:1, size:15 });
-    function actRegDoSearch(){ actRegApplied.part_code=actRegFilters.part_code; actRegApplied.part_name=actRegFilters.part_name; actRegApplied.status=actRegFilters.status; actRegPage.current=1; }
-    function actRegResetSearch(){ actRegFilters.part_code=''; actRegFilters.part_name=''; actRegFilters.status=undefined; actRegDoSearch(); }
+    function actRegDoSearch(){ actRegApplied.activity_name=actRegFilters.activity_name; actRegApplied.part_code=actRegFilters.part_code; actRegApplied.part_name=actRegFilters.part_name; actRegApplied.status=actRegFilters.status; actRegPage.current=1; }
+    function actRegResetSearch(){ actRegFilters.activity_name=''; actRegFilters.part_code=''; actRegFilters.part_name=''; actRegFilters.status=undefined; actRegDoSearch(); }
     const actRegFiltered = computed(()=> actRegData.filter(r=>{
+      if(actRegApplied.activity_name && !String(r.activity_name||'').includes(actRegApplied.activity_name)) return false;
       if(actRegApplied.part_code && !String(r.part_code).includes(actRegApplied.part_code)) return false;
       if(actRegApplied.part_name && !String(r.part_name).includes(actRegApplied.part_name)) return false;
       if(actRegApplied.status && r.activity_status!==actRegApplied.status) return false;
@@ -6886,18 +6916,18 @@ const app = createApp({
     }));
     const actRegPaged = computed(()=>{ const s=(actRegPage.current-1)*actRegPage.size; return actRegFiltered.value.slice(s,s+actRegPage.size); });
     const actRegColumns = [
-      { title:'最新配件号', key:'part_code', dataIndex:'part_code', width:150, fixed:'left' },
+      { title:'活动名称', key:'activity_name', dataIndex:'activity_name', width:180, fixed:'left' },
+      { title:'配件号', key:'part_code', dataIndex:'part_code', width:150, fixed:'left' },
       { title:'配件名称', key:'part_name', dataIndex:'part_name', width:170, ellipsis:true },
       { title:'开始日期', key:'start_date', dataIndex:'start_date', width:120 },
       { title:'结束日期', key:'end_date', dataIndex:'end_date', width:120 },
       { title:'活动数量', key:'activity_qty', dataIndex:'activity_qty', width:110 },
       { title:'促销预估增量', key:'promo_increment', dataIndex:'promo_increment', width:130 },
       { title:'活动类型', key:'activity_type', dataIndex:'activity_type', width:110 },
-      { title:'活动状态', key:'activity_status', dataIndex:'activity_status', width:110 },
+      { title:'活动状态', key:'activity_status', dataIndex:'activity_status', width:120 },
       { title:'处理方案', key:'process_plan', dataIndex:'process_plan', width:260, ellipsis:true },
       { title:'比例计算开始日期', key:'ratio_start', dataIndex:'ratio_start', width:140 },
       { title:'比例计算结束日期', key:'ratio_end', dataIndex:'ratio_end', width:140 },
-      { title:'按月销量（优化）', key:'month_qty', dataIndex:'month_qty', width:320, ellipsis:true },
       { title:'备注', key:'remark', dataIndex:'remark', width:200, ellipsis:true },
       { title:'创建人名称', key:'creator_name', dataIndex:'creator_name', width:120 },
       { title:'创建时间', key:'create_time', dataIndex:'create_time', width:170 },
@@ -6905,113 +6935,89 @@ const app = createApp({
       { title:'更新时间', key:'update_time', dataIndex:'update_time', width:170 },
       { title:'操作', key:'action', width:170, fixed:'right' },
     ];
-    const actRegScrollX = 2990;
-    const actRegMonthCols = [
-      { title:'月份', key:'month', dataIndex:'month', width:110 },
-      { title:'覆盖区间', key:'range', dataIndex:'range', width:210 },
-      { title:'覆盖天数', key:'days', dataIndex:'days', width:100 },
-      { title:'天数占比', key:'ratio', dataIndex:'ratio', width:100 },
-      { title:'活动销量', key:'qty', dataIndex:'qty', width:120 },
-    ];
+    const actRegScrollX = 2850;
     const actRegDayCols = [
-      { title:'最新配件号', key:'part_code', dataIndex:'part_code', width:140 },
-      { title:'最新配件名称', key:'part_name', dataIndex:'part_name', width:160 },
-      { title:'处理状态', key:'status', dataIndex:'status', width:100 },
+      { title:'配件号', key:'part_code', dataIndex:'part_code', width:140 },
+      { title:'配件名称', key:'part_name', dataIndex:'part_name', width:160 },
+      { title:'活动状态', key:'status', dataIndex:'status', width:120 },
       { title:'订单日期', key:'order_date', dataIndex:'order_date', width:120 },
       { title:'所属月份', key:'month', dataIndex:'month', width:110 },
-      { title:'当月填充销量', key:'month_qty', dataIndex:'month_qty', width:130 },
+      { title:'活动数量', key:'activity_qty', dataIndex:'activity_qty', width:120 },
       { title:'原始数量', key:'raw_qty', dataIndex:'raw_qty', width:100 },
       { title:'推荐数量', key:'rec_qty', dataIndex:'rec_qty', width:100 },
       { title:'创建时间', key:'create_time', dataIndex:'create_time', width:160 },
     ];
-    function actRegStatusColor(s){ return s==='已完成' ? 'green' : (s==='待处理' ? 'gold' : 'blue'); }
-    function actRegMonthText(r){
-      const arr = r.month_alloc || [];
-      return arr.length ? arr.map(x=>x.month+'：'+x.qty+' 件').join('；') : '—';
-    }
+    function actRegStatusColor(s){ return s==='已完成' ? 'green' : (s==='待补充信息' ? 'orange' : (s==='待处理' ? 'blue' : 'gold')); }
     // 新增表单
     const actRegFormOpen = ref(false), actRegFormErr = ref('');
-    const actRegForm = reactive({ part_code:'', part_name:'', start_date:'', end_date:'', activity_type:'服务活动',
-      process_plan:actRegProcessPlans['服务活动'], activity_qty:null, promo_increment:null, ratio_start:'', ratio_end:'', remark:'' });
-    const actRegFormMonths = ref([]);
-    const actRegIsCrossMonth = computed(()=> actRegMonthSpans(actRegForm.start_date, actRegForm.end_date).length>1);
-    const actRegMonthSum = computed(()=> actRegFormMonths.value.reduce((s,x)=>s+(Number(x.qty)||0),0));
-    // 分月填充总量：服务活动取「活动数量」，促销活动取「促销预估增量」；分摊算法保持不变
+    const actRegForm = reactive({ activity_name:'', part_code:'', part_name:'', start_date:'', end_date:'', activity_type:'服务活动',
+      process_plan:actRegProcessPlans['服务活动'], activity_qty:null, promo_increment:null, ratio_start:'', ratio_end:'', remark:'', images:[] });
     const actRegTotalQty = computed(()=> Number(actRegForm.activity_type==='促销活动' ? actRegForm.promo_increment : actRegForm.activity_qty) || 0);
-    const actRegTotalLabel = computed(()=> actRegForm.activity_type==='促销活动' ? '促销预估增量' : '活动数量');
-    function actRegRecalcMonths(){ setTimeout(()=>{ actRegFormMonths.value = actRegAllocate(actRegForm.start_date, actRegForm.end_date, actRegTotalQty.value); },0); }
     function actRegOnPart(code){ const m = matData.find(x=>x.material_code===code); actRegForm.part_name = m ? m.material_name : ''; }
-    // 比例计算结束日期：参考系统为灰底只读自动带出，原型按「活动开始日期前一日」推导
     function actRegSyncRatioEnd(){
-      if(actRegForm.activity_type!=='促销活动' || !actRegForm.start_date){ actRegForm.ratio_end=''; return; }
-      const d = new Date(actRegForm.start_date+'T00:00:00'); d.setDate(d.getDate()-1);
-      actRegForm.ratio_end = actRegFmtDate(d);
+      actRegForm.ratio_end = actRegForm.activity_type==='促销活动' ? actRegCalcRatioEnd(actRegForm.start_date) : '';
     }
-    function actRegOnDateChange(){ actRegSyncRatioEnd(); actRegRecalcMonths(); }
+    function actRegOnDateChange(){ actRegSyncRatioEnd(); }
     function actRegOnRatioStart(){ actRegSyncRatioEnd(); }
     function actRegOnType(t){
       actRegForm.process_plan = actRegProcessPlans[t] || '';
       if(t==='服务活动'){ actRegForm.promo_increment=null; actRegForm.ratio_start=''; actRegForm.ratio_end=''; }
       else { actRegForm.activity_qty=null; actRegSyncRatioEnd(); }
-      actRegRecalcMonths();
     }
     function actRegOpenCreate(){
       actRegFormErr.value='';
-      Object.assign(actRegForm, { part_code:'', part_name:'', start_date:'', end_date:'', activity_type:'服务活动',
-        process_plan:actRegProcessPlans['服务活动'], activity_qty:null, promo_increment:null, ratio_start:'', ratio_end:'', remark:'' });
-      actRegFormMonths.value = [];
+      Object.assign(actRegForm, { activity_name:'', part_code:'', part_name:'', start_date:'', end_date:'', activity_type:'服务活动',
+        process_plan:actRegProcessPlans['服务活动'], activity_qty:null, promo_increment:null, ratio_start:'', ratio_end:'', remark:'', images:[] });
+      jlrsImgPreview.open = false;
       actRegFormOpen.value = true;
     }
     function actRegSaveForm(){
       const f = actRegForm;
-      const label = actRegTotalLabel.value;
-      if(!f.part_code){ actRegFormErr.value='请从配件主数据中选择最新配件号'; return; }
-      if(!f.start_date || !f.end_date || f.end_date < f.start_date){ actRegFormErr.value='请填写有效的日期范围（结束日期不得早于开始日期）'; return; }
-      if(f.activity_type==='促销活动' && !f.ratio_start){ actRegFormErr.value='请选择比例计算开始日期'; return; }
-      if(!(actRegTotalQty.value>0)){ actRegFormErr.value='请填写大于 0 的'+label; return; }
+      // 唯一主键：活动名称 + 配件号（两端必填，组合重复直接拦截）
+      const name = String(f.activity_name||'').trim();
+      if(!name || !f.part_code){ actRegFormErr.value='请填写活动名称并选择配件号（唯一主键）'; return; }
+      if(actRegData.some(x=>x.activity_name===name && x.part_code===f.part_code)){
+        actRegFormErr.value='该「活动名称 + 配件号」组合已存在，请勿重复新增'; return;
+      }
+      // 结束日期选填；仅填写时校验不得早于开始日期
+      if(f.start_date && f.end_date && f.end_date < f.start_date){ actRegFormErr.value='结束日期不得早于开始日期'; return; }
       actRegSyncRatioEnd();
       const qty = actRegTotalQty.value;
-      const months = actRegAllocate(f.start_date, f.end_date, qty);
-      if(months.length>1){
-        if(actRegFormMonths.value.length !== months.length) actRegFormMonths.value = months.map(x=>({...x}));
-        if(actRegMonthSum.value !== qty){ actRegFormErr.value='各月活动销量合计 '+actRegMonthSum.value+' 与'+label+' '+qty+' 不一致，请调整'; return; }
-        months.forEach(m=>{ const x = actRegFormMonths.value.find(y=>y.month===m.month); if(x) m.qty = Number(x.qty)||0; });
-      }
+      const status = actRegStatusOf(f);
+      const now = new Date().toISOString().slice(0,16).replace('T',' ');
       actRegData.unshift({
-        id:'AR-N'+Date.now(), part_code:f.part_code, part_name:f.part_name||'—',
+        id:'AR-N'+Date.now(), activity_name:name, part_code:f.part_code, part_name:f.part_name||'—',
         start_date:f.start_date, end_date:f.end_date, activity_qty:qty,
         promo_increment:(f.activity_type==='促销活动' ? qty : 0), activity_type:f.activity_type,
-        activity_status:'待处理', process_plan:f.process_plan,
+        activity_status:status, process_plan:f.process_plan,
         ratio_start:f.ratio_start||'', ratio_end:f.ratio_end||'', remark:f.remark||'—',
-        creator_name:'超级管理员', create_time:new Date().toISOString().slice(0,16).replace('T',' '),
-        modifier_name:'超级管理员', update_time:new Date().toISOString().slice(0,16).replace('T',' '),
-        month_alloc:months
+        images:(f.images||[]).slice(),
+        creator_name:'超级管理员', create_time:now, modifier_name:'超级管理员', update_time:now
       });
       actRegPage.current = 1;
-      msg('已保存活动登记，活动销量已按 '+months.length+' 个月填充（合计 '+qty+' 件）','success');
+      msg(status==='待补充信息' ? '已保存活动登记（信息未填完整，状态：待补充信息）' : '已保存活动登记','success');
       actRegFormOpen.value = false;
     }
     // 详情 / 查看结果 / 删除
     const actRegDetailOpen = ref(false), actRegDetailRow = ref(null);
-    const actRegDetailMonths = computed(()=> actRegDetailRow.value ? (actRegDetailRow.value.month_alloc||[]).map(x=>({...x})) : []);
     function actRegOpenDetail(r){ actRegDetailRow.value = r; actRegDetailOpen.value = true; }
-    const actRegResultOpen = ref(false), actRegResultRow = ref(null), actRegResultTab = ref('month');
-    const actRegResultMonths = computed(()=> actRegResultRow.value ? (actRegResultRow.value.month_alloc||[]).map(x=>({...x})) : []);
-    const actRegResultMonthSum = computed(()=> actRegResultMonths.value.reduce((s,x)=>s+(Number(x.qty)||0),0));
+    const actRegResultOpen = ref(false), actRegResultRow = ref(null);
+    // 按天明细：按活动期间逐日展开，活动数量直接取登记总量，不再按月分摊；结束日期为空时无明细
     const actRegResultDays = computed(()=>{
-      const r = actRegResultRow.value; if(!r) return [];
+      const r = actRegResultRow.value;
+      if(!r || !r.start_date || !r.end_date) return [];
       const out = []; const s = new Date(r.start_date+'T00:00:00'), e = new Date(r.end_date+'T00:00:00');
       let k = 0;
+      const qty = Number(r.activity_type==='促销活动' ? r.promo_increment : r.activity_qty) || 0;
       for(let d = new Date(s); d <= e; d.setDate(d.getDate()+1)){
-        const ds = actRegFmtDate(d), mo = ds.slice(0,7);
-        const m = (r.month_alloc||[]).find(x=>x.month===mo);
-        out.push({ id:ds, part_code:r.part_code, part_name:r.part_name, status:'待处理', order_date:ds,
-                   month:mo, month_qty:m?m.qty:0, raw_qty:50, rec_qty:8+((k*7)%13), create_time:r.create_time });
+        const ds = actRegFmtDate(d);
+        out.push({ id:ds, part_code:r.part_code, part_name:r.part_name, status:r.activity_status, order_date:ds,
+                   month:ds.slice(0,7), activity_qty:qty, raw_qty:50, rec_qty:8+((k*7)%13), create_time:r.create_time });
         k++;
       }
       return out;
     });
-    function actRegOpenResult(r){ actRegResultRow.value = r; actRegResultTab.value = 'month'; actRegResultOpen.value = true; }
+    function actRegOpenResult(r){ actRegResultRow.value = r; actRegResultOpen.value = true; }
     const actRegDeleteOpen = ref(false), actRegDeleteRow = ref(null);
     function actRegAskDelete(r){ actRegDeleteRow.value = r; actRegDeleteOpen.value = true; }
     function actRegDoDelete(){
@@ -7020,6 +7026,138 @@ const app = createApp({
       actRegDeleteOpen.value = false;
       msg('已删除活动登记','success');
     }
+    /* ---- 列表导出：按当前筛选结果导出全部数据列（不含操作列） ---- */
+    function actRegExportCsv(){
+      const cols = actRegColumns.filter(c=>c.key!=='action' && c.dataIndex);
+      const src = actRegFiltered.value;
+      const esc = v => {
+        const s = (v===null || v===undefined) ? '' : String(v);
+        return /[",\n\r]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s;
+      };
+      const lines = [cols.map(c=>c.title).join(',')]
+        .concat(src.map(r=> cols.map(c=>esc(r[c.dataIndex])).join(',')));
+      const blob = new Blob(['\uFEFF'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = 'JLRS_活动登记表_' + new Date().toISOString().slice(0,10) + '.csv';
+      a.click(); URL.revokeObjectURL(a.href);
+      msg('导出成功，共 '+src.length+' 条（CSV 已下载）','success');
+    }
+    /* ---- 导入：Excel/CSV → 解析预览 → upsert 写回 ---- */
+    const actRegImportOpen = ref(false), actRegImportErr = ref(''), actRegImportRows = ref([]);
+    const actRegImportHeads = ['活动名称','配件号','活动类型','开始日期','结束日期','活动数量','促销预估增量','比例计算开始日期','备注'];
+    const actRegImportCols = [
+      { title:'活动名称', dataIndex:'activity_name', width:160, ellipsis:true },
+      { title:'配件号', dataIndex:'part_code', width:130 },
+      { title:'配件名称', dataIndex:'part_name', width:150, ellipsis:true },
+      { title:'操作', dataIndex:'_op', width:90 },
+      { title:'导入后状态', dataIndex:'_status', width:120 },
+      { title:'活动类型', dataIndex:'activity_type', width:100 },
+      { title:'开始日期', dataIndex:'start_date', width:110 },
+      { title:'结束日期', dataIndex:'end_date', width:110 },
+      { title:'活动数量/预估增量', dataIndex:'qty', width:140 },
+      { title:'比例计算开始日期', dataIndex:'ratio_start', width:130 },
+      { title:'备注', dataIndex:'remark', width:140, ellipsis:true },
+    ];
+    const actRegImportAddCount = computed(()=> actRegImportRows.value.filter(x=>x._op==='新增').length);
+    const actRegImportUpdCount = computed(()=> actRegImportRows.value.filter(x=>x._op==='变更').length);
+    const actRegImportSkipCount = computed(()=> actRegImportRows.value.filter(x=>x._op==='跳过').length);
+    const actRegImportPendingCount = computed(()=> actRegImportRows.value.filter(x=>x._status==='待补充信息').length);
+    // 唯一主键：活动名称 + 配件号
+    function actRegFindMatch(name, code){
+      if(!name || !code) return null;
+      return actRegData.find(x=>x.activity_name===name && x.part_code===code) || null;
+    }
+    function actRegOpenImport(){ actRegImportRows.value=[]; actRegImportErr.value=''; actRegImportOpen.value=true; }
+    function actRegImportTemplate(){
+      const sample = actRegData.find(r=>r.activity_name && r.part_code && r.start_date && r.activity_type==='服务活动' && Number(r.activity_qty)>0)
+        || { activity_name:'示例变更活动', part_code:'LR062541', start_date:'2026-11-06', end_date:'' };
+      const lines = [
+        actRegImportHeads.join(','),
+        ['示例新增服务活动','LR099901','服务活动','2026-12-01','','100','','','批量导入示例-新增'].join(','),
+        [sample.activity_name, sample.part_code,'服务活动',sample.start_date,sample.end_date||'','150','','','批量导入示例-变更'].join(',')
+      ];
+      const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = 'JLRS_活动登记导入模板_' + new Date().toISOString().slice(0,10) + '.csv';
+      a.click(); URL.revokeObjectURL(a.href);
+      antd.message.success('已导出导入模板（9 列）');
+    }
+    function actRegParseImport(text){
+      const lines = (text||'').replace(/^\uFEFF/,'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+      const out = [];
+      for(const line of lines){
+        const cells = line.split(/[,;\t]/).map(c=>c.trim());
+        if(!cells.length) continue;
+        if(cells[0]==='活动名称') continue; // 表头
+        const activity_name = cells[0]||'';
+        const part_code = cells[1]||'';
+        const activity_type = cells[2]==='促销活动' ? '促销活动' : '服务活动';
+        const start_date = cells[3]||'';
+        const end_date = cells[4]||'';
+        const activity_qty = (cells[5]!==undefined && cells[5]!=='' && !isNaN(parseFloat(cells[5]))) ? Math.round(parseFloat(cells[5])) : null;
+        const promo_increment = (cells[6]!==undefined && cells[6]!=='' && !isNaN(parseFloat(cells[6]))) ? Math.round(parseFloat(cells[6])) : null;
+        const ratio_start = cells[7]||'';
+        const remark = cells[8]||'';
+        if(!activity_name && !part_code && !start_date && activity_qty===null && promo_increment===null && !remark) continue;
+        const qty = activity_type==='促销活动' ? promo_increment : activity_qty;
+        const info = { part_code, start_date, activity_type, activity_qty, promo_increment, ratio_start };
+        const m = matData.find(x=>x.material_code===part_code);
+        const missingKey = !activity_name || !part_code;
+        out.push({ key:'IMP-'+out.length, activity_name, part_code, part_name:m ? m.material_name : '—',
+          activity_type, start_date, end_date, qty, ratio_start, remark,
+          _op: missingKey ? '跳过' : (actRegFindMatch(activity_name, part_code) ? '变更' : '新增'),
+          _status: missingKey ? '主键缺失' : actRegStatusOf(info) });
+      }
+      return out;
+    }
+    function actRegImportFile(file){
+      const name = file.name || '';
+      if(!/\.(csv|txt|xlsx?)$/i.test(name)){ actRegImportErr.value='请上传 CSV/TXT 文件（Excel 请「另存为 CSV」）'; return false; }
+      const reader = new FileReader();
+      reader.onload = () => {
+        const rows = actRegParseImport(String(reader.result||''));
+        if(!rows.length){ actRegImportErr.value='未解析到有效数据，请检查是否按模板填写'; actRegImportRows.value=[]; return; }
+        actRegImportRows.value = rows; actRegImportErr.value='';
+        antd.message.success('已解析 '+rows.length+' 行');
+      };
+      reader.readAsText(file, 'UTF-8');
+      return false; // 阻止默认上传，由本地 FileReader 解析
+    }
+    function actRegDoImport(){
+      const rows = actRegImportRows.value;
+      if(!rows.length){ actRegImportErr.value='请先导入文件并确认解析结果'; return; }
+      let add = 0, upd = 0, skip = 0;
+      const now = new Date().toISOString().slice(0,16).replace('T',' ');
+      rows.forEach(function(x){
+        if(x._op==='跳过'){ skip++; return; }
+        const qty = x.qty; // 解析时已按活动类型取「活动数量 / 促销预估增量」
+        const rec = {
+          activity_name:x.activity_name,
+          part_code:x.part_code, part_name:x.part_name,
+          start_date:x.start_date, end_date:x.end_date,
+          activity_qty:qty, promo_increment:(x.activity_type==='促销活动' ? qty : 0),
+          activity_type:x.activity_type, activity_status:x._status,
+          process_plan:actRegProcessPlans[x.activity_type],
+          ratio_start:x.ratio_start||'',
+          ratio_end:(x.activity_type==='促销活动' ? actRegCalcRatioEnd(x.start_date) : ''),
+          remark:x.remark||'—', images:[]
+        };
+        const matched = actRegFindMatch(x.activity_name, x.part_code);
+        if(matched){
+          Object.assign(matched, rec, { modifier_name:'超级管理员', update_time:now });
+          upd++;
+        } else {
+          actRegData.unshift(Object.assign({ id:'AR-I'+Date.now()+'-'+add,
+            creator_name:'超级管理员', create_time:now, modifier_name:'超级管理员', update_time:now }, rec));
+          add++;
+        }
+      });
+      actRegPage.current = 1;
+      actRegImportOpen.value = false;
+      actRegImportRows.value = [];
+      msg('导入完成：新增 '+add+' 条，变更 '+upd+' 条'+(skip ? '，跳过 '+skip+' 行（主键缺失）' : ''),'success');
+    }
+
     // 编辑 / 调整弹窗
     const poRegEditOpen = ref(false); const poRegEditRow = ref(null); const poRegEditTarget = ref(null);
     const poRegEditErr = reactive({ adjustQty:'', adjustReason:'', supplier:'', planner:'', contract:'', activity:'' });
@@ -7036,8 +7174,16 @@ const app = createApp({
       if(copy.block_reason==='无有效合同'){
         copy.contract_confirmed = false;
       }
-      poRegEditErr.adjustQty=''; poRegEditErr.adjustReason=''; poRegEditOpen.value=true;
+      Object.keys(poRegEditErr).forEach(k=>{ poRegEditErr[k]=''; }); poRegEditOpen.value=true;
     }
+    /* 调整弹窗两种形态：
+       ① 待处理＝单据状态「待提交」＋本行拦截尚未处理过＋仍有待处理的拦截原因 → 按拦截原因展示对应处理内容；
+       ② 处理完成（handled 已置位、拦截已解除）或单据已流转出「待提交」→ 仅保留「调整计划数量」「调整原因」2 个通用调整字段，
+          不再重复要求选择供应商 / 指定计划员 / 确认合同等一次性动作。 */
+    const poRegEditPending = computed(()=>{
+      const r = poRegEditRow.value; if(!r) return false;
+      return r.bill_status==='待提交' && !r.handled && r.is_blocked==='是' && !!r.block_reason && r.block_reason!=='—';
+    });
     // 多供应商拦截场景：展示当前选定供应商及其对应 MOQ（数量不在本弹窗调整）
     const poRegEditCurSupplier = computed(()=>{ const r=poRegEditRow.value; if(!r||!r.suppliers) return null; return r.suppliers.find(s=>s.code===r.cur_supplier_code) || null; });
     // 系统自动拦截（计划员无需处理）类原因 → 弹窗提示文案
@@ -7047,40 +7193,44 @@ const app = createApp({
       '替代拦截':'替代关系拦截，计划员无需处理',
       '一次买断件':'一次买断件，计划员无需处理',
       '直供件':'直供件，计划员无需处理',
+      '手工下单':'该配件已由计划员手工创建订单单独下单，系统不再生成常规计划，计划员无需处理',
     };
     const poRegEditBlockNote = computed(()=> poRegEditBlockNoteMap[poRegEditRow.value ? poRegEditRow.value.block_reason : ''] || '');
-    // 活动零件拦截：优先读「历史需求处理 · 活动登记表」的实时登记（含按月填充），回退静态原型数据
+    // 活动零件拦截：优先读「历史需求处理 · 活动登记表」的实时登记（活动数量取登记总量），回退静态原型数据
     const poRegEditActReg = computed(()=>{
       const r = poRegEditRow.value; if(!r) return null;
       const live = actRegData.find(x=>x.part_code===r.part_code);
       return live || poRegActivityMap[r.part_code] || null;
     });
-    const poRegEditActMonths = computed(()=>{ const a=poRegEditActReg.value; return a && a.month_alloc ? a.month_alloc.map(x=>({...x})) : []; });
-    const poRegEditActMonthSum = computed(()=> poRegEditActMonths.value.reduce((s,x)=>s+(Number(x.qty)||0),0));
     function poRegSaveEdit(){
       const row = poRegEditRow.value; if(!row) return;
       let ok = true;
       const reason = row.block_reason;
-      const isReadOnly = ['非计划日','库存充足','替代拦截','一次买断件','直供件'].includes(reason);
-      // 按拦截原因做差异化校验
-      if(reason==='多供应商'){
+      const isPending = poRegEditPending.value;   // 仅待处理行才做「按拦截原因」的差异化校验
+      const isReadOnly = poNoActionReasons.includes(reason);
+      // 待处理：按拦截原因做差异化校验
+      if(isPending && reason==='多供应商'){
         if(!row.cur_supplier_code){ poRegEditErr.supplier='请选择供应商'; ok=false; } else poRegEditErr.supplier='';
       }
-      if(reason==='零件无计划员'){
+      if(isPending && reason==='零件无计划员'){
         if(!row.planner){ poRegEditErr.planner='请指定计划员'; ok=false; } else poRegEditErr.planner='';
       }
-      if(reason==='无有效合同'){
+      if(isPending && reason==='无有效合同'){
         if(!row.contract_confirmed){ poRegEditErr.contract='请勾选「确认已维护好有效合同」'; ok=false; }
         else poRegEditErr.contract='';
       }
-      if(reason==='活动零件'){
+      if(isPending && reason==='活动零件'){
         if(row.adjust_qty===null || row.adjust_qty===undefined || row.adjust_qty < 0 || !Number.isInteger(row.adjust_qty)){ poRegEditErr.adjustQty='调整计划数量必须为非负整数'; ok=false; } else poRegEditErr.adjustQty='';
       }
-      if(reason==='联合MOQ凑单超量' || reason==='成套采购凑单超量'){
+      if(isPending && (reason==='联合MOQ凑单超量' || reason==='成套采购凑单超量')){
         if(row.adjust_qty===null || row.adjust_qty===undefined || row.adjust_qty < 0 || !Number.isInteger(row.adjust_qty)){ poRegEditErr.adjustQty='调整计划数量必须为非负整数'; ok=false; } else poRegEditErr.adjustQty='';
       }
-      // 调整原因：除「系统自动拦截（计划员无需处理）」外均必填
-      const needReason = !isReadOnly;
+      // 再次调整：只校验 2 个通用字段
+      if(!isPending){
+        if(row.adjust_qty===null || row.adjust_qty===undefined || row.adjust_qty < 0 || !Number.isInteger(row.adjust_qty)){ poRegEditErr.adjustQty='调整计划数量必须为非负整数'; ok=false; } else poRegEditErr.adjustQty='';
+      }
+      // 调整原因：待处理时仅「系统自动拦截（无需处理）」可不填；再次调整一律必填
+      const needReason = isPending ? !isReadOnly : true;
       if(needReason && (!row.adjust_reason || !row.adjust_reason.trim())){ poRegEditErr.adjustReason='调整原因必填（100 字以内）'; ok=false; } else poRegEditErr.adjustReason='';
       if(!ok){ msg('请修正表单中的错误项','error'); return; }
       let doneMsg = '调整已保存';
@@ -7089,10 +7239,17 @@ const app = createApp({
         const ts = new Date().toISOString().slice(0,16).replace('T',' ');
         const log = (t.chg_log||[]).slice();
         const pushLog = (type, field, oldV, newV, source, reasonTxt)=>{ log.push({ id:t.id+'-LG'+String(log.length+1).padStart(2,'0'), time:ts, type, field, old_value:oldV, new_value:newV, operator:'当前用户', source, reason:reasonTxt, content: poRegChgContent({ type, field, old_value:oldV, new_value:newV, reason:reasonTxt }) }); };
-        const upd = { modifier:'当前用户', update_time:ts };
+        // handled：标记该拦截已处理过，再次打开调整弹窗不再重复展示按原因的一次性处理内容
+        const upd = { modifier:'当前用户', update_time:ts, handled:true };
         // 变更类型严格取自 PRD 4.4.3.2「变更类型」目录（9 类），变更来源按目录固定：
         // 系统＝计划生成/解除拦截；人工＝数量调整/调整供应商/批量导入调整/提交审批/审批通过/驳回/计划导出执行
-        if(reason==='多供应商'){
+        if(!isPending){
+          // 再次调整（拦截已处理 / 单据已流转出待提交）：仅写回 2 个通用字段，追加「数量调整」变更记录
+          upd.adjust_qty = row.adjust_qty; upd.adjust_reason = row.adjust_reason;
+          if(t.adjust_qty !== row.adjust_qty){
+            pushLog('数量调整','调整计划数量', t.adjust_qty, row.adjust_qty, '人工', row.adjust_reason||'人工调整计划数量');
+          }
+        } else if(reason==='多供应商'){
           // 写回选定供应商、解除拦截，并追加「调整供应商」+「解除拦截」两条变更记录
           const sel = (row.suppliers||[]).find(s=>s.code===row.cur_supplier_code) || row.suppliers[0];
           const oldS = (t.suppliers||[]).find(s=>s.code===t.cur_supplier_code) || (t.suppliers||[])[0] || sel;
@@ -7127,12 +7284,10 @@ const app = createApp({
           }
           pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','登记活动信息（'+actType+'，活动数量 '+actQty+'）后拦截消除');
         } else {
-          // 系统自动拦截（计划员无需处理）：仅更新备注，维持拦截。
-          // 备注变更不属于目录内任何变更类型，故不落变更日志（明细保留在「调整原因」列）
-          upd.adjust_reason = row.adjust_reason;
+          // 系统自动拦截（计划员无需处理）：维持拦截，不产生变更日志；备注由「创建订单」回写，不在本弹窗维护。
         }
         upd.chg_log = log;
-        const last = log[log.length-1]; upd.last_change_type = last.type; upd.last_change_time = last.time;
+        const last = log[log.length-1]; if(last){ upd.last_change_type = last.type; upd.last_change_time = last.time; }
         Object.assign(t, upd);
       }
       poRegEditOpen.value=false; msg(doneMsg,'success');
@@ -7245,37 +7400,37 @@ const app = createApp({
     const poHistExportSource = computed(()=> poHistFiltered.value);
     function poHistDoExport(){ poHistCsv(poHistExportSource.value.slice()); }
 
-    /* ================= 采购计划导出（po-export）：客服下单精简视图，顶部仅 待导出 一个状态tab ================= */
+    /* ================= 采购计划导出（po-export）：列集与导出文件严格按 4.4.6.2「PO下单模板」11 列，顶部仅 待导出 一个状态tab ================= */
     const poExpTabs = [
       { key:'待导出', label:'待导出' },
     ];
     const poExpTab = ref('待导出');
-    const poExpColumns = [
-      { title:'数据生成日期', key:'data_date', dataIndex:'data_date', width:100 },
-      { title:'计划类型', key:'plan_type', dataIndex:'plan_type', width:112, sorter:(a,b)=>a.plan_type.localeCompare(b.plan_type) },
-      /* 第一屏顺序与「采购计划」保持一致：当前采购件号 / 当前采购配件名称 置于 配件号 / 配件名称 之前 */
-      { title:'当前采购件号', key:'cur_purchase_code', dataIndex:'cur_purchase_code', width:112 },
-      { title:'当前采购配件名称', key:'cur_purchase_name', dataIndex:'cur_purchase_name', width:132, ellipsis:true },
-      { title:'配件号', key:'part_code', dataIndex:'part_code', width:108, sorter:(a,b)=>a.part_code.localeCompare(b.part_code) },
-      { title:'配件名称', key:'part_name', dataIndex:'part_name', width:132, ellipsis:true },
-      { title:'建储仓库', key:'wh', dataIndex:'wh', width:170, ellipsis:true },
-      { title:'计划数量(最终计划)', key:'adjust_qty', dataIndex:'adjust_qty', width:118, sorter:(a,b)=>a.adjust_qty-b.adjust_qty },
-      { title:'供应商代码', key:'cur_supplier_code', dataIndex:'cur_supplier_code', width:110 },
-      { title:'供应商名称', key:'cur_supplier_name', dataIndex:'cur_supplier_name', width:170, ellipsis:true },
-      { title:'起订量', key:'cur_supplier_moq', dataIndex:'cur_supplier_moq', width:90 },
-      { title:'采购LT(天)', key:'purchase_lt', dataIndex:'purchase_lt', width:84 },
-      { title:'要求到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:104 },
-      { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:88 },
-      { title:'计划行', key:'plan_line', dataIndex:'plan_line', width:104 },
+    /* 列集严格对齐 PRD 4.4.6.2「PO下单模板」：11 个模板表头（其中 6 项为 SAP 固定值），
+       另保留「导出状态」「操作」两个页面控制列；控制列不参与 PO 模板导出。 */
+    const poExpTemplateColumns = [
+      { title:'Order Type (Purchasing)', key:'order_type', width:180, constVal:'ZDFP' },
+      { title:'供应商代码', key:'supplier_code', dataIndex:'cur_supplier_code', width:120 },
+      { title:'Purchasing Organization', key:'purchasing_org', width:180, constVal:'CJV0' },
+      { title:'Purchasing Group', key:'purchasing_group', width:150, constVal:'1' },
+      { title:'Company Code', key:'company_code', width:130, constVal:'CJLR' },
+      { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:150 },
+      { title:'计划行', key:'plan_line', dataIndex:'plan_line', width:190 },
+      { title:'配件号', key:'material', dataIndex:'cur_purchase_code', width:130 },
+      { title:'订单数量', key:'order_qty', dataIndex:'adjust_qty', width:100, sorter:(a,b)=>a.adjust_qty-b.adjust_qty },
+      { title:'Net Price in Purchasing Document (in Document Currency)', key:'net_price', width:340, constVal:'1' },
+      { title:'Plant', key:'plant', width:90, constVal:'CJDC' },
+    ];
+    const poExpColumns = poExpTemplateColumns.concat([
       { title:'导出状态', key:'export_status', dataIndex:'export_status', width:90, fixed:'right' },
       { title:'操作', key:'action', width:150, fixed:'right' },
-    ];
+    ]);
+    function poExpVal(r, c){ return c.constVal !== undefined ? c.constVal : r[c.dataIndex]; }
     const poExpHiddenCols = ref([]);
     const poExpVisibleColumns = computed(()=> poExpColumns.filter(c=>!poExpHiddenCols.value.includes(c.key)));
     const poExpScrollX = computed(()=> poExpVisibleColumns.value.reduce((s,c)=>s+(c.width||100),0));
     function poExpToggleCol(k){ const i=poExpHiddenCols.value.indexOf(k); if(i>=0) poExpHiddenCols.value.splice(i,1); else poExpHiddenCols.value.push(k); }
-    const poExpFilters = reactive({ part_code:'', part_name:'', wh_code:'', supplier:undefined, plan_type:undefined });
-    const poExpApplied = reactive({ part_code:'', part_name:'', wh_code:'', supplier:undefined, plan_type:undefined });
+    const poExpFilters = reactive({ material:'', supplier_code:'', plan_batch:'', plan_line:'' });
+    const poExpApplied = reactive({ material:'', supplier_code:'', plan_batch:'', plan_line:'' });
     const poExpFav = ref(false);
     const poExpPage = reactive({ current:1, size:15 });
     const poExpSelectedKeys = ref([]);
@@ -7286,11 +7441,10 @@ const app = createApp({
     function poExpDoSearch(){ Object.assign(poExpApplied, poExpFilters); poExpPage.current=1; poExpSelectedKeys.value=[]; msg('查询完成，共命中 '+poExpFiltered.value.length+' 条记录','success'); }
     function poExpToggleFav(){ poExpFav.value=!poExpFav.value; msg(poExpFav.value?'已收藏本页':'已取消收藏','success'); }
     const poExpQueryFiltered = computed(()=> poExpData.filter(r=>{
-      if(poExpApplied.part_code && !r.part_code.toLowerCase().includes(poExpApplied.part_code.toLowerCase())) return false;
-      if(poExpApplied.part_name && !r.part_name.includes(poExpApplied.part_name)) return false;
-      if(poExpApplied.wh_code && !r.wh_code.toLowerCase().includes(poExpApplied.wh_code.toLowerCase())) return false;
-      if(poExpApplied.supplier && !r.cur_supplier_name.includes(poExpApplied.supplier)) return false;
-      if(poExpApplied.plan_type && r.plan_type!==poExpApplied.plan_type) return false;
+      if(poExpApplied.material && !String(r.cur_purchase_code||'').toLowerCase().includes(poExpApplied.material.toLowerCase())) return false;
+      if(poExpApplied.supplier_code && !String(r.cur_supplier_code||'').toLowerCase().includes(poExpApplied.supplier_code.toLowerCase())) return false;
+      if(poExpApplied.plan_batch && !String(r.plan_batch||'').toLowerCase().includes(poExpApplied.plan_batch.toLowerCase())) return false;
+      if(poExpApplied.plan_line && !String(r.plan_line||'').toLowerCase().includes(poExpApplied.plan_line.toLowerCase())) return false;
       return true;
     }));
     const poExpFiltered = computed(()=> poExpQueryFiltered.value.filter(r=>r.export_status===poExpTab.value));
@@ -7303,10 +7457,12 @@ const app = createApp({
     function poExpOpenDetail(r){ poExpDetailRow.value=r; poExpDetailOpen.value=true; }
     const poExpCanExport = computed(()=> poExpSelected.value.length>0 || poExpFiltered.value.length>0);
     function poExpCsv(rows){
-      const cols = poExpVisibleColumns.value;
-      const header = cols.map(c=>c.title);
-      const lines = [header.join(',')].concat(rows.map(r=> cols.map(c=>{ const v=r[c.dataIndex]; return (v===null||v===undefined)?'':String(v); }).join(',')));
-      const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
+      /* 导出文件严格按 4.4.6.2 PO 下单模板的 11 列表头输出，与列表列设置无关 */
+      const cols = poExpTemplateColumns;
+      const esc = v => { const s=(v===null||v===undefined)?'':String(v); return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+      const lines = [cols.map(c=>esc(c.title)).join(',')]
+        .concat(rows.map(r=> cols.map(c=>esc(poExpVal(r, c))).join(',')));
+      const blob = new Blob(['\uFEFF'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
       const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='JLRS_采购计划导出_'+new Date().toISOString().slice(0,10)+'.csv'; a.click(); URL.revokeObjectURL(a.href);
     }
     const poExpExportSource = computed(()=> poExpSelected.value.length ? poExpSelected.value : poExpFiltered.value);
@@ -7373,37 +7529,31 @@ const app = createApp({
       { title:'操作', key:'action', width:80, fixed:'right' },
     ];
 
-    /* 调拨计划导出（sto-export）：在「调拨计划」口径基础上删减中间计算过程字段，仅保留执行导出所需的精简列。
-       已删：预期/可用/欠交/库间在途/缺货（发货仓/收货仓）共 10 个库存诊断列、推荐计划数量(取整前)、
-       近3个月月均销量、当前可用天数；保留 收货仓最低风控线/目标库存、推荐计划数量(分配后/MPQ取整后/最终)、
-       库间LT、要求到货日期、体积/预计调拨体积 等执行字段，外加 导出状态/是否下单/导出时间。
-       首屏前置：推荐计划数量(分配后/MPQ取整后/最终) 与 预计调拨体积 紧接收货仓之后（风控/目标后移），无需横向滚动即可见。 */
-    const stoExpColumns = [
-      { title:'数据生成日期', key:'data_gen_date', dataIndex:'data_gen_date', width:106 },
-      { title:'配件号', key:'part_code', dataIndex:'part_code', width:128 },
-      { title:'配件名称', key:'part_name', dataIndex:'part_name', width:170, ellipsis:true },
-      { title:'发货仓', key:'from_wh', dataIndex:'from_wh', width:140 },
-      { title:'收货仓', key:'to_wh', dataIndex:'to_wh', width:140 },
-      { title:'推荐计划数量(分配后)', key:'alloc_qty', dataIndex:'alloc_qty', width:150, sorter:(a,b)=>a.alloc_qty-b.alloc_qty },
-      { title:'推荐计划数量(MPQ取整后)', key:'mpq_qty', dataIndex:'mpq_qty', width:160, sorter:(a,b)=>a.mpq_qty-b.mpq_qty },
-      { title:'推荐计划数量', key:'rec_qty', dataIndex:'rec_qty', width:110, sorter:(a,b)=>a.rec_qty-b.rec_qty },
-      { title:'体积', key:'unit_volume', dataIndex:'unit_volume', width:76 },
-      { title:'体积单位', key:'volume_unit', dataIndex:'volume_unit', width:80 },
-      { title:'预计调拨体积', key:'est_volume', dataIndex:'est_volume', width:104, sorter:(a,b)=>a.est_volume-b.est_volume },
-      { title:'收货仓最低风控线', key:'safety_stock', dataIndex:'safety_stock', width:128, sorter:(a,b)=>a.safety_stock-b.safety_stock },
-      { title:'收货仓目标库存', key:'target_stock', dataIndex:'target_stock', width:124, sorter:(a,b)=>a.target_stock-b.target_stock },
-      { title:'ABC分类', key:'abc_class', dataIndex:'abc_class', width:80 },
-      { title:'车型代码', key:'vehicle_code', dataIndex:'vehicle_code', width:100 },
-      { title:'计划员', key:'planner', dataIndex:'planner', width:80 },
-      { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:96 },
-      { title:'计划行', key:'plan_line', dataIndex:'plan_line', width:96 },
-      { title:'库间LT', key:'transfer_lt', dataIndex:'transfer_lt', width:84, sorter:(a,b)=>a.transfer_lt-b.transfer_lt },
-      { title:'要求到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:120 },
-      { title:'导出状态', key:'export_status', dataIndex:'export_status', width:92 },
-      { title:'是否下单', key:'is_placed', dataIndex:'is_placed', width:92 },
-      { title:'导出时间', key:'exported_time', dataIndex:'exported_time', width:150, fixed:'right' },
-      { title:'操作', key:'action', width:80, fixed:'right' },
+    /* 调拨计划导出（sto-export）：严格按 PRD 6.4.2.2「STO 下单模板」字段输出，列表＝10 模板列 + 导出状态 + 操作。
+       模板 10 列：Order Type (Purchasing)=ZC（固定值）、发货仓、Purchasing Organization（固定值，随发货仓 CJDC→CJV0 / CN00→CN01）、
+       Purchasing Group=000（固定值）、Company Code（固定值，随发货仓 CJLR / CN02）、计划批次、计划行、配件号、数量（取推荐计划数量＝rec_qty）、收货仓。
+       其中 发货仓/收货仓/计划批次/计划行/配件号/数量 为数据字段，其余 4 个为 SAP 固定值（3 个随发货仓切换）。
+       导出 CSV 严格按 10 模板列（不受列设置影响）。 */
+    const stoExpTemplateColumns = [
+      { title:'Order Type (Purchasing)', key:'order_type', width:170, constVal:'ZC' },
+      { title:'发货仓', key:'from_wh', dataIndex:'from_wh', width:130, constVal: r => (r.from_wh||'').split(/\s+/)[0] },
+      { title:'Purchasing Organization', key:'purchasing_org', width:210, constVal: stoExpOrgConst },
+      { title:'Purchasing Group', key:'purchasing_group', width:160, constVal:'000' },
+      { title:'Company Code', key:'company_code', width:140, constVal: stoExpCompConst },
+      { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:140 },
+      { title:'计划行', key:'plan_line', dataIndex:'plan_line', width:150 },
+      { title:'配件号', key:'material', dataIndex:'part_code', width:130 },
+      { title:'数量', key:'qty', dataIndex:'rec_qty', width:100, sorter:(a,b)=>a.rec_qty-b.rec_qty },
+      { title:'收货仓', key:'to_wh', dataIndex:'to_wh', width:130, constVal: r => (r.to_wh||'').split(/\s+/)[0] },
     ];
+    const stoExpColumns = stoExpTemplateColumns.concat([
+      { title:'导出状态', key:'export_status', dataIndex:'export_status', width:90, fixed:'right' },
+      { title:'操作', key:'action', width:80, fixed:'right' },
+    ]);
+    /* 固定值随发货仓切换：CJDC（及 JB09 等）→ CJV0 / CJLR；CN00 → CN01 / CN02 */
+    function stoExpOrgConst(r){ return (r && r.from_wh && r.from_wh.indexOf('CN00')===0) ? 'CN01' : 'CJV0'; }
+    function stoExpCompConst(r){ return (r && r.from_wh && r.from_wh.indexOf('CN00')===0) ? 'CN02' : 'CJLR'; }
+    function stoExpVal(r, c){ return c.constVal !== undefined ? (typeof c.constVal==='function' ? c.constVal(r) : c.constVal) : r[c.dataIndex]; }
 
     // 默认列：列设置可自行隐藏；操作列固定右侧
     const stoDefaultVisible = stoColumns.map(c=>c.key);
@@ -7442,20 +7592,18 @@ const app = createApp({
     const stoPaged = computed(()=>{ const s=(stoPage.current-1)*stoPage.size; return stoFiltered.value.slice(s, s+stoPage.size); });
     function stoCustomRow(){ return { style:{cursor:'default'} }; }
 
-    /* 详情：仅字段详情 + 备注编辑 */
+    /* 详情：纯只读字段展示，不提供备注编辑与保存入口 */
     const stoDetailOpen = ref(false);
     const stoDetailRow = ref(null);
-    const stoDetailRemark = ref('');
-    function stoOpenDetail(r){ stoDetailRow.value = r; stoDetailRemark.value = (r && r.remark) || ''; stoDetailOpen.value = true; }
-    function stoSaveRemark(){ if(stoDetailRow.value){ stoDetailRow.value.remark = stoDetailRemark.value; msg('备注已保存','success'); } }
+    function stoOpenDetail(r){ stoDetailRow.value = r; stoDetailOpen.value = true; }
 
-    /* 导出 */
+    /* 导出（调拨计划页自身导出：可勾选字段，使用主表 stoColumns，与 sto-export 模板导出互不影响） */
     const stoExportOpen = ref(false);
-    const stoExportFields = ref(stoExpColumns.filter(c=>c.key!=='action' && c.key!=='exported_time').map(c=>c.key));
+    const stoExportFields = ref(stoColumns.filter(c=>c.key!=='action' && c.key!=='exported_time').map(c=>c.key));
     function stoToggleExportField(k){ const i=stoExportFields.value.indexOf(k); if(i>=0) stoExportFields.value.splice(i,1); else stoExportFields.value.push(k); }
     function stoDoExport(){
       const rows = stoFiltered.value;
-      const cols = stoExpColumns.filter(c=> stoExportFields.value.includes(c.key));
+      const cols = stoColumns.filter(c=> stoExportFields.value.includes(c.key));
       const header = cols.map(c=>c.title);
       const lines = [header.join(',')].concat(rows.map(r=> cols.map(c=>{ const v=r[c.dataIndex]; return (v===null||v===undefined)?'':String(v).replace(/,/g,'，'); }).join(',')));
       const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
@@ -7471,14 +7619,13 @@ const app = createApp({
        列表只读、仅详情与导出。 */
     const stoExpTabs = [ { key:'待导出', label:'待导出' } ];
     const stoExpTab = ref('待导出');
-    const stoExpPlanTypes = ['紧急调拨计划','常规调拨计划'];
     const stoExpHiddenCols = ref([]);
     const stoExpVisibleColumns = computed(()=> stoExpColumns.filter(c=> !stoExpHiddenCols.value.includes(c.key)));
     const stoExpScrollX = computed(()=> stoExpVisibleColumns.value.reduce((s,c)=> s + (c.width||100), 0));
     function stoExpToggleCol(k){ const i=stoExpHiddenCols.value.indexOf(k); if(i>=0) stoExpHiddenCols.value.splice(i,1); else stoExpHiddenCols.value.push(k); }
 
-    const stoExpFilters = reactive({ part_code:'', part_name:'', plan_batch:'', from_wh:undefined, to_wh:undefined, plan_type:undefined, abc_class:undefined, network_id:undefined, planner:undefined, route_code:undefined });
-    const stoExpApplied = reactive({ part_code:'', part_name:'', plan_batch:'', from_wh:undefined, to_wh:undefined, plan_type:undefined, abc_class:undefined, network_id:undefined, planner:undefined, route_code:undefined });
+    const stoExpFilters = reactive({ part_code:'', plan_batch:'', plan_line:'', from_wh:undefined, to_wh:undefined });
+    const stoExpApplied = reactive({ part_code:'', plan_batch:'', plan_line:'', from_wh:undefined, to_wh:undefined });
     const stoExpFilterExpanded = ref(false);
     const stoExpFav = ref(false);
     const stoExpPage = reactive({ current:1, size:15 });
@@ -7492,15 +7639,10 @@ const app = createApp({
     const stoExpQueryFiltered = computed(()=> stoExpData.filter(function(r){
       const f = stoExpApplied;
       if(f.part_code && !r.part_code.toLowerCase().includes(f.part_code.toLowerCase())) return false;
-      if(f.part_name && !r.part_name.includes(f.part_name)) return false;
       if(f.plan_batch && !r.plan_batch.toLowerCase().includes(f.plan_batch.toLowerCase())) return false;
+      if(f.plan_line && !r.plan_line.toLowerCase().includes(f.plan_line.toLowerCase())) return false;
       if(f.from_wh && r.from_wh!==f.from_wh) return false;
       if(f.to_wh && r.to_wh!==f.to_wh) return false;
-      if(f.plan_type && r.plan_type!==f.plan_type) return false;
-      if(f.abc_class && r.abc_class!==f.abc_class) return false;
-      if(f.network_id && r.network_id!==f.network_id) return false;
-      if(f.planner && r.planner!==f.planner) return false;
-      if(f.route_code && r.route_code!==f.route_code) return false;
       return true;
     }));
     const stoExpFiltered = computed(()=> stoExpQueryFiltered.value.filter(r=> r.export_status===stoExpTab.value));
@@ -7517,18 +7659,20 @@ const app = createApp({
 
     const stoExpCanExport = computed(()=> stoExpSelected.value.length>0 || stoExpFiltered.value.length>0);
     const stoExpExportSource = computed(()=> stoExpSelected.value.length ? stoExpSelected.value : stoExpFiltered.value);
+    function stoExpCsv(rows){
+      /* 导出文件严格按 6.4.2.2 STO 下单模板的 10 列表头输出，与列表列设置无关 */
+      const cols = stoExpTemplateColumns;
+      const esc = v => { const s=(v===null||v===undefined)?'':String(v); return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
+      const lines = [cols.map(c=>esc(c.title)).join(',')]
+        .concat(rows.map(r=> cols.map(c=>esc(stoExpVal(r, c))).join(',')));
+      const blob = new Blob(['\uFEFF'+lines.join('\r\n')], {type:'text/csv;charset=utf-8'});
+      const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
+      a.download='JLRS_调拨计划导出_'+new Date().toISOString().slice(0,10)+'.csv'; a.click(); URL.revokeObjectURL(a.href);
+    }
     function stoExpDoExport(){
       const rows = stoExpExportSource.value.slice();
       if(!rows.length){ msg('没有可导出的调拨计划','error'); return; }
-      const cols = stoExpVisibleColumns.value.filter(c=> c.key!=='action');
-      const header = cols.map(c=> c.title);
-      const lines = [header.join(',')].concat(rows.map(r=> cols.map(c=>{
-        const v = (c.key==='export_status') ? '已导出' : r[c.dataIndex];
-        return (v===null||v===undefined)?'':String(v).replace(/,/g,'，');
-      }).join(',')));
-      const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
-      const a = document.createElement('a'); a.href=URL.createObjectURL(blob);
-      a.download='JLRS_调拨计划_'+new Date().toISOString().slice(0,10)+'.csv'; a.click(); URL.revokeObjectURL(a.href);
+      stoExpCsv(rows);
       // 导出成功后自动打上「已导出」标签（无需单独的标记按钮）
       const now = new Date().toISOString().slice(0,16).replace('T',' ');
       rows.forEach(r=>{ r.export_status='已导出'; r.exported_time=now; });
@@ -7538,11 +7682,12 @@ const app = createApp({
     watch(stoExpTab, ()=>{ stoExpSelectedKeys.value=[]; stoExpPage.current=1; });
 
     /* ================= 6. 调拨计划汇总（STO 汇总维度报表） =================
-       口径＝PRD 6.5.2「汇总维度页面（导出后的计划：相当于执行了的计划）」，列结构对齐 6.4.3.2 计算逻辑表：
-         数据快照日期(Snapshot Date) / 配件号(Material) / 配件名称(Material Description)
-       + 每个区域仓 8 列（指标名取自 6.4.3.2 计算逻辑表）：是否备货标识 / 目标库存(SSQ) / STO分配率(STO Ratio) /
-         STO计划量(Total STO Qty) / 预期库存(StockPlusIntr) / 可用库存(Available) / Currenratio / SSQ Ratio
-       + 中心仓 4 列（指标名取自 6.4.3.2 计算逻辑表）：预期库存 / STO分配后库存 / STO分配总量 / 近3个月月均销量
+       口径＝PRD 6.4.3「汇总维度页面（导出后的计划：相当于执行了的计划）」，列结构严格对齐 6.4.3.2 计算逻辑表：
+         固定 3 列：数据快照日期 / 配件号 / 配件名称
+       + 每个区域仓 9 列（分仓指标，取自 6.4.3.2）：是否备货标识 / 目标库存 / 本次分配率 / 本次分配量 /
+         预期库存 / 现有库存 / 当前库存占比 / 分配后库存占比 / 目标库存占比
+       + 中心仓 4 列（中心仓指标，取自 6.4.3.2）：全网可用库存 / STO分配后库存 / STO分配总量 / 近3个月月均销量
+       列数：CJLR、JLR＝3＋9×4＋4＝43 列；JLRC＝3＋9×3＋4＝34 列。
        三套仓网（跨仓网不共享库存）：CJLR＝CJDC→CJV0~CJV3；JLR＝JB09→CN00~CN03；JLRC＝CN00→CN01~CN03。
        页面只读：无新增/编辑/审批/导入，仅支持查询与导出。 */
     /* ---- 仓网结构（跨仓网不共享库存）：中心仓 → 区域仓 ---- */
@@ -7551,18 +7696,21 @@ const app = createApp({
       JLR:  { center:'JB09', regions:['CN00','CN01','CN02','CN03'] },
       JLRC: { center:'CN00', regions:['CN01','CN02','CN03'] },
     };
-    /* 每个区域仓固定 8 列，指标名严格取自 6.4.3.2 计算逻辑表（分仓指标）：
-       是否备货标识 / 目标库存 / STO分配率 / STO计划量 / 预期库存 / 可用库存 / Currenratio / SSQ Ratio；
-       是否备货位于各区域仓「目标库存」列前，取值 允许 / 禁止 */
+    /* 每个区域仓固定 9 列，指标名严格取自 6.4.3.2 计算逻辑表（分仓指标）：
+       是否备货标识 / 目标库存 / 本次分配率 / 本次分配量 / 预期库存 / 现有库存 /
+       当前库存占比 / 分配后库存占比 / 目标库存占比；
+       是否备货位于各区域仓「目标库存」列前，取值 允许 / 禁止；
+       4 个数量列按千分位，4 个比率列保留 2 位小数并带百分号 */
     const stoSumRegionMeta = [
-      { key:'stock_flag', label:'是否备货标识', w:120 },
-      { key:'ssq',       label:'目标库存',  w:100, num:true },
-      { key:'sto_ratio', label:'STO分配率', w:100 },
-      { key:'sto_qty',   label:'STO计划量', w:100, num:true },
-      { key:'spi',       label:'预期库存',  w:104, num:true },
-      { key:'potential', label:'可用库存',  w:100, num:true },
-      { key:'cur_ratio', label:'Currenratio', w:110 },
-      { key:'ssq_ratio', label:'SSQ Ratio', w:100 },
+      { key:'stock_flag',  label:'是否备货标识',   w:120 },
+      { key:'ssq',         label:'目标库存',       w:100, num:true },
+      { key:'alloc_ratio', label:'本次分配率',     w:110, pct:true },
+      { key:'alloc_qty',   label:'本次分配量',     w:110, num:true },
+      { key:'expected',    label:'预期库存',       w:104, num:true },
+      { key:'onhand',      label:'现有库存',       w:100, num:true },
+      { key:'cur_ratio',   label:'当前库存占比',   w:126, pct:true },
+      { key:'after_ratio', label:'分配后库存占比', w:140, pct:true },
+      { key:'ssq_ratio',   label:'目标库存占比',   w:126, pct:true },
     ];
     const stoSumSnapshot = '2026-09-21';
     /* CJLR 仓网前 10 行＝业务实际导出数据（配件号/名称/各区域仓目标库存、预期库存、STO计划量、中心仓预期库存、全网总需求） */
@@ -7589,31 +7737,33 @@ const app = createApp({
       return (h % 10) < 8 ? '允许' : '禁止';
     }
     function stoSumPct(v){ return (Math.round(v*10000)/100).toFixed(2) + '%'; }
-    /* 计算链：缺口＝MAX(目标库存−库存+在途,0)；STO计划量＝ROUNDUP(缺口÷MPQ)×MPQ（中心仓可分配量封顶）；
-       可用库存＝MAX(目标库存−库存+在途−STO计划量,0)；中心仓预期库存＝中心仓当前库存＋STO分配总量；STO分配后库存＝中心仓当前库存 */
+    /* 演示数据到 6.4.3.2 计算逻辑表的映射：
+       ssq[i]＝目标库存（STO建储结果.调整后目标库存）；spi[i]＝现有库存（预期库存.可用＋库间在途）；
+       sto[i]＝本次分配量（调拨计划.推荐计划数量）；预期库存＝现有库存＋本次分配量；
+       中心仓「全网可用库存」＝预期库存.预期库存－open PO 库存（演示以中心仓可分配量＋STO分配总量表示）；
+       STO分配总量＝Σ各分仓本次分配量；STO分配后库存＝全网可用库存－STO分配总量；近3个月月均销量取自指标宽表 */
     function stoSumBuildRow(o){
       const regions = o.regions, ssq = o.ssq, spi = o.spi, sto = o.sto;
-      const curSum = regions.reduce(function(a,_,i){ return a + spi[i] + sto[i]; }, 0);
+      const alloc = sto.reduce((a,b)=>a+b, 0);
       const ssqSum = ssq.reduce((a,b)=>a+b, 0);
-      const actSsqSum = ssq.reduce(function(a,v,i){ return a + (sto[i] > 0 ? v : 0); }, 0);
+      const cstock = o.center_stock || 0;
+      const netAvail = cstock + alloc;                       // 中心仓 全网可用库存
       const row = { id:o.id, snapshot_date:o.snapshot_date, part_code:o.part_code, part_name:o.part_name,
         network_id:o.network_id, abc_class:o.abc_class, vehicle_code:o.vehicle_code, planner:o.planner };
       regions.forEach(function(r, i){
-        row[r + '_stock_flag'] = stoSumStockFlag(o.part_code, r);
-        row[r + '_ssq']       = ssq[i];
-        row[r + '_sto_ratio'] = (sto[i] > 0 && actSsqSum) ? stoSumPct(ssq[i] / actSsqSum) : '0.00%';
-        row[r + '_sto_qty']   = sto[i];
-        row[r + '_spi']       = spi[i];
-        row[r + '_potential'] = Math.max(0, ssq[i] - spi[i] - sto[i]);
-        row[r + '_cur_ratio'] = curSum ? stoSumPct((spi[i] + sto[i]) / curSum) : '0.00%';
-        row[r + '_ssq_ratio'] = ssqSum ? stoSumPct(ssq[i] / ssqSum) : '0.00%';
+        const onhand = spi[i];
+        row[r + '_stock_flag']  = stoSumStockFlag(o.part_code, r);
+        row[r + '_ssq']         = ssq[i];
+        row[r + '_alloc_ratio'] = alloc ? stoSumPct(sto[i] / alloc) : '0.00%';
+        row[r + '_alloc_qty']   = sto[i];
+        row[r + '_expected']    = onhand + sto[i];
+        row[r + '_onhand']      = onhand;
+        row[r + '_cur_ratio']   = netAvail ? stoSumPct(onhand / netAvail) : '0.00%';
+        row[r + '_after_ratio'] = netAvail ? stoSumPct((onhand + sto[i]) / netAvail) : '0.00%';
+        row[r + '_ssq_ratio']   = ssqSum ? stoSumPct(ssq[i] / ssqSum) : '0.00%';
       });
-      const alloc = sto.reduce((a,b)=>a+b, 0);
-      const cstock = o.center_stock || 0;
-      // 中心仓指标（取自 6.4.3.2 计算逻辑表）：预期库存＝当前库存＋STO分配总量；STO分配后库存＝预期库存−STO分配总量；
-      // STO分配总量＝Σ各分仓调拨数量；近3个月月均销量＝全网总需求÷3（演示口径）
-      row.center_expected  = cstock + alloc;
-      row.center_sto_after = cstock;
+      row.center_net_avail = netAvail;
+      row.center_sto_after = netAvail - alloc;
       row.center_sto_total = alloc;
       row.center_avg_3m    = o.total_demand ? Math.round(o.total_demand / 3) : Math.round(alloc / 3);
       return row;
@@ -7691,10 +7841,11 @@ const app = createApp({
       out.push({ title:'配件名称', key:'part_name', dataIndex:'part_name', width:200, fixed:'left', ellipsis:true });
       meta.regions.forEach(function(r){
         stoSumRegionMeta.forEach(function(m){
-          out.push({ title:r + ' ' + m.label, key:r + '_' + m.key, dataIndex:r + '_' + m.key, width:m.w, align:'right', num:!!m.num });
+          out.push({ title:r + ' ' + m.label, key:r + '_' + m.key, dataIndex:r + '_' + m.key,
+                     width:m.w, align:'right', num:!!m.num, pct:!!m.pct });
         });
       });
-      out.push({ title: meta.center + ' 预期库存',        key:'center_expected',  dataIndex:'center_expected',  width:120, align:'right', num:true });
+      out.push({ title: meta.center + ' 全网可用库存',     key:'center_net_avail', dataIndex:'center_net_avail', width:140, align:'right', num:true });
       out.push({ title: meta.center + ' STO分配后库存',   key:'center_sto_after', dataIndex:'center_sto_after', width:140, align:'right', num:true });
       out.push({ title: meta.center + ' STO分配总量',     key:'center_sto_total', dataIndex:'center_sto_total', width:130, align:'right', num:true });
       out.push({ title: meta.center + ' 近3个月月均销量', key:'center_avg_3m',    dataIndex:'center_avg_3m',    width:140, align:'right', num:true });
@@ -8683,35 +8834,51 @@ const app = createApp({
       pgModal.open = false;
       antd.message.success('配件组已保存');
     }
-    /* ---- 配件组管理：备注图片上传（前端原型：本地预览，阻止真实上传）---- */
-    const pgImgMax = 6;
-    // 图片预览弹窗：详情与编辑共用
-    const pgPreview = reactive({ open:false, src:'', title:'' });
-    function pgBeforeImgUpload(file){
-      const isImg = file.type && file.type.indexOf('image/')===0;
-      if(!isImg){ antd.message.error('仅支持上传图片文件'); return false; }
+    /* ---- 通用图片附件交互（配件组管理「图片凭证」/ 活动登记表「附件」共用）----
+       统一口径：picture-card 卡片列表 + 本地 FileReader 转 base64（阻止真实上传）、仅接受图片、
+       按各页面上限拦截（含一次多选的并发计数）、删除、点击缩略图由全局居中弹窗放大预览。
+       每个页面只需提供 holder（含 images 数组）与 max（数量上限）。 */
+    const jlrsImgPreview = reactive({ open:false, src:'', title:'' });
+    let jlrsImgPending = 0;
+    function jlrsImgBefore(file, holder, max){
+      if(!file.type || file.type.indexOf('image/')!==0){ antd.message.error('仅支持上传图片文件'); return false; }
+      if(!Array.isArray(holder.images)) holder.images = [];
+      if(holder.images.length + jlrsImgPending >= max){ antd.message.warning('最多上传 ' + max + ' 张图片'); return false; }
+      jlrsImgPending++;
       const reader = new FileReader();
       reader.onload = () => {
-        if(!Array.isArray(pgModal.form.images)) pgModal.form.images = [];
-        pgModal.form.images.push({
+        jlrsImgPending--;
+        if(holder.images.length >= max) return;
+        holder.images.push({
           uid:'IMG-' + Date.now() + '-' + Math.floor(Math.random()*100000),
           name:file.name, status:'done', url:reader.result,
         });
       };
+      reader.onerror = () => { jlrsImgPending--; antd.message.error('图片读取失败'); };
       reader.readAsDataURL(file);
       return false; // 阻止默认上传，由本地 FileReader 生成预览
     }
-    function pgRemoveImg(file){
-      const arr = pgModal.form.images || [];
+    function jlrsImgRemove(file, holder){
+      const arr = holder.images || [];
       const i = arr.findIndex(x=>x.uid===file.uid);
       if(i>=0) arr.splice(i,1);
       return true;
     }
-    function pgPreviewImg(file){
-      pgPreview.src = (file && (file.url || file.thumbUrl)) || '';
-      pgPreview.title = (file && file.name) || '';
-      pgPreview.open = true;
+    function jlrsImgPreviewOpen(file){
+      jlrsImgPreview.src = (file && (file.url || file.thumbUrl)) || '';
+      jlrsImgPreview.title = (file && file.name) || '';
+      jlrsImgPreview.open = true;
     }
+    /* 配件组管理：图片凭证最多 6 张，薄封装复用通用交互 */
+    const pgImgMax = 6;
+    const pgPreview = jlrsImgPreview; // 兼容旧引用（预览弹窗已提升至全局）
+    function pgBeforeImgUpload(file){ return jlrsImgBefore(file, pgModal.form, pgImgMax); }
+    function pgRemoveImg(file){ return jlrsImgRemove(file, pgModal.form); }
+    function pgPreviewImg(file){ jlrsImgPreviewOpen(file); }
+    /* 活动登记表：附件最多 5 张，薄封装复用同一套交互 */
+    const actRegImgMax = 5;
+    function actRegBeforeImg(file){ return jlrsImgBefore(file, actRegForm, actRegImgMax); }
+    function actRegRemoveImg(file){ return jlrsImgRemove(file, actRegForm); }
     /* ---- 配件组管理：单条删除 ---- */
     function pgOpenDelete(r){ pgDelRow.value = r; pgDelOpen.value = true; }
     function pgDoDelete(){
@@ -10924,7 +11091,9 @@ const app = createApp({
       gpRaw.splice(0,gpRaw.length,...updated);antd.message.success('保存成功');gpView.value='list';
     }
 
+    /* DRAFT_INJECT_SCRIPT_LATE */
     return {
+      ...draftExpose,
       gpView, gpQ, gpFiltered, gpSearch, gpCols, gpEdit, gpIsCoeff, gpOpenEdit, gpBack, gpSave,
       zhCN, msg,
       topTabs, topTab, clickTopTab,
@@ -10950,25 +11119,28 @@ const app = createApp({
       exportCsv, toggleFull, ruleOpen,
       dealerFilters, dealerFilterExpanded, dealerFav, dealerToggleFav, dealerTypeOptions, dealerStatusOptions, dealerDoSearch, dealerResetFilters,
       dealerColumns, dealerHiddenCols, dealerVisibleColumns, dealerFiltered, dealerPage, dealerPaged, dealerExportCsv,
-      poRegTabs, poRegTab, poRegColumns, poRegHiddenCols, poRegVisibleColumns, poRegScrollX, poRegToggleCol,
+      poRegTabs, poRegTab, poRegColumns, poRegHiddenCols, poRegVisibleColumns, poRegScrollX, poRegToggleCol, poRegIsNoIssue,
       poRegFilters, poRegApplied, poRegFilterExpanded, poRegFav, poRegDoSearch, poRegResetFilters, poRegToggleFav,
       poRegPage, poRegSelectedKeys, poRegFiltered, poRegTabCount, poRegPaged, poRegSelected,
       poRegCanSubmit, poRegCanApprove, poRegCanReject, poRegRowSelection, poRegCustomRow, poRegBillColor,
       poRegSubmit, poRegApproveOpen, poRegApproveRemark, poRegApproveErr, poRegApproveConfirm,
       poRegRejectOpen, poRegRejectRemark, poRegRejectErr, poRegRejectConfirm,
-      poRegEditOpen, poRegEditRow, poRegEditErr, poRegEditErrList, poRegOpenEdit, poRegSaveEdit, poRegEditCurSupplier, poRegEditBlockNote, poRegEditActReg, poRegEditActMonths, poRegEditActMonthSum, poRegOpenDetail, poRegDetailOpen, poRegDetailRow,
+      poRegEditOpen, poRegEditRow, poRegEditErr, poRegEditErrList, poRegEditPending, poRegOpenEdit, poRegSaveEdit, poRegEditCurSupplier, poRegEditBlockNote, poRegEditActReg, poRegOpenDetail, poRegDetailOpen, poRegDetailRow,
       poRegChgOpen, poRegChgRow, poRegOpenChgLog, poRegChgColumns, poRegChgColor,
       poRegImportOpen, poRegDoImport, poRegExportOpen, poRegExportMode, poRegExportFields, poRegToggleExportField,
       poRegExportCsv, poRegExportSource, poRegDoExport, poRegPush, poRegMoreMenu, poRegPlanTypes, poRegReceiveModes, poRegStatuses, poRegPurchaseTypes, poRegBlockReasonOptions, poRegPushStatuses,
-      poOrderOpen, poOrderErr, poOrderRows, poOrderCols, poOrderPartOptions, poOrderOpenModal, poOrderAddRow, poOrderDelRow, poOrderOnPart, poOrderSubmit,
+      poOrderOpen, poOrderErr, poOrderRows, poOrderCols, poOrderPartOptions, poOrderOpenModal, poOrderAddRow, poOrderDelRow, poOrderOnPart, poOrderOnSupplier, poOrderSubmit,
       actRegStatuses, actRegTypes, actRegPartOptions, actRegFilters, actRegPage, actRegDoSearch, actRegResetSearch,
-      actRegFiltered, actRegPaged, actRegColumns, actRegScrollX, actRegMonthCols, actRegDayCols, actRegStatusColor, actRegMonthText,
-      actRegFormOpen, actRegFormErr, actRegForm, actRegFormMonths, actRegIsCrossMonth, actRegMonthSum,
-      actRegTotalQty, actRegTotalLabel, actRegSyncRatioEnd,
-      actRegRecalcMonths, actRegOnPart, actRegOnType, actRegOnDateChange, actRegOnRatioStart, actRegOpenCreate, actRegSaveForm,
-      actRegDetailOpen, actRegDetailRow, actRegDetailMonths, actRegOpenDetail,
-      actRegResultOpen, actRegResultRow, actRegResultTab, actRegResultMonths, actRegResultMonthSum, actRegResultDays, actRegOpenResult,
+      actRegFiltered, actRegPaged, actRegColumns, actRegScrollX, actRegDayCols, actRegStatusColor,
+      actRegFormOpen, actRegFormErr, actRegForm, actRegImgMax, actRegBeforeImg, actRegRemoveImg,
+      actRegTotalQty, actRegSyncRatioEnd,
+      actRegOnPart, actRegOnType, actRegOnDateChange, actRegOnRatioStart, actRegOpenCreate, actRegSaveForm,
+      actRegDetailOpen, actRegDetailRow, actRegOpenDetail,
+      actRegResultOpen, actRegResultRow, actRegResultDays, actRegOpenResult,
       actRegDeleteOpen, actRegDeleteRow, actRegAskDelete, actRegDoDelete,
+      actRegImportOpen, actRegImportErr, actRegImportRows, actRegImportCols, actRegImportHeads,
+      actRegImportAddCount, actRegImportUpdCount, actRegImportSkipCount, actRegImportPendingCount,
+      actRegOpenImport, actRegImportTemplate, actRegImportFile, actRegDoImport, actRegExportCsv,
       // 历史采购计划（po-history）
       poHistColumns, poHistHiddenCols, poHistVisibleColumns, poHistScrollX, poHistToggleCol,
       poHistFilters, poHistApplied, poHistFilterExpanded, poHistFav, poHistDoSearch, poHistResetFilters, poHistToggleFav, poHistBlockReasonOptions,
@@ -10976,7 +11148,7 @@ const app = createApp({
       poHistOpenDetail, poHistDetailOpen, poHistDetailRow, poHistBillColor, poHistDoExport,
       poHistChgOpen, poHistChgRow, poHistOpenChgLog,
       // 采购计划导出（po-export）
-      poExpTabs, poExpTab, poExpColumns, poExpHiddenCols, poExpVisibleColumns, poExpScrollX, poExpToggleCol,
+      poExpTabs, poExpTab, poExpColumns, poExpTemplateColumns, poExpVal, poExpHiddenCols, poExpVisibleColumns, poExpScrollX, poExpToggleCol,
       poExpFilters, poExpApplied, poExpFav, poExpPage, poExpSelectedKeys, poExpFiltered, poExpTabCount,
       poExpPaged, poExpSelected, poExpRowSelection, poExpCustomRow, poExpOpenDetail, poExpDetailOpen, poExpDetailRow,
       poExpCanExport, poExpDoExport,
@@ -10993,10 +11165,10 @@ const app = createApp({
       poPlanEditOpen, poPlanEditRow, poPlanEditErr, poPlanOpenEdit, poPlanSaveEdit, poPlanDetailOpen, poPlanDetailRow, poPlanOpenDetail, poPlanExport,
       stoFilters, stoFilterExpanded, stoFav, stoPage, stoDoSearch, stoResetFilters, stoToggleFav,
       stoFiltered, stoPaged, stoCustomRow,
-      stoDetailOpen, stoDetailRow, stoOpenDetail, stoDetailRemark, stoSaveRemark,
+      stoDetailOpen, stoDetailRow, stoOpenDetail,
       stoExportOpen, stoExportFields, stoToggleExportField, stoDoExport,
       stoNetworks, stoPlanTypeOptions, stoRouteCodes, stoFromWhs, stoToWhs,
-      stoExpTabs, stoExpTab, stoExpPlanTypes, stoExpColumns, stoExpHiddenCols, stoExpVisibleColumns,
+      stoExpTabs, stoExpTab, stoExpColumns, stoExpTemplateColumns, stoExpVal, stoExpHiddenCols, stoExpVisibleColumns,
       stoExpScrollX, stoExpToggleCol, stoExpFilters, stoExpFilterExpanded, stoExpFav, stoExpPage,
       stoExpResetFilters, stoExpDoSearch, stoExpToggleFav, stoExpFiltered, stoExpPaged, stoExpTabCount,
       stoExpSelected, stoExpRowSelection, stoExpCustomRow, stoExpCanExport, stoExpDoExport,
@@ -11030,6 +11202,7 @@ const app = createApp({
       pgPartCols, pgTypeOptions, pgDetailCols,
       pgPasteOpen, pgOpenPaste, pgDelOpen, pgDelRow, pgOpenDelete, pgDoDelete,
       pgImgMax, pgPreview, pgBeforeImgUpload, pgRemoveImg, pgPreviewImg,
+      jlrsImgPreview, jlrsImgPreviewOpen,
       planDeleteNode, planRemoveSupplierRel, planSave,
       plan2Keyword, plan2PlannerColumns, plan2PlannerRows, plan2GroupCount, openPlan2PlannerModal, plan2PlannerModal, plan2SavePlanner,
       plan2PlannerOptions, openPlan2GroupModal, plan2GroupModal, plan2SaveGroup,

@@ -65,6 +65,22 @@ def main():
         # git 仓库场景：无 fragment 文件，或显式关闭草稿 → 仅保留空注释占位
         html = html.replace(anchor, "/* no draft module */", 1)
 
+    # 草稿「可交互页面」注入：模板片段 + setup 末尾脚本片段。
+    # 两个文件与 draft-script.fragment.js 一样只在本地存在且被 .gitignore 忽略；
+    # JLR_DRAFT=off 或文件缺失时锚点替换为空注释，git 成品不含任何草稿页面代码。
+    draft_tpl_path = os.path.join(VENDOR_DIR, "draft-activity-register.fragment.html")
+    draft_js_path = os.path.join(VENDOR_DIR, "draft-activity-register.fragment.js")
+    tpl_anchor = "<!-- DRAFT_INJECT_TEMPLATE -->"
+    late_anchor = "/* DRAFT_INJECT_SCRIPT_LATE */"
+    if draft_on and os.path.exists(draft_tpl_path) and os.path.exists(draft_js_path):
+        with open(draft_tpl_path, "r", encoding="utf-8") as tf:
+            html = html.replace(tpl_anchor, tf.read(), 1)
+        with open(draft_js_path, "r", encoding="utf-8") as jf:
+            html = html.replace(late_anchor, jf.read(), 1)
+    else:
+        html = html.replace(tpl_anchor, "<!-- no draft page -->", 1)
+        html = html.replace(late_anchor, "/* no draft page script */", 1)
+
     # 检查是否还有未替换的占位符
     leftover = [p for p in PLACEHOLDERS if p in html]
     if leftover:
