@@ -1237,6 +1237,173 @@ def check_part_group():
              (" 残留=" + ",".join(extra) if extra else "")
     return {"key":"part-group","ok":ok,"msg":detail}
 
+def check_pg_no_max_months():
+    """配件组管理（2026-11-09）：两类分组统一不再维护「最大备货月数」——
+    新增/编辑清单、详情清单、批量导入模板与预览均只保留「配件号」单列口径；
+    详情弹窗对联合 MOQ 分组补充只读「联合 MOQ 数量」（取 moq_qty）。
+    断言：详情新增项与单列模板齐备；配件组三段区间内不得残留任何维护/展示该字段的实现。
+    注意：配件组章节保留 2 条说明性注释含「最大备货月数」裸词，故仍按区间限定断言；
+    全局零残留断言由 check_po_no_max_months 负责。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    need = [
+        '<!-- 配件组管理：联合 MOQ 分组在详情补充展示阈值数量（只读，取 moq_qty） -->',
+        "label=\"联合 MOQ 数量\">{{ genDetailRow.moq_qty ?? '—' }}",
+        "const lines = ['配件号'];",
+        "out.push({ part_code:code });",
+        '两类分组统一为配件号 / 配件名称 / 供应商 / 操作',
+        '两类分组统一三列，不再展示最大备货月数',
+        '已解析 {{ pgPasteRows.length }} 行（配件号）',
+    ]
+    bad = [
+        "dataIndex:'max_stock_months'", "column.dataIndex==='max_stock_months'",
+        "max_stock_months:2", "r.max_stock_months", "p.max_stock_months",
+        "'配件号,最大备货月数'", '含「最大备货月数」', '配件号 + 最大备货月数',
+        "title:'最大备货月数'",
+    ]
+    segs = [
+        re.search(r'<!-- ===== 通用主数据详情.*?<a-drawer v-else', src, re.S),
+        re.search(r'<!-- 新增/编辑 配件组.*?<!-- 删除分组确认 -->', src, re.S),
+        re.search(r'/\* ---- 配件组管理（part-group）---- \*/.*?/\* ---- 通用图片附件交互', src, re.S),
+    ]
+    seg = "\n".join(m.group(0) for m in segs if m)
+    miss = [k for k in need if k not in src]
+    stale = [k for k in bad if k in seg]
+    if len([m for m in segs if m]) != 3:
+        stale.append("配件组区间未完整定位")
+    ok = (not miss) and (not stale)
+    return {"key": "pg-无最大备货月数", "ok": ok,
+            "msg": f"缺失={miss if miss else '无'} 残留={stale if stale else '无'}"}
+
+def check_po_no_max_months():
+    """采购计划（2026-11-09）：按 PRD 12.6「涉及到最大备货月数的逻辑都删除」口径，
+    常规/历史采购计划列表、列设置、导出自选字段、单块详情弹窗共用 poRegColumns，
+    删除「最大备货月数」后统一为 57 数据列 + 1 操作列；「最高风控线」single_max_limit 保留。
+    断言：源码级零残留 max_stock_months / maxStockMonths / title:'最大备货月数'，
+    poRegColumns 元素数 58，且保留最高风控线。裸词「最大备货月数」仅允许配件组章节 2 条注释。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    stale = [k for k in ("max_stock_months", "maxStockMonths", "title:'最大备货月数'") if k in src]
+    m = re.search(r'const poRegColumns\s*=\s*\[(.*?)\n\s*\];', src, re.S)
+    n = len(re.findall(r"\{\s*title:'", m.group(1))) if m else -1
+    if n != 58:
+        stale.append("poRegColumns 元素数=%d(应为 57 数据列+操作列共 58)" % n)
+    if "single_max_limit" not in src:
+        stale.append("最高风控线 single_max_limit 缺失")
+    if "title:'最高风控线'" not in src or "title:'单品最大上限'" in src:
+        stale.append("列名未对齐 12.6 口径（应为「最高风控线」）")
+    if src.count("最大备货月数") != 2:
+        stale.append("裸词「最大备货月数」出现 %d 次(应仅配件组 2 条注释)" % src.count("最大备货月数"))
+    return {"key": "po-无最大备货月数", "ok": not stale,
+            "msg": f"poRegColumns={n}（57 数据列+操作列） 残留={stale if stale else '无'}"}
+
+def check_qty_col_order():
+    """4 个计划页数量列改名与调序（2026-11-10）。
+    - All Time Buy / Bridge Buy / 参考零件采购计划（poPlanCfg）：显示名「采购计划数量」→
+      「推荐计划数量」，且「调整计划数量」列前置；key/dataIndex 仍为 plan_qty，不得误改数据字段。
+    - 常规采购计划（poRegColumns 首屏）：「调整计划数量」置于「推荐计划数量(凑MPQ后)」之前。
+    - 三页共用调整弹窗 3 处写死文案（只读描述项 / placeholder / 保存校验提示）同步改名。
+    其它模块（计划生成日志术语、MOQ 计算注释、预测生成采购计划预览表 fcGenPoResultCols）
+    仍可合法使用「采购计划数量」，故旧名零残留断言只限定在 poPlanCfg 区间内，禁止全局裸词断言。
+    """
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    miss, stale = [], []
+
+    m = re.search(r'const poPlanCfg\s*=\s*\{(.*?)\n\s*\};\s*\n\s*const poPlanFilters', src, re.S)
+    if not m:
+        return {"key": "qty-列改名与调序", "ok": False, "msg": "poPlanCfg 区间未定位"}
+    cfg = m.group(1)
+    keys = ("'po-atb'", "'po-bridge'", "'po-ref'")
+    starts = [(k, cfg.find(k + ': {')) for k in keys]
+    for i, (k, st) in enumerate(starts):
+        if st < 0:
+            stale.append(k + " 区间未定位")
+            continue
+        en = starts[i + 1][1] if i + 1 < len(starts) and starts[i + 1][1] > st else len(cfg)
+        seg = cfg[st:en]
+        if "title:'采购计划数量'" in seg:
+            stale.append(k + " 残留旧列名「采购计划数量」")
+        a, b = seg.find("title:'调整计划数量'"), seg.find("title:'推荐计划数量'")
+        if not (0 <= a < b):
+            stale.append(k + " 列序非「调整计划数量 → 推荐计划数量」")
+        if "key:'plan_qty', dataIndex:'plan_qty'" not in seg:
+            stale.append(k + " plan_qty 数据字段被误改")
+
+    mr = re.search(r'const poRegColumns\s*=\s*\[(.*?)\n\s*\];', src, re.S)
+    if not mr:
+        stale.append("poRegColumns 区间未定位")
+    else:
+        reg = mr.group(1)
+        a, b = reg.find("title:'调整计划数量'"), reg.find("title:'推荐计划数量(凑MPQ后)'")
+        if not (0 <= a < b):
+            stale.append("poRegColumns 首屏列序非「调整计划数量 → 推荐计划数量(凑MPQ后)」")
+
+    for k in ('<a-descriptions-item label="推荐计划数量">',
+              'placeholder="调整数量与推荐计划数量不一致时必填"',
+              "+ '）与推荐计划数量（'"):
+        if k not in src:
+            miss.append("弹窗文案:" + k[:34])
+    for k in ('<a-descriptions-item label="采购计划数量">',
+              'placeholder="调整数量与采购计划数量不一致时必填"',
+              "+ '）与采购计划数量（'"):
+        if k in src:
+            stale.append("弹窗旧文案残留:" + k[:34])
+    # 非本范围的 3 处合法旧名仍应保留，防止误伤全局替换
+    if src.count('title:\'采购计划数量\'') != 1:
+        stale.append("非范围模块（fcGenPoResultCols）旧列名被误改或重复")
+    ok = (not miss) and (not stale)
+    return {"key": "qty-列改名与调序", "ok": ok,
+            "msg": f"4 页列序/改名/弹窗文案齐备 缺失={miss if miss else '无'} 残留={stale if stale else '无'}"}
+
+def check_ps_default():
+    """配件与供应商关系（2026-11-09 v2）：默认供应商改为「编辑」弹窗内维护。
+    断言：列表列 / 筛选 / 行操作「编辑」入口 / 编辑弹窗全字段只读 + 仅「是否默认供应商」
+    可选是·否 / 同配件互斥保存 / setup return 暴露齐备；采购计划多供应商拦截恢复
+    「选择默认供应商」逻辑（radio 标题 + 保存时回写），不得残留上一版专用维护弹窗与文字引导。
+    对应 PRD 4.4.1、4.4.4.3 与 12.6 待确认项。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    need = [
+        "key:'is_default_supplier'",
+        "{key:'default', label:'是否默认供应商'",
+        "v-else-if=\"activeMenu==='part-supplier'\"",
+        "@click.stop=\"openGenEdit(record)\">编辑",
+        "activeMenu==='part-supplier' ? psSaveGenEdit() : saveGenEdit()",
+        "<template v-if=\"activeMenu==='part-supplier' && genEditRow\">",
+        "activeMenu==='part-supplier' ? null : undefined",
+        "<a-button type=\"primary\" @click=\"psSaveGenEdit\">保存</a-button>",
+        "activeDef.columns.filter(x=>x.key!=='action' && x.key!=='is_default_supplier')",
+        "<a-input :value=\"genEditRow[c.dataIndex]\" disabled/>",
+        "v-model:value=\"genEditRow.is_default_supplier\"",
+        "<a-radio value=\"是\">是</a-radio>",
+        "<a-radio value=\"否\">否</a-radio>",
+        "function psSaveGenEdit()",
+        "x.is_default_supplier='否'",
+        "psSaveGenEdit,",
+        "选择默认供应商（及其对应 MOQ）",
+        "upd.default_supplier_code = sel.code",
+        "relRows.forEach(x=>{ x.is_default_supplier",
+    ]
+    bad = [
+        "psDefaultOpen",
+        "psOpenDefault",
+        "psSaveDefault",
+        "维护默认供应商",
+        "本弹窗仅用于本次计划选定供应商",
+        "不调整默认供应商",
+        "请前往「配件与供应商关系」页面维护",
+        "v-model:checked=\"poRegEditRow.is_default_supplier\"",
+        "v-model:value=\"poRegEditRow.is_default_supplier\"",
+    ]
+    miss = [k for k in need if k not in src]
+    stale = [k for k in bad if k in src]
+    # 多供应商分支区间：必须含「选择默认供应商」，不得残留「仅文字引导」类表述
+    m = re.search(r"<div v-if=\"poRegEditRow\.block_reason==='多供应商'\" class=\"jlrs-form-grid\">(.*?)</div>", src, re.S)
+    if not m:
+        stale.append("多供应商分支区间未定位")
+    elif "选择默认供应商" not in m.group(1) or "不调整默认供应商" in m.group(1):
+        stale.append("多供应商分支未恢复选择默认供应商")
+    ok = (not miss) and (not stale)
+    return {"key": "ps-编辑默认供应商", "ok": ok,
+            "msg": f"缺失={miss if miss else '无'} 残留={stale if stale else '无'}"}
+
 def check_menu():
     """校验左侧菜单结构：需求预测一级菜单及子页、占位菜单已移除、采购计划组顺序等。"""
     dump("wh-abc")
@@ -1479,17 +1646,18 @@ def check_sto_export():
 
 def check_po_plan():
     """采购计划扩展 3 页：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划。
-    断言列集对齐 PRD 第 6/7 章，且各页专属能力齐备。"""
+    断言列集对齐 PRD 第 6/7 章，且各页专属能力齐备。
+    2026-11-10：「采购计划数量」显示名改为「推荐计划数量」，且「调整计划数量」列前置。"""
     pages = [
         ("po-atb", "All Time Buy 计划",
          ["配件号", "配件名称", "全国预期库存", "全生命周期累计需求", "净需求", "MOQ", "MPQ",
-          "采购计划数量", "调整计划数量", "停产标记", "单据状态", "审批人", "审批时间"]),
+          "推荐计划数量", "调整计划数量", "停产标记", "单据状态", "审批人", "审批时间"]),
         ("po-bridge", "Bridge Buy 计划",
          ["配件号", "配件名称", "收货仓库", "买断区间", "区间预测需求量", "属地预期库存", "净需求", "MOQ", "MPQ",
-          "采购计划数量", "调整计划数量", "单据状态", "审批人"]),
+          "推荐计划数量", "调整计划数量", "单据状态", "审批人"]),
         ("po-ref", "参考零件采购计划",
          ["新件配件号", "配件名称", "参考车型", "参考配件号", "预测需求量", "全国预期库存", "净需求", "MOQ", "MPQ",
-          "采购计划数量", "调整计划数量", "单据状态", "审批人"]),
+          "推荐计划数量", "调整计划数量", "单据状态", "审批人"]),
     ]
     bad = []
     for key, title, cols in pages:
@@ -1864,6 +2032,18 @@ def main():
         r = check_part_group()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] part-group   {r['msg']}")
+    if only in (None, 'pg-no-max-months', 'po-no-max-months', 'part-group', 'pg'):
+        r = check_pg_no_max_months()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] pg-无最大备货月数 {r['msg']}")
+    if only in (None, 'po-no-max-months', 'pg-no-max-months', 'po'):
+        r = check_po_no_max_months()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-无最大备货月数 {r['msg']}")
+    if only in (None, 'ps-default', 'part-supplier', 'po'):
+        r = check_ps_default()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] ps-编辑默认供应商 {r['msg']}")
     if only in (None, 'menu'):
         r = check_menu()
         all_ok = all_ok and r["ok"]
@@ -1892,6 +2072,10 @@ def main():
         r = check_po_plan()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-plan-3pages {r['msg']}")
+    if only in (None, 'qty-col-order', 'po-plan', 'po'):
+        r = check_qty_col_order()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] qty-列改名与调序 {r['msg']}")
     if only in (None, 'po-roll', 'po-plan'):
         r = check_po_roll()
         all_ok = all_ok and r["ok"]

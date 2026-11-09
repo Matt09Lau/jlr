@@ -924,13 +924,14 @@
                 <template v-if="poRegEditPending">
                 <!-- 多供应商：选择供应商（及其对应 MOQ）+ 调整原因 -->
                 <div v-if="poRegEditRow.block_reason==='多供应商'" class="jlrs-form-grid">
-                  <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>选择供应商（及其对应 MOQ）</span>
+                  <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>选择默认供应商（及其对应 MOQ）</span>
                     <a-radio-group v-model:value="poRegEditRow.cur_supplier_code">
                       <a-radio v-for="s in poRegEditRow.suppliers" :key="s.code" :value="s.code" style="display:block;margin:6px 0;">
                         {{ s.name }}（供应商编码 {{ s.code }}）　MOQ {{ s.moq }}　开通起始时间 {{ s.since }}
                       </a-radio>
                     </a-radio-group>
                   </label>
+                  <p style="grid-column:1 / -1;margin:0;color:#8c8c8c;font-size:12px;line-height:1.7;">所选供应商即作为该配件的默认供应商，保存后同步至「配件与供应商关系」（同一配件仅一家，原默认自动取消）。</p>
                   <label><span>选定供应商</span><a-input :value="poRegEditCurSupplier ? poRegEditCurSupplier.name : '—'" disabled/></label>
                   <label><span>对应 MOQ</span><a-input :value="poRegEditCurSupplier ? poRegEditCurSupplier.moq : '—'" disabled/></label>
                   <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>调整原因</span>
@@ -1546,14 +1547,14 @@
                   <a-descriptions-item label="预期库存">{{ poPlanEditRow.expected_stock }}</a-descriptions-item>
                   <a-descriptions-item label="净需求">{{ poPlanEditRow.net_demand }}</a-descriptions-item>
                   <a-descriptions-item label="MOQ / MPQ">{{ poPlanEditRow.moq + ' / ' + poPlanEditRow.mpq }}</a-descriptions-item>
-                  <a-descriptions-item label="采购计划数量">{{ poPlanEditRow.plan_qty }}</a-descriptions-item>
+                  <a-descriptions-item label="推荐计划数量">{{ poPlanEditRow.plan_qty }}</a-descriptions-item>
                 </a-descriptions>
                 <div class="jlrs-form-grid">
                   <label><span><span class="jlrs-req">*</span>调整计划数量</span>
                     <a-input-number v-model:value="poPlanEditRow.adjust_qty" :min="0" :precision="0" style="width:100%" placeholder="非负整数"/></label>
                   <label><span>调整原因</span>
                     <a-input v-model:value="poPlanEditRow.adjust_reason" :maxlength="100" allow-clear
-                      placeholder="调整数量与采购计划数量不一致时必填"/></label>
+                      placeholder="调整数量与推荐计划数量不一致时必填"/></label>
                 </div>
                 <div class="jlrs-modal-footer">
                   <a-button @click="poPlanEditOpen=false">取消</a-button>
@@ -2603,6 +2604,10 @@
                       <span class="link-btn" @click.stop="openPgModal('edit', record)">编辑</span>
                       <span class="link-btn" style="color:#ff4d4f;" @click.stop="pgOpenDelete(record)">删除</span>
                     </template>
+                    <template v-else-if="activeMenu==='part-supplier'">
+                      <span class="link-btn" @click.stop="openGenDetail(record)">详情</span>
+                      <span class="link-btn" @click.stop="openGenEdit(record)">编辑</span>
+                    </template>
                     <template v-else>
                       <span class="link-btn" @click.stop="openGenDetail(record)">详情</span>
                       <span v-if="activeDef.isExtension || activeDef.editable" class="link-btn" @click.stop="openGenEdit(record)">编辑</span>
@@ -2834,7 +2839,6 @@
                 <a-table :columns="pgPartCols" :data-source="pgModal.form.parts" row-key="part_code" :pagination="false" size="small" bordered>
                   <template #bodyCell="{ column, record }">
                     <template v-if="column.dataIndex==='supplier_code'"><a-input v-model:value="record.supplier_code" size="small" style="width:96px"/></template>
-                    <template v-else-if="column.dataIndex==='max_stock_months'"><a-input-number v-model:value="record.max_stock_months" :min="0" :step="0.01" :precision="2" size="small" style="width:110px"/></template>
                     <template v-else-if="column.dataIndex==='_op'"><a @click="pgRemovePart(record)" style="color:#ff4d4f;">删除</a></template>
                   </template>
                 </a-table>
@@ -2871,7 +2875,7 @@
               </a-form>
             </a-modal>
 
-            <!-- 批量添加配件（新增 / 编辑分组内触发）：仅支持 Excel/CSV 导入（配件号 + 最大备货月数） -->
+            <!-- 批量添加配件（新增 / 编辑分组内触发）：仅支持 Excel/CSV 导入（单列模板：配件号） -->
             <a-modal v-model:open="pgPasteOpen" title="批量添加配件 · 配件组" :width="850" :footer="null" :mask-closable="false">
               <a-form layout="vertical">
                 <a-form-item label="Excel / CSV 导入">
@@ -2882,7 +2886,7 @@
                     </a-upload>
                   </a-space>
                   <div v-if="pgPasteRows.length" style="margin-top:12px;">
-                    <div class="bt-sec-sub" style="margin-bottom:6px;">已解析 {{ pgPasteRows.length }} 行（配件号 + 最大备货月数）</div>
+                    <div class="bt-sec-sub" style="margin-bottom:6px;">已解析 {{ pgPasteRows.length }} 行（配件号）</div>
                     <a-table :columns="pgPastePreviewCols" :data-source="pgPasteRows" row-key="part_code" :pagination="false" size="small" bordered :scroll="{ y: 220 }"/>
                   </div>
                 </a-form-item>
@@ -4416,15 +4420,14 @@
             <span v-else-if="c.render==='partlink'">{{ genDetailRow[c.csvField || c.dataIndex] }}<a v-if="hasTrend(genDetailRow)" style="margin-left:8px;" @click.stop="openTrendModal(genDetailRow)">查看趋势图</a></span>
             <span v-else>{{ genDetailRow[c.csvField || c.dataIndex] }}</span>
           </a-descriptions-item>
+          <!-- 配件组管理：联合 MOQ 分组在详情补充展示阈值数量（只读，取 moq_qty） -->
+          <a-descriptions-item v-if="activeMenu==='part-group' && genDetailRow.group_type==='联合MOQ'" label="联合 MOQ 数量">{{ genDetailRow.moq_qty ?? '—' }}</a-descriptions-item>
         </a-descriptions>
         <!-- 配件组管理：详情同时展示组内配件明细（只读，与新增/编辑同构） -->
         <template v-if="activeMenu==='part-group'">
           <div class="bt-sec-t" style="margin:18px 0 10px;">组内配件清单（{{ (genDetailRow.parts||[]).length }}）<span class="bt-sec-sub">统一取每个配件的最新件</span></div>
           <a-table :columns="pgDetailCols" :data-source="genDetailRow.parts||[]" row-key="part_code" :pagination="false" size="small" bordered>
-            <template #bodyCell="{ column, record }">
-              <template v-if="column.dataIndex==='max_stock_months'">{{ record.max_stock_months ?? 2 }}</template>
-              <template v-else>{{ record[column.dataIndex] }}</template>
-            </template>
+            <template #bodyCell="{ column, record }"><span>{{ record[column.dataIndex] }}</span></template>
             <template #emptyText><a-empty description="暂无配件"/></template>
           </a-table>
 
@@ -4464,9 +4467,30 @@
       </template>
     </a-drawer>
 
-    <!-- ===== 通用主数据编辑弹窗 ===== -->
-    <a-modal v-model:open="genEditOpen" :title="'编辑' + activeDef.detailTitle + ' · ' + (genEditRow ? genEditRow[activeDef.idField] : '')" @ok="saveGenEdit" width="680px">
-      <a-form layout="vertical">
+    <!-- ===== 通用主数据编辑弹窗 =====
+         配件与供应商关系限域：展示该行全部字段，仅「是否默认供应商」可编辑（是 / 否）；其余页面维持通用表单。 -->
+    <a-modal v-model:open="genEditOpen" :title="'编辑' + activeDef.detailTitle + ' · ' + (genEditRow ? genEditRow[activeDef.idField] : '')" @ok="activeMenu==='part-supplier' ? psSaveGenEdit() : saveGenEdit()" :width="activeMenu==='part-supplier' ? '920px' : '680px'" :footer="activeMenu==='part-supplier' ? null : undefined">
+      <template v-if="activeMenu==='part-supplier' && genEditRow">
+        <div class="jlrs-form-grid">
+          <label v-for="c in activeDef.columns.filter(x=>x.key!=='action' && x.key!=='is_default_supplier')" :key="c.key">
+            <span>{{ c.title }}</span>
+            <a-input :value="genEditRow[c.dataIndex]" disabled/>
+          </label>
+          <label style="grid-column:1 / -1;">
+            <span><b class="jlrs-req">*</b>是否默认供应商</span>
+            <a-radio-group v-model:value="genEditRow.is_default_supplier">
+              <a-radio value="是">是</a-radio>
+              <a-radio value="否">否</a-radio>
+            </a-radio-group>
+            <span style="color:#8c8c8c;font-size:12px;line-height:1.6;">仅本字段可编辑；同一配件号下仅允许一家默认供应商，选择「是」后原默认自动取消。</span>
+          </label>
+        </div>
+        <div class="jlrs-modal-footer">
+          <a-button @click="genEditOpen=false">取消</a-button>
+          <a-button type="primary" @click="psSaveGenEdit">保存</a-button>
+        </div>
+      </template>
+      <a-form v-else layout="vertical">
         <a-row :gutter="16">
           <a-col :span="12" v-for="c in (activeDef.editable ? activeDef.columns.filter(x=>x.editable) : activeDef.columns.filter(x=>x.key!=='action'))" :key="c.key">
             <a-form-item :label="c.title">
@@ -4765,7 +4789,7 @@ for(let i=1;i<=24;i++){
 /* ================= 配件与供应商关系（part_supplier_relation）模拟 ================= */
 const partSupplierData = Vue.reactive([]);
 for(let i=0;i<36;i++){
-  const p = partPool[i % partPool.length];
+  const p = partPool[Math.floor(i/3) % partPool.length];
   const s = supplierData[i % supplierData.length];
   partSupplierData.push({
     id: 'PS' + (i+1),
@@ -4779,6 +4803,14 @@ for(let i=0;i<36;i++){
     is_contract_valid: rnd()<0.85 ? 'Y' : 'N',
     delivery_lead_time: rint(3,45),
     data_access_date: '2026-0' + rint(1,9) + '-' + pad2(rint(1,28)),
+  });
+}
+// 默认供应商：同一配件号下仅允许一家，初始化取该配件的首条关系
+{
+  const seen = new Set();
+  partSupplierData.forEach(r=>{
+    if(seen.has(r.part_code)) r.is_default_supplier = '否';
+    else { r.is_default_supplier = '是'; seen.add(r.part_code); }
   });
 }
 
@@ -4886,18 +4918,19 @@ const supplierExtDef = {
   data: supplierData,
 };
 const partSupplierDef = {
-  isExtension:false, detailTitle:'配件与供应商关系', idField:'part_code', scrollX:1400,
+  isExtension:false, detailTitle:'配件与供应商关系', idField:'part_code', scrollX:1560,
   columns:[
     {title:'配件号', key:'part_code', dataIndex:'part_code', width:145, fixed:'left', render:'link', sorter:(a,b)=>a.part_code.localeCompare(b.part_code)},
     {title:'供应商代码', key:'supplier_code', dataIndex:'supplier_code', width:115, sorter:(a,b)=>a.supplier_code.localeCompare(b.supplier_code)},
     {title:'供应商名称', key:'supplier_name', dataIndex:'supplier_name', width:250, ellipsis:true, sorter:(a,b)=>a.supplier_name.localeCompare(b.supplier_name)},
+    {title:'是否默认供应商', key:'is_default_supplier', dataIndex:'is_default_supplier', width:120, render:'tag', colorMap:{'是':'green','否':'default'}, sorter:(a,b)=>String(a.is_default_supplier).localeCompare(String(b.is_default_supplier))},
     {title:'最后一次采购时间', key:'last_purchase_time', dataIndex:'last_purchase_time', width:160, sorter:(a,b)=>a.last_purchase_time.localeCompare(b.last_purchase_time)},
     {title:'采购信息记录', key:'purchasing_info_record', dataIndex:'purchasing_info_record', width:130},
     {title:'供应商合同', key:'supplier_contract', dataIndex:'supplier_contract', width:130},
     {title:'合同是否有效', key:'is_contract_valid', dataIndex:'is_contract_valid', width:110, render:'tag', colorMap:{Y:'green',N:'red'}, sorter:(a,b)=>a.is_contract_valid.localeCompare(b.is_contract_valid)},
     {title:'交付提前期(天)', key:'delivery_lead_time', dataIndex:'delivery_lead_time', width:125, sorter:(a,b)=>a.delivery_lead_time-b.delivery_lead_time},
     {title:'数据接入日期', key:'data_access_date', dataIndex:'data_access_date', width:120, sorter:(a,b)=>a.data_access_date.localeCompare(b.data_access_date)},
-    {title:'操作', key:'action', width:80, fixed:'right'},
+    {title:'操作', key:'action', width:170, fixed:'right'},
   ],
   filters:[
     {key:'part', label:'配件号', type:'input', field:'part_code', placeholder:'配件号'},
@@ -4907,6 +4940,7 @@ const partSupplierDef = {
     {key:'record', label:'采购信息记录', type:'input', field:'purchasing_info_record', placeholder:'采购信息记录'},
     {key:'contract', label:'供应商合同', type:'input', field:'supplier_contract', placeholder:'供应商合同'},
     {key:'valid', label:'合同是否有效', type:'select', field:'is_contract_valid', options:[{value:'Y',label:'有效'},{value:'N',label:'无效'}]},
+    {key:'default', label:'是否默认供应商', type:'select', field:'is_default_supplier', options:[{value:'是',label:'是'},{value:'否',label:'否'}]},
   ],
   data: partSupplierData,
 };
@@ -5441,7 +5475,6 @@ for(let i=0;i<64;i++){
   const curSupplierMoq = curSupplier.moq;
   const adjustQty = (i % 7 === 3) ? suggestQty + 60 : suggestQty;
   const purchaseLt = [7,15,30,45,60][i % 5];
-  const maxStockMonths = [1.5,2,2.5,3][i % 4];
   const singleMaxLimit = Math.round(targetStock*1.2);
   const etaBase = new Date(2026, 9, 10 + (i % 18));
   const requiredArrivalDate = etaBase.toISOString().slice(0,10);
@@ -5468,7 +5501,7 @@ for(let i=0;i<64;i++){
     available_qty:availableQty, open_po_qty:openPoQty, in_transit_qty:inTransitQty, bo_qty:boQty,
     avg_3m_sales:avg3mSales, cover_days:coverDays, suggest_raw_qty:suggestRawQty, moq,
     suggest_moq_qty:suggestMoqQty, moq_group:poRegMoqGroups[i%poRegMoqGroups.length], joint_moq_qty:jointMoqQty,
-    purchase_lt:purchaseLt, max_stock_months:maxStockMonths, single_max_limit:singleMaxLimit,
+    purchase_lt:purchaseLt, single_max_limit:singleMaxLimit,
     is_joint_moq:isJointMoq, max_joint_qty:maxJointQty, joint_fill_qty:jointFillQty, suggest_joint_qty:suggestJointQty,
     set_group:setGroup, set_fill_qty:setFillQty, suggest_set_qty:suggestSetQty, mpq,
     suggest_mpq_qty:suggestMpqQty, suggest_qty:suggestQty, is_blocked:isBlocked, block_reason:blockReason,
@@ -5553,7 +5586,6 @@ function poBuildFullRow(i, opts){
   const curSupplier = suppliers[0];
   const adjustQty = (i % 7 === 3) ? suggestQty + 60 : suggestQty;
   const purchaseLt = [7,15,30,45,60][i % 5];
-  const maxStockMonths = [1.5,2,2.5,3][i % 4];
   const singleMaxLimit = Math.round(targetStock*1.2);
   const etaBase = new Date(2026, 9, 10 + (i % 18));
   const requiredArrivalDate = etaBase.toISOString().slice(0,10);
@@ -5576,7 +5608,7 @@ function poBuildFullRow(i, opts){
     available_qty:availableQty, open_po_qty:openPoQty, in_transit_qty:inTransitQty, bo_qty:boQty,
     avg_3m_sales:avg3mSales, cover_days:coverDays, suggest_raw_qty:suggestRawQty, moq,
     suggest_moq_qty:suggestMoqQty, moq_group:poRegMoqGroups[i%poRegMoqGroups.length], joint_moq_qty:jointMoqQty,
-    purchase_lt:purchaseLt, max_stock_months:maxStockMonths, single_max_limit:singleMaxLimit,
+    purchase_lt:purchaseLt, single_max_limit:singleMaxLimit,
     is_joint_moq:isJointMoq, max_joint_qty:maxJointQty, joint_fill_qty:jointFillQty, suggest_joint_qty:suggestJointQty,
     set_group:setGroup, set_fill_qty:setFillQty, suggest_set_qty:suggestSetQty, mpq,
     suggest_mpq_qty:suggestMpqQty, suggest_qty:suggestQty, is_blocked:isBlocked, block_reason:blockReason,
@@ -6598,10 +6630,10 @@ const app = createApp({
       { title:'当前采购件号', key:'cur_purchase_code', dataIndex:'cur_purchase_code', width:112 },
       { title:'当前采购配件名称', key:'cur_purchase_name', dataIndex:'cur_purchase_name', width:132, ellipsis:true },
       /* 第一屏核心列（默认可见，无需横向滚动即可见）：
-         当前采购件号 / 当前采购配件名称（置于最前，紧邻计划类型）/ 推荐计划数量(凑MPQ后) / 调整计划数量 / 调整原因 / 是否计划拦截 / 拦截原因；
+         当前采购件号 / 当前采购配件名称（置于最前，紧邻计划类型）/ 调整计划数量 / 推荐计划数量(凑MPQ后) / 调整原因 / 是否计划拦截 / 拦截原因；
          其后紧跟 配件号 / 配件名称 / 推荐计划数量(取整前)（置于第一屏末尾） */
-      { title:'推荐计划数量(凑MPQ后)', key:'suggest_mpq_qty', dataIndex:'suggest_mpq_qty', width:122, ellipsis:true },
       { title:'调整计划数量', key:'adjust_qty', dataIndex:'adjust_qty', width:90, sorter:(a,b)=>a.adjust_qty-b.adjust_qty },
+      { title:'推荐计划数量(凑MPQ后)', key:'suggest_mpq_qty', dataIndex:'suggest_mpq_qty', width:122, ellipsis:true },
       { title:'调整原因', key:'adjust_reason', dataIndex:'adjust_reason', width:150, ellipsis:true },
       { title:'是否计划拦截', key:'is_blocked', dataIndex:'is_blocked', width:96 },
       { title:'拦截原因', key:'block_reason', dataIndex:'block_reason', width:150, ellipsis:true },
@@ -6635,8 +6667,7 @@ const app = createApp({
       { title:'联合MOQ分组', key:'moq_group', dataIndex:'moq_group', width:100 },
       { title:'联合MOQ数量', key:'joint_moq_qty', dataIndex:'joint_moq_qty', width:100 },
       { title:'采购LT', key:'purchase_lt', dataIndex:'purchase_lt', width:66 },
-      { title:'最大备货月数', key:'max_stock_months', dataIndex:'max_stock_months', width:100 },
-      { title:'单品最大上限', key:'single_max_limit', dataIndex:'single_max_limit', width:88 },
+      { title:'最高风控线', key:'single_max_limit', dataIndex:'single_max_limit', width:88 },
       { title:'是否凑MOQ', key:'is_joint_moq', dataIndex:'is_joint_moq', width:82 },
       { title:'最大可凑量', key:'max_joint_qty', dataIndex:'max_joint_qty', width:90 },
       { title:'凑MOQ量', key:'joint_fill_qty', dataIndex:'joint_fill_qty', width:76 },
@@ -7254,6 +7285,11 @@ const app = createApp({
           const sel = (row.suppliers||[]).find(s=>s.code===row.cur_supplier_code) || row.suppliers[0];
           const oldS = (t.suppliers||[]).find(s=>s.code===t.cur_supplier_code) || (t.suppliers||[])[0] || sel;
           upd.cur_supplier_code = sel.code; upd.cur_supplier_name = sel.name; upd.cur_supplier_moq = sel.moq;
+          // 恢复原先「选择默认供应商」逻辑：选定供应商同步设为该配件默认供应商（同配件互斥）
+          upd.default_supplier_code = sel.code; upd.default_supplier_name = sel.name;
+          const relRows = partSupplierData.filter(x=>x.part_code===t.part_code);
+          const relHit = relRows.find(x=>x.supplier_name===sel.name);
+          if(relHit){ relRows.forEach(x=>{ x.is_default_supplier = (x.id===relHit.id ? '是' : '否'); }); }
           upd.is_blocked = '否'; upd.block_reason = '—'; upd.multi_supplier_block = '否';
           if(sel.code !== oldS.code){ pushLog('调整供应商','供应商、对应的MOQ',(oldS.name+'（MOQ '+oldS.moq+'）'),(sel.name+'（MOQ '+sel.moq+'）'),'人工','多供应商场景，手工改选供应商'); }
           pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','指定供应商后拦截消除');
@@ -8208,6 +8244,18 @@ const app = createApp({
       genEditTarget.value = r; genEditRow.value = reactive(Object.assign({}, r)); genEditOpen.value = true;
     }
     function saveGenEdit(){ if(genEditTarget.value && genEditRow.value) Object.assign(genEditTarget.value, genEditRow.value); genEditOpen.value = false; antd.message.success('保存成功（设计稿示意）'); }
+    /* 配件与供应商关系：编辑弹窗仅「是否默认供应商」可编辑（是 / 否）；
+       选择「是」时同一配件号下其余供应商关系自动置「否」。 */
+    function psSaveGenEdit(){
+      const row = genEditRow.value, target = genEditTarget.value;
+      if(!row || !target){ genEditOpen.value = false; return; }
+      if(row.is_default_supplier==='是'){
+        partSupplierData.forEach(x=>{ if(x.part_code===target.part_code && x.id!==target.id) x.is_default_supplier='否'; });
+      }
+      Object.assign(target, row);
+      genEditOpen.value = false;
+      antd.message.success('保存成功（设计稿示意）');
+    }
     function doGenImport(){ genImportOpen.value = false; antd.message.success('导入成功（设计稿示意），新增/更新记录已写入'); }
     function genExportCsv(all){
       const def = pageDefs[activeMenu.value];
@@ -8314,8 +8362,8 @@ const app = createApp({
         columns:[
           { title:'配件号', key:'part_code', dataIndex:'part_code', width:140 },
           { title:'配件名称', key:'part_name', dataIndex:'part_name', width:210, ellipsis:true },
-          { title:'采购计划数量', key:'plan_qty', dataIndex:'plan_qty', width:118, sorter:(a,b)=>a.plan_qty-b.plan_qty },
           { title:'调整计划数量', key:'adjust_qty', dataIndex:'adjust_qty', width:118 },
+          { title:'推荐计划数量', key:'plan_qty', dataIndex:'plan_qty', width:118, sorter:(a,b)=>a.plan_qty-b.plan_qty },
           { title:'调整原因', key:'adjust_reason', dataIndex:'adjust_reason', width:150, ellipsis:true },
           { title:'全国预期库存', key:'expected_stock', dataIndex:'expected_stock', width:120, sorter:(a,b)=>a.expected_stock-b.expected_stock },
           { title:'全生命周期累计需求', key:'life_demand', dataIndex:'life_demand', width:152, sorter:(a,b)=>a.life_demand-b.life_demand },
@@ -8343,8 +8391,8 @@ const app = createApp({
         columns:[
           { title:'配件号', key:'part_code', dataIndex:'part_code', width:140 },
           { title:'配件名称', key:'part_name', dataIndex:'part_name', width:200, ellipsis:true },
-          { title:'采购计划数量', key:'plan_qty', dataIndex:'plan_qty', width:118 },
           { title:'调整计划数量', key:'adjust_qty', dataIndex:'adjust_qty', width:118 },
+          { title:'推荐计划数量', key:'plan_qty', dataIndex:'plan_qty', width:118 },
           { title:'调整原因', key:'adjust_reason', dataIndex:'adjust_reason', width:150, ellipsis:true },
           { title:'属地预期库存', key:'expected_stock', dataIndex:'expected_stock', width:126 },
           { title:'收货仓库', key:'wh_name', dataIndex:'wh_name', width:120 },
@@ -8372,8 +8420,8 @@ const app = createApp({
         columns:[
           { title:'新件配件号', key:'part_code', dataIndex:'part_code', width:150 },
           { title:'配件名称', key:'part_name', dataIndex:'part_name', width:210, ellipsis:true },
-          { title:'采购计划数量', key:'plan_qty', dataIndex:'plan_qty', width:118 },
           { title:'调整计划数量', key:'adjust_qty', dataIndex:'adjust_qty', width:118 },
+          { title:'推荐计划数量', key:'plan_qty', dataIndex:'plan_qty', width:118 },
           { title:'调整原因', key:'adjust_reason', dataIndex:'adjust_reason', width:150, ellipsis:true },
           { title:'全国预期库存', key:'expected_stock', dataIndex:'expected_stock', width:120 },
           { title:'参考车型', key:'ref_vehicle', dataIndex:'ref_vehicle', width:110 },
@@ -8478,7 +8526,7 @@ const app = createApp({
         poPlanEditErr.value = '调整计划数量必须为非负整数'; return;
       }
       if(Number(row.adjust_qty)!==Number(row.plan_qty) && !(row.adjust_reason && String(row.adjust_reason).trim())){
-        poPlanEditErr.value = '调整数量（' + row.adjust_qty + '）与采购计划数量（' + row.plan_qty + '）不一致，调整原因必填'; return;
+        poPlanEditErr.value = '调整数量（' + row.adjust_qty + '）与推荐计划数量（' + row.plan_qty + '）不一致，调整原因必填'; return;
       }
       const target = poPlanPage.value.data.find(x=> x.id===row.id);
       if(target){ target.adjust_qty = row.adjust_qty; target.adjust_reason = row.adjust_reason; target.update_time = polNow(); }
@@ -8509,39 +8557,27 @@ const app = createApp({
     /* ---- 配件组管理（part-group）---- */
     const pgSel = ref([]);
     const pgModal = reactive({ open:false, mode:'add', err:'', form:pgBlankForm() });
-    const pgPasteRows = ref([]); // 来自 Excel/CSV 导入的解析结果（配件号 + 最大备货月数）
+    const pgPasteRows = ref([]); // 来自 Excel/CSV 导入的解析结果（单列模板：仅配件号）
     const pgPastePreviewCols = [
-      { title:'配件号', dataIndex:'part_code', width:200 },
-      { title:'最大备货月数', dataIndex:'max_stock_months', width:140 },
+      { title:'配件号', dataIndex:'part_code', width:240 },
     ];
     const pgPasteOpen = ref(false);
     const pgNewPartCode = ref('');
     const pgDelOpen = ref(false);
     const pgDelRow = ref(null);
-    // 组内配件清单列：最大备货月数仅联合 MOQ 类型需要（零件维度，默认 2，支持两位小数调整）
-    const pgPartCols = computed(()=>{
-      const cols = [
-        { title:'配件号', dataIndex:'part_code', width:150 },
-        { title:'配件名称', dataIndex:'part_name', width:220, ellipsis:true },
-        { title:'供应商', dataIndex:'supplier_code', width:130 },
-      ];
-      if(pgModal.form.group_type==='联合MOQ'){
-        cols.push({ title:'最大备货月数', dataIndex:'max_stock_months', width:130 });
-      }
-      cols.push({ title:'操作', dataIndex:'_op', width:70 });
-      return cols;
-    });
-    // 详情态配件明细列：与新增/编辑一致，只读；最大备货月数仅联合 MOQ 类型展示
-    const pgDetailCols = computed(()=>{
-      const cols = [
-        { title:'配件号', dataIndex:'part_code', width:160 },
-        { title:'配件名称', dataIndex:'part_name', width:260, ellipsis:true },
-        { title:'供应商', dataIndex:'supplier_code', width:140 },
-      ];
-      const row = genDetailRow.value;
-      if(row && row.group_type==='联合MOQ') cols.push({ title:'最大备货月数', dataIndex:'max_stock_months', width:130 });
-      return cols;
-    });
+    // 组内配件清单列：两类分组统一为配件号 / 配件名称 / 供应商 / 操作，不再维护最大备货月数
+    const pgPartCols = computed(()=>[
+      { title:'配件号', dataIndex:'part_code', width:150 },
+      { title:'配件名称', dataIndex:'part_name', width:220, ellipsis:true },
+      { title:'供应商', dataIndex:'supplier_code', width:130 },
+      { title:'操作', dataIndex:'_op', width:70 },
+    ]);
+    // 详情态配件明细列：与新增/编辑一致，只读；两类分组统一三列，不再展示最大备货月数
+    const pgDetailCols = computed(()=>[
+      { title:'配件号', dataIndex:'part_code', width:160 },
+      { title:'配件名称', dataIndex:'part_name', width:260, ellipsis:true },
+      { title:'供应商', dataIndex:'supplier_code', width:140 },
+    ]);
     const planGroupOptions = computed(()=> planGroups.map(g=>({ value:g.code, label:g.name + '（' + g.code + '）' })));
     const planAddSupplierGroupName = computed(()=>{ const g=planGroups.find(x=>x.code===planAddSupplierGroup.value); return g?g.name:''; });
     const planSelSupplierName = computed(()=>{
@@ -8724,7 +8760,7 @@ const app = createApp({
       pgModal.err = '';
       pgModal.form = payload
         ? Object.assign({}, payload, {
-            parts:(payload.parts||[]).map(p=>Object.assign({}, p, { max_stock_months: p.max_stock_months ?? 2 })),
+            parts:(payload.parts||[]).map(p=>Object.assign({}, p)),
             images: Array.isArray(payload.images) ? payload.images.slice() : [],
             remark: payload.remark || '',
           })
@@ -8739,7 +8775,7 @@ const app = createApp({
       const info = pgLookupPart(code);
       pgModal.form.parts.push(Object.assign({
         id:'PGP-N'+(Date.now()+pgModal.form.parts.length), part_code:code,
-        supplier_code:'', max_stock_months:2,
+        supplier_code:'',
       }, info));
       pgModal.form.part_count = pgModal.form.parts.length;
       pgNewPartCode.value = '';
@@ -8750,7 +8786,7 @@ const app = createApp({
     }
     // 批量添加配件：按钮触发弹窗，仅支持 Excel/CSV 导入，确认后写入组内配件清单
     function pgOpenPaste(){ pgPasteRows.value = []; pgPasteOpen.value = true; }
-    // 解析 Excel/CSV（模板两列：配件号、最大备货月数；支持逗号/分号/Tab 分隔；首行表头自动跳过）
+    // 解析 Excel/CSV（单列模板：仅配件号；兼容逗号/分号/Tab 分隔，首行表头自动跳过；附带其它列一律忽略）
     function pgParsePasteCsv(text){
       const lines = (text||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
       const out = [];
@@ -8759,37 +8795,32 @@ const app = createApp({
         if(cells[0]==='配件号' || (cells[0]||'').indexOf('配件号')===0) continue; // 表头
         const code = cells[0];
         if(!code) continue;
-        let m = 2;
-        if(cells.length>1 && cells[1]!==''){
-          const n = parseFloat(cells[1]);
-          if(!isNaN(n) && n>=0) m = Math.round(n*100)/100;
-        }
-        out.push({ part_code:code, max_stock_months:m });
+        out.push({ part_code:code });
       }
       return out;
     }
-    // 导入 Excel/CSV（Excel 请「另存为 CSV」）：取「配件号 + 最大备货月数」两列，预览后由「确认添加」写入
+    // 导入 Excel/CSV（Excel 请「另存为 CSV」）：仅取「配件号」一列，预览后由「确认添加」写入
     function pgPasteImportFile(file){
       const name = file.name || '';
       if(!/\.(csv|txt|xlsx?)$/i.test(name)){ antd.message.warning('请上传 CSV/TXT 文件（Excel 请「另存为 CSV」）'); return false; }
       const reader = new FileReader();
       reader.onload = () => {
         const rows = pgParsePasteCsv(String(reader.result || ''));
-        if(!rows.length){ antd.message.warning('未解析到有效数据，请检查文件是否含「配件号」「最大备货月数」两列'); pgPasteRows.value = []; return; }
+        if(!rows.length){ antd.message.warning('未解析到有效数据，请检查文件是否含「配件号」列'); pgPasteRows.value = []; return; }
         pgPasteRows.value = rows;
-        antd.message.success('已解析 '+rows.length+' 行（含「最大备货月数」）');
+        antd.message.success('已解析 '+rows.length+' 行（配件号）');
       };
       reader.readAsText(file, 'UTF-8');
       return false; // 阻止默认上传，由本地 FileReader 解析
     }
-    // 导出导入模板：仅表头两列「配件号」「最大备货月数」，供用户按模板填写后导入
+    // 导出导入模板：单列「配件号」，两类分组通用，供用户按模板填写后导入
     function pgPasteExportTemplate(){
-      const lines = ['配件号,最大备货月数'];
+      const lines = ['配件号'];
       const blob = new Blob(['\uFEFF'+lines.join('\n')], {type:'text/csv;charset=utf-8'});
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
       a.download = 'JLRS_配件组批量导入模板_' + new Date().toISOString().slice(0,10) + '.csv';
       a.click(); URL.revokeObjectURL(a.href);
-      antd.message.success('已导出导入模板（配件号、最大备货月数 两列）');
+      antd.message.success('已导出导入模板（配件号 单列）');
     }
     function pgPasteAddParts(){
       const rows = pgPasteRows.value || [];
@@ -8804,7 +8835,7 @@ const app = createApp({
         const info = pgLookupPart(code);
         pgModal.form.parts.push(Object.assign({
           id:'PGP-N'+(Date.now()+added), part_code:code,
-          supplier_code:'', max_stock_months: r.max_stock_months ?? 2,
+          supplier_code:'',
         }, info));
         added++;
       });
@@ -11192,6 +11223,7 @@ const app = createApp({
       fcRegMdl, fcOpenRegMdl, closeRegMdl, refreshRegMdlCharts, fcApplyRegMdl,
       canEditFc, fcEditMode, isFcLongBuyout, fcRowEditable, fcSaveForecast,
       genEditOpen, genEditRow, genImportOpen, genTagColor,
+      psSaveGenEdit,
       genDoSearch, genResetFilters, genToggleFav, genToggleCol, openGenEdit, saveGenEdit, doGenImport, genExportCsv,
       planKeyword, planAllExpanded, planExpandedKeys, planSelectedKeys, planSel, planTreeData, planFlatNodes, onPlanNodeClick, onPlanToggle, planToggleExpand,
       planGroupOptions, planSelSupplierName, planGroupSuppliers, planPlannerSupplierCount, planUnlinkedSuppliers,
