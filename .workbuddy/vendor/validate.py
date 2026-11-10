@@ -175,6 +175,33 @@ def check_po_regular_activity():
     detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
     return {"key":"po-regular-活动零件","ok":ok,"msg":detail}
 
+def check_po_regular_activity_qty():
+    """活动零件拦截演示数值口径（2026-11-10）：
+    ① 活动数量（客户活动需求量）取 1200~4999，明显高于系统计划量；前两条演示值 2400/1800；
+    ② 仅「活动零件」拦截行的调整计划数量降为推荐量的约 15%（下限 30），其余场景口径不变；
+    ③ 历史归档计划(po-history)那处 adjustQty 不得被误改，仍保留原表达式。
+    """
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    need = [
+        "activity_qty: 1200 + (h % 3800)",
+        "i===0 ? 2400 : (i===1 ? 1800 : a.activity_qty)",
+        "(blockReason === '活动零件')",
+        "Math.max(30, Math.round(suggestQty * 0.15))",
+    ]
+    miss = [k for k in need if k not in src]
+    bad = []
+    if "activity_qty: 50 + (h % 950)" in src:
+        bad.append("旧活动数量 50~999 残留")
+    if "i===0 ? 414 : (i===1 ? 120 : a.activity_qty)" in src:
+        bad.append("旧前两条演示值 414/120 残留")
+    # 历史归档(po-history)那处表达式必须仍保留一份，确保未被误改
+    cnt = src.count("const adjustQty = (i % 7 === 3) ? suggestQty + 60 : suggestQty;")
+    if cnt != 1:
+        bad.append(f"po-history 原 adjustQty 表达式数量异常({cnt}, 期望 1)")
+    ok = (not miss) and (not bad)
+    detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
+    return {"key":"po-regular-活动数量与计划数量", "ok":ok, "msg":detail}
+
 def check_po_order():
     """采购计划-创建订单弹窗（2026-11-06；2026-11-10 更名为创建计划）：
     ① 按截图去掉「交付提前期」列；该字段仅不再展示，后台仍必须带出 lead_days 用于自动计算
@@ -2197,6 +2224,10 @@ def main():
         r = check_po_regular_activity()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-regular-活动零件 {r['msg']}")
+    if only in (None, 'act-qty', 'po-regular-activity', 'po'):
+        r = check_po_regular_activity_qty()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-regular-活动数值 {r['msg']}")
     if only in (None, 'po-order', 'po-regular', 'po', 'create-plan'):
         r = check_po_order()
         all_ok = all_ok and r["ok"]

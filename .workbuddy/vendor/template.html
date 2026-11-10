@@ -5338,7 +5338,7 @@ const poRegActivityTable = matData.map((m, k)=>{
     activity_type: type,
     start_date: fmt(start),
     end_date: fmt(end),
-    activity_qty: 50 + (h % 950),                               // 活动数量 50~999
+    activity_qty: 1200 + (h % 3800),                            // 活动数量 1200~4999（客户活动需求量，明显高于系统计划量）
     process_plan: processPlan,
     ratio_start: ratioStart,
     ratio_end: ratioEnd,
@@ -5484,7 +5484,11 @@ for(let i=0;i<64;i++){
   const curSupplierCode = curSupplier.code;
   const curSupplierName = curSupplier.name;
   const curSupplierMoq = curSupplier.moq;
-  const adjustQty = (i % 7 === 3) ? suggestQty + 60 : suggestQty;
+  // 活动零件拦截场景演示：客户活动需求量（活动登记表 1200~4999）明显高于系统计划量，
+  // 故该场景调整计划数量取推荐量的约 15%（下限 30），供计划员在弹窗中参考活动数量上调；其余场景维持原口径
+  const adjustQty = (blockReason === '活动零件')
+    ? Math.max(30, Math.round(suggestQty * 0.15))
+    : ((i % 7 === 3) ? suggestQty + 60 : suggestQty);
   const purchaseLt = [7,15,30,45,60][i % 5];
   const singleMaxLimit = Math.round(targetStock*1.2);
   const etaBase = new Date(2026, 9, 10 + (i % 18));
@@ -6937,7 +6941,7 @@ const app = createApp({
       const start = i===0 ? '2026-02-01' : (i===1 ? '2026-01-01' : a.start_date);
       let end   = i===0 ? '2026-03-02' : (i===1 ? '2026-01-10' : a.end_date);
       if(i===2) end = '';   // 演示：活动截止日期留空，但信息完整 → 状态仍为「已受理/待处理」
-      const qty  = i===0 ? 414 : (i===1 ? 120 : a.activity_qty);
+      const qty  = i===0 ? 2400 : (i===1 ? 1800 : a.activity_qty);
       const type = i===0 ? '促销活动' : (i===1 ? '服务活动' : a.activity_type);
       actRegData.push({
         id:'AR'+(i+1), activity_name:actRegDemoName(i, a.part_code),
