@@ -851,6 +851,38 @@ def check_fc_long_import():
     return {"key": "fc-long-批量圆整", "ok": ok, "msg": detail}
 
 
+def check_po_atb_bridge_integer():
+    """All Time Buy / Bridge Buy 计划生成弹窗：计划数量须为整数，生成前须校验来源预测结果（全部配件 10 年）均已圆整。
+    源码级断言：两生成函数改为校验全量来源数据（fcBuyoutData / fcLongData），新增全圆整计算属性并用于弹窗警告横幅与生成按钮禁用，
+    弹窗提示文案说明整数要求；旧的「仅校验选中行」口径必须已移除。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    need = [
+        "fcAllTimeAllRounded = computed(()=> fcGenRoundedBad(fcBuyoutData, fcLongKeys).length === 0)",
+        "fcBridgeAllRounded = computed(()=> fcGenRoundedBad(fcLongData, fcLongKeys).length === 0)",
+        "const bad = fcGenRoundedBad(fcBuyoutData, fcLongKeys);",
+        "const bad = fcGenRoundedBad(fcLongData, fcLongKeys);",
+        "v-if=\"!fcAllTimeAllRounded\"",
+        "v-if=\"!fcBridgeAllRounded\"",
+        ":disabled=\"!fcBatchSelIds.length || !fcAllTimeAllRounded\"",
+        ":disabled=\"!fcLongSel.length || !fcBridgeAllRounded\"",
+        "计划数量须为整数，生成前系统将校验「一次买断预测结果」全部配件（10 年）均已圆整",
+        "计划数量须为整数，生成前系统将校验「长周期预测报表」全部配件（10 年）均已圆整",
+        "一次买断预测结果仍存在未圆整（含小数）的年份，请先对全部配件执行「圆整」处理后再生成 All Time Buy 计划",
+        "长周期预测报表仍存在未圆整（含小数）的年份，请先对全部配件执行「圆整」处理后再生成 bridge buy 计划",
+    ]
+    stale = [
+        "const bad = fcGenRoundedBad(fcAllTimeSelRowsRaw.value, fcLongKeys);",
+        "const bad = fcGenRoundedBad(fcBridgeSelRowsRaw.value, fcLongKeys);",
+        "所选配件存在未圆整（含小数）的年份，请先对选中的配件执行「圆整」处理后再生成 All Time Buy 计划",
+        "所选配件存在未圆整（含小数）的年份，请先对选中的配件执行「圆整」处理后再生成 bridge buy 计划",
+    ]
+    miss = [k for k in need if k not in src]
+    bad = [k for k in stale if k in src]
+    ok = (not miss) and (not bad)
+    detail = f"缺失={miss if miss else '无'} 残留旧口径={bad if bad else '无'}"
+    return {"key": "po-atb-bridge-整数校验", "ok": ok, "msg": detail}
+
+
 def check_fc_long_editmode():
     """长周期预测报表：默认展示态（仅「编辑」按钮、预测值只读）；点击「编辑」进入编辑态后，工具栏出现「保存」、预测值出现数字输入框（ant-input-number）。"""
     inject = ("<script>setTimeout(function(){"
@@ -2116,6 +2148,10 @@ def main():
         r = check_po_plan()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-plan-3pages {r['msg']}")
+    if only in (None, 'atb-bridge-int', 'po-atb', 'po-bridge', 'po'):
+        r = check_po_atb_bridge_integer()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-atb-bridge-整数校验 {r['msg']}")
     if only in (None, 'qty-col-order', 'po-plan', 'po'):
         r = check_qty_col_order()
         all_ok = all_ok and r["ok"]

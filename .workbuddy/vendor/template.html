@@ -2756,7 +2756,10 @@
             <a-modal v-model:open="fcBridgeOpen" title="生成 bridge buy 计划" :width="1200" :footer="null" :mask-closable="false">
               <template v-if="!fcBridgeDone">
                 <a-alert type="info" :show-icon="true" style="margin-bottom:14px;">
-                  <template #message>已选择 <b>{{ fcLongSel.length }}</b> 个配件（来自长周期预测报表勾选行）。请选择 bridge buy 买断年数，下方按配件维度展示所选年数对应年份区间（首年~末年）的各年预测需求与合计。</template>
+                  <template #message>已选择 <b>{{ fcLongSel.length }}</b> 个配件（来自长周期预测报表勾选行）。请选择 bridge buy 买断年数，下方按配件维度展示所选年数对应年份区间（首年~末年）的各年预测需求与合计。计划数量须为整数，生成前系统将校验「长周期预测报表」全部配件（10 年）均已圆整，仍存在小数将不允许生成。</template>
+                </a-alert>
+                <a-alert v-if="!fcBridgeAllRounded" type="warning" :show-icon="true" style="margin-bottom:14px;">
+                  <template #message>「长周期预测报表」仍存在未圆整（含小数）的配件，请先对全部配件执行「圆整」后再生成 bridge buy 计划。</template>
                 </a-alert>
                 <a-form layout="vertical">
                   <a-form-item label="bridge buy买断年数" required>
@@ -2773,7 +2776,7 @@
 
                 <div class="jlrs-modal-footer">
                   <a-button @click="fcBridgeOpen=false">取 消</a-button>
-                  <a-button type="primary" :disabled="!fcLongSel.length" @click="fcBridgeGenerate">生成bridge buy 计划</a-button>
+                  <a-button type="primary" :disabled="!fcLongSel.length || !fcBridgeAllRounded" @click="fcBridgeGenerate">生成bridge buy 计划</a-button>
                 </div>
               </template>
               <template v-else>
@@ -2793,7 +2796,10 @@
             <a-modal v-model:open="fcAllTimeOpen" title="生成 All Time Buy 计划" :width="1200" :footer="null" :mask-closable="false">
               <template v-if="!fcAllTimeDone">
                 <a-alert type="info" :show-icon="true" style="margin-bottom:14px;">
-                  <template #message>已选择 <b>{{ fcBatchSelIds.length }}</b> 个配件（来自一次买断预测结果勾选行）。All Time Buy 为一次性买断剩余生命周期（{{ fcLongFctYears[0] }}~{{ fcLongFctYears[fcLongFctYears.length-1] }}）的全部预测需求。</template>
+                  <template #message>已选择 <b>{{ fcBatchSelIds.length }}</b> 个配件（来自一次买断预测结果勾选行）。All Time Buy 为一次性买断剩余生命周期（{{ fcLongFctYears[0] }}~{{ fcLongFctYears[fcLongFctYears.length-1] }}）的全部预测需求。计划数量须为整数，生成前系统将校验「一次买断预测结果」全部配件（10 年）均已圆整，仍存在小数将不允许生成。</template>
+                </a-alert>
+                <a-alert v-if="!fcAllTimeAllRounded" type="warning" :show-icon="true" style="margin-bottom:14px;">
+                  <template #message>「一次买断预测结果」仍存在未圆整（含小数）的配件，请先对全部配件执行「圆整」后再生成 All Time Buy 计划。</template>
                 </a-alert>
                 <div class="bt-sec-t" style="margin:6px 0 10px;">所选配件明细<span class="bt-sec-sub">各年预测需求按配件维度按列展示，末列为全周期合计</span></div>
                 <a-table :columns="fcAllTimeCols" :data-source="fcAllTimeRows" row-key="id"
@@ -2801,7 +2807,7 @@
                   :scroll="{ x: 1250 }" :locale="{emptyText:'请先在一次买断预测结果中勾选配件'}"/>
                 <div class="jlrs-modal-footer">
                   <a-button @click="fcAllTimeOpen=false">取 消</a-button>
-                  <a-button type="primary" :disabled="!fcBatchSelIds.length" @click="fcAllTimeGenerate">生成 All Time Buy 计划</a-button>
+                  <a-button type="primary" :disabled="!fcBatchSelIds.length || !fcAllTimeAllRounded" @click="fcAllTimeGenerate">生成 All Time Buy 计划</a-button>
                 </div>
               </template>
               <template v-else>
@@ -10276,6 +10282,8 @@ const app = createApp({
       return fcAllTimeSelRows.value.length ? fcAllTimeSelRows.value.concat([fcAllTimeTotalRow.value]) : [];
     });
     function fcAllTimeRowClass(rec){ return rec.id === '__AT_TOTAL__' ? 'fc-bridge-total-row' : ''; }
+    // 生成前须确保「一次买断预测结果」全部配件（10 年）均已圆整为整数；否则不允许生成
+    const fcAllTimeAllRounded = computed(()=> fcGenRoundedBad(fcBuyoutData, fcLongKeys).length === 0);
     const fcAllTimeResultCols = [
       { title:'配件号', dataIndex:'part_code', width:180 },
       { title:'配件名称', dataIndex:'part_name', width:380, ellipsis:true },
@@ -10285,10 +10293,10 @@ const app = createApp({
     function fcAllTimeGenerate(){
       const sel = fcAllTimeSelRows.value;
       if(!sel.length){ antd.message.warning('请先在一次买断预测结果中勾选配件'); return; }
-      // 圆整校验：全生命周期 10 年必须均已圆整为整数，否则提示先圆整再生成
-      const bad = fcGenRoundedBad(fcAllTimeSelRowsRaw.value, fcLongKeys);
+      // 圆整校验：生成前须确保「一次买断预测结果」全部配件（10 年）均已圆整为整数，否则不允许生成
+      const bad = fcGenRoundedBad(fcBuyoutData, fcLongKeys);
       if(bad.length){
-        antd.message.warning('所选配件存在未圆整（含小数）的年份，请先对选中的配件执行「圆整」处理后再生成 All Time Buy 计划：' + bad.slice(0,5).join('、') + (bad.length > 5 ? ' 等' : ''));
+        antd.message.warning('一次买断预测结果仍存在未圆整（含小数）的年份，请先对全部配件执行「圆整」处理后再生成 All Time Buy 计划：' + bad.slice(0,5).join('、') + (bad.length > 5 ? ' 等' : ''));
         return;
       }
       const period = fcLongFctYears[0] + '~' + fcLongFctYears[fcLongFctYears.length - 1];
@@ -10391,13 +10399,15 @@ const app = createApp({
       });
       return bad;
     }
+    // 生成前须确保「长周期预测报表」全部配件（10 年）均已圆整为整数；否则不允许生成
+    const fcBridgeAllRounded = computed(()=> fcGenRoundedBad(fcLongData, fcLongKeys).length === 0);
     function fcBridgeGenerate(){
       const sel = fcBridgeSelRows.value;
       if(!sel.length){ antd.message.warning('请先在长周期预测报表中勾选配件'); return; }
-      // 圆整校验：所选配件必须整体已圆整（10 年预测均为整数），否则提示先圆整再生成
-      const bad = fcGenRoundedBad(fcBridgeSelRowsRaw.value, fcLongKeys);
+      // 圆整校验：生成前须确保「长周期预测报表」全部配件（10 年）均已圆整为整数，否则不允许生成
+      const bad = fcGenRoundedBad(fcLongData, fcLongKeys);
       if(bad.length){
-        antd.message.warning('所选配件存在未圆整（含小数）的年份，请先对选中的配件执行「圆整」处理后再生成 bridge buy 计划：' + bad.slice(0,5).join('、') + (bad.length > 5 ? ' 等' : ''));
+        antd.message.warning('长周期预测报表仍存在未圆整（含小数）的年份，请先对全部配件执行「圆整」处理后再生成 bridge buy 计划：' + bad.slice(0,5).join('、') + (bad.length > 5 ? ' 等' : ''));
         return;
       }
       fcBridgeData.length = 0;
@@ -11278,10 +11288,10 @@ const app = createApp({
       fcRefModal, fcOpenRefModal, fcSaveRef, fcDelRef, fcImportOpen, fcDoImport,
       fcDrawer, fcDrawerTitle, fcDrawerCols, fcDrawerRows, fcOpenDrawer, fcGenPurchase,
       fcAllTimeOpen, fcAllTimeDone, fcAllTimeData, fcAllTimeGenSum, fcAllTimeCols, fcAllTimeRows,
-      fcAllTimeRowClass, fcAllTimeResultCols, fcAllTimeGenerate,
+      fcAllTimeRowClass, fcAllTimeResultCols, fcAllTimeGenerate, fcAllTimeAllRounded,
       fcBatchable, fcBuyoutSel, fcBatchSelIds,
       fcBridgeOpen, fcBridgeYear, fcBridgeYearsN, fcBridgeYearRange, fcBridgeDone, fcBridgeData, fcBridgeDetailCols, fcBridgeDetailRows, fcBridgeScrollX,
-      fcBridgeDetailRowClass, fcBridgeGenSum, fcBridgeCols, fcBridgeGenerate, fcLongFctYears,
+      fcBridgeDetailRowClass, fcBridgeGenSum, fcBridgeCols, fcBridgeGenerate, fcBridgeAllRounded, fcLongFctYears,
       fcLongTotal, fcLongYearVal, isFcLong, fcLongSel, fcLongBatchM, fcLongBatchApply, genRowSelection,
       fcLongBatchTargets,
       poIssueSel, poIssueSelected, poIssueCanApprove, poIssueCanReject,
