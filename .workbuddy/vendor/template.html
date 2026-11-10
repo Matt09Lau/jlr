@@ -2759,7 +2759,7 @@
                   <template #message>已选择 <b>{{ fcLongSel.length }}</b> 个配件（来自长周期预测报表勾选行）。请选择 bridge buy 买断年数，下方按配件维度展示所选年数对应年份区间（首年~末年）的各年预测需求与合计。计划数量须为整数，生成前系统将校验「长周期预测报表」全部配件（10 年）均已圆整，仍存在小数将不允许生成。</template>
                 </a-alert>
                 <a-alert v-if="!fcBridgeAllRounded" type="warning" :show-icon="true" style="margin-bottom:14px;">
-                  <template #message>「长周期预测报表」仍存在未圆整（含小数）的配件，请先对全部配件执行「圆整」后再生成 bridge buy 计划。</template>
+                  <template #message>「长周期预测报表」仍存在未圆整（含小数）的年份，请先对全部配件执行「圆整」后再生成 bridge buy 计划。</template>
                 </a-alert>
                 <a-form layout="vertical">
                   <a-form-item label="bridge buy买断年数" required>
@@ -2799,7 +2799,7 @@
                   <template #message>已选择 <b>{{ fcBatchSelIds.length }}</b> 个配件（来自一次买断预测结果勾选行）。All Time Buy 为一次性买断剩余生命周期（{{ fcLongFctYears[0] }}~{{ fcLongFctYears[fcLongFctYears.length-1] }}）的全部预测需求。计划数量须为整数，生成前系统将校验「一次买断预测结果」全部配件（10 年）均已圆整，仍存在小数将不允许生成。</template>
                 </a-alert>
                 <a-alert v-if="!fcAllTimeAllRounded" type="warning" :show-icon="true" style="margin-bottom:14px;">
-                  <template #message>「一次买断预测结果」仍存在未圆整（含小数）的配件，请先对全部配件执行「圆整」后再生成 All Time Buy 计划。</template>
+                  <template #message>「一次买断预测结果」仍存在未圆整（含小数）的年份，请先对全部配件执行「圆整」后再生成 All Time Buy 计划。</template>
                 </a-alert>
                 <div class="bt-sec-t" style="margin:6px 0 10px;">所选配件明细<span class="bt-sec-sub">各年预测需求按配件维度按列展示，末列为全周期合计</span></div>
                 <a-table :columns="fcAllTimeCols" :data-source="fcAllTimeRows" row-key="id"
