@@ -1975,6 +1975,23 @@ def check_sto_export_template():
     return {"ok": not bad,
             "msg": "正常（10 列表头 + 4 项固定值；CSV 严格模板列、不受列设置影响）" if not bad else "异常: " + ", ".join(bad)}
 
+def check_warehouse_gb09():
+    """仓网中心仓 JB09 → GB09 更名一致性校验。"""
+    tpl = os.path.join(VENDOR_DIR, "template.html")
+    wn = os.path.join(PROJECT_DIR, "前端设计稿", "warehouse-network.js")
+    bad = []
+    for label, path in (("template.html", tpl), ("warehouse-network.js", wn), ("成品HTML", HTML)):
+        if not os.path.exists(path):
+            bad.append(f"{label} 不存在")
+            continue
+        s = open(path, encoding="utf-8").read()
+        if "JB09" in s:
+            bad.append(f"{label} 仍残留 JB09（{s.count('JB09')} 处）")
+        if "GB09" not in s:
+            bad.append(f"{label} 未出现 GB09")
+    return {"ok": not bad,
+            "msg": "GB09 更名一致（JB09 零残留）" if not bad else "异常: " + ", ".join(bad)}
+
 def main():
     only = sys.argv[1] if len(sys.argv) > 1 else None
     pages = [p for p in PAGES if (only is None or p[0]==only)]
@@ -2204,6 +2221,10 @@ def main():
         r = check_activity_register()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] activity-register {r['msg']}")
+    if only in (None, 'wh-gb09', 'warehouse', 'sto', 'sto-summary'):
+        r = check_warehouse_gb09()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] 仓网-JB09→GB09 {r['msg']}")
     print("==== 汇总:", "全部通过" if all_ok else "存在失败", "====")
 
 if __name__ == "__main__":

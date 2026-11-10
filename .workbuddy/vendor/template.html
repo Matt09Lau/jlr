@@ -7617,7 +7617,7 @@ const app = createApp({
       { title:'导出状态', key:'export_status', dataIndex:'export_status', width:90, fixed:'right' },
       { title:'操作', key:'action', width:80, fixed:'right' },
     ]);
-    /* 固定值随发货仓切换：CJDC（及 JB09 等）→ CJV0 / CJLR；CN00 → CN01 / CN02 */
+    /* 固定值随发货仓切换：CJDC（及 GB09 等）→ CJV0 / CJLR；CN00 → CN01 / CN02 */
     function stoExpOrgConst(r){ return (r && r.from_wh && r.from_wh.indexOf('CN00')===0) ? 'CN01' : 'CJV0'; }
     function stoExpCompConst(r){ return (r && r.from_wh && r.from_wh.indexOf('CN00')===0) ? 'CN02' : 'CJLR'; }
     function stoExpVal(r, c){ return c.constVal !== undefined ? (typeof c.constVal==='function' ? c.constVal(r) : c.constVal) : r[c.dataIndex]; }
@@ -7755,12 +7755,12 @@ const app = createApp({
          预期库存 / 现有库存 / 当前库存占比 / 分配后库存占比 / 目标库存占比
        + 中心仓 4 列（中心仓指标，取自 6.4.3.2）：全网可用库存 / STO分配后库存 / STO分配总量 / 近3个月月均销量
        列数：CJLR、JLR＝3＋9×4＋4＝43 列；JLRC＝3＋9×3＋4＝34 列。
-       三套仓网（跨仓网不共享库存）：CJLR＝CJDC→CJV0~CJV3；JLR＝JB09→CN00~CN03；JLRC＝CN00→CN01~CN03。
+       三套仓网（跨仓网不共享库存）：CJLR＝CJDC→CJV0~CJV3；JLR＝GB09→CN00~CN03；JLRC＝CN00→CN01~CN03。
        页面只读：无新增/编辑/审批/导入，仅支持查询与导出。 */
     /* ---- 仓网结构（跨仓网不共享库存）：中心仓 → 区域仓 ---- */
     const stoSumNetMap = {
       CJLR: { center:'CJDC', regions:['CJV0','CJV1','CJV2','CJV3'] },
-      JLR:  { center:'JB09', regions:['CN00','CN01','CN02','CN03'] },
+      JLR:  { center:'GB09', regions:['CN00','CN01','CN02','CN03'] },
       JLRC: { center:'CN00', regions:['CN01','CN02','CN03'] },
     };
     /* 每个区域仓固定 9 列，指标名严格取自 6.4.3.2 计算逻辑表（分仓指标）：
