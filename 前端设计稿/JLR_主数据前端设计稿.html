@@ -1078,7 +1078,7 @@ mark {
                 <a-button danger :disabled="!poRegCanReject" @click="poRegRejectOpen=true">驳回</a-button>
                 <a-button @click="poRegImportOpen=true">⬆ 导入</a-button>
                 <a-button @click="poRegExportCsv(false)">⬇ 导出</a-button>
-                <a-button type="primary" @click="poOrderOpenModal">创建订单</a-button>
+                <a-button type="primary" @click="poOrderOpenModal">创建计划</a-button>
                 <span style="margin-left:8px;color:#888;font-size:12px;" v-if="poRegSelected.length">已选 {{ poRegSelected.length }} 行</span>
                 <div class="toolbar-icons">
                   <a-dropdown>
@@ -1370,10 +1370,11 @@ mark {
               </div>
             </a-modal>
 
-            <!-- 创建订单弹窗：配件号从配件主数据联想选择；多供应商时供应商可下拉改选，其余字段自动带出；提交后生成「待审批」采购订单 -->
-            <a-modal v-model:open="poOrderOpen" title="创建订单 · 采购计划" :width="1080" :footer="null" :mask-closable="false">
+            <!-- 创建计划弹窗：配件号从配件主数据联想选择；多供应商时供应商可下拉改选，其余字段自动带出；
+                 备注列可从「活动登记表」联想选择活动名称，也允许直接手工输入；提交后生成「待审批」计划行 -->
+            <a-modal v-model:open="poOrderOpen" title="创建计划 · 采购计划" :width="1080" :footer="null" :mask-closable="false">
               <a-alert v-if="poOrderErr" type="error" :message="poOrderErr" show-icon style="margin-bottom:12px;"/>
-              <div class="bt-sec-t" style="margin:0 0 8px;">订单明细（可添加多条，每行一个配件）</div>
+              <div class="bt-sec-t" style="margin:0 0 8px;">计划明细（可添加多条，每行一个配件）<span style="margin-left:8px;color:#888;font-size:12px;font-weight:400;">备注列可联想选择活动名称，也可直接手工输入</span></div>
               <a-table :columns="poOrderCols" :data-source="poOrderRows" row-key="_id" :pagination="false" size="small" bordered :scroll="{x:1000}">
                 <template #bodyCell="{ column, record }">
                   <template v-if="column.key==='part_code'">
@@ -1392,16 +1393,20 @@ mark {
                   </template>
                   <template v-else-if="column.key==='supplier_name'"><span :style="record.supplier_name?'':'color:#bbb'">{{ record.supplier_name || '自动带出' }}</span></template>
                   <template v-else-if="column.key==='qty'"><a-input-number v-model:value="record.qty" size="small" :min="1" :precision="0" style="width:100%"/></template>
-                  <template v-else-if="column.key==='remark'"><a-input v-model:value="record.remark" size="small" placeholder="备注（如：某某活动单独下单）"/></template>
+                  <template v-else-if="column.key==='remark'">
+                    <a-auto-complete v-model:value="record.remark" size="small" style="width:100%" allow-clear
+                      :options="poOrderActOptions" :filter-option="poOrderActFilter"
+                      placeholder="选择或输入活动名称"/>
+                  </template>
                   <template v-else-if="column.key==='_op'"><a @click="poOrderDelRow(record)" style="color:#ff4d4f;">删除</a></template>
                   <template v-else>{{ record[column.dataIndex] }}</template>
                 </template>
-                <template #emptyText><a-empty description="暂无订单明细，请点击下方「添加一行」"/></template>
+                <template #emptyText><a-empty description="暂无计划明细，请点击下方「添加一行」"/></template>
               </a-table>
               <a-button type="dashed" block style="margin-top:10px;" @click="poOrderAddRow">＋ 添加一行</a-button>
               <div class="jlrs-modal-footer">
                 <a-button @click="poOrderOpen=false">取消</a-button>
-                <a-button type="primary" @click="poOrderSubmit">创建订单</a-button>
+                <a-button type="primary" @click="poOrderSubmit">创建计划</a-button>
               </div>
             </a-modal>
           </template>
@@ -5597,7 +5602,7 @@ const poRegBlockReasonAssignPool = poRegBlockReasons.flatMap(g=>g.items);
 // 历史采购计划（po-history）：归档计划保留全部拦截原因取值（含无需审核类），保证各类值都有演示数据
 const poAllBlockReasons = ['多供应商','联合MOQ凑单超量','成套采购凑单超量','活动零件','零件无计划员','无有效合同','非计划日','库存充足','替代拦截','一次买断件','直供件','手工下单'];
 const poHistBlockReasonOptions = [{ label:'全部拦截原因', title:'全部拦截原因', options: poAllBlockReasons.map(v=>({ value:v, label:v })) }];
-// 无需计划员处理的拦截原因：5 类系统自动拦截 + 「手工下单」（已由计划员手工创建订单单独下单）→ 编辑弹窗只读。
+// 无需计划员处理的拦截原因：5 类系统自动拦截 + 「手工下单」（已由计划员手工创建计划单独下单）→ 编辑弹窗只读。
 const poNoActionReasons = ['非计划日','库存充足','替代拦截','一次买断件','直供件','手工下单'];
 // 备注列派生"不推荐出单"提示的范围：仅 5 类系统自动拦截；「手工下单」已单独出单，备注只展示人工填写的原因。
 const poNoIssueReasons = poNoActionReasons.filter(v=>v!=='手工下单');
@@ -5831,7 +5836,7 @@ for(let i=0;i<64;i++){
   poRegularData.push(_row);
 }
 
-/* 手工下单拦截演示行：由「创建订单」功能手工单独下单产生，系统不再生成常规计划。
+/* 手工下单拦截演示行：由「创建计划」功能手工单独下单产生，系统不再生成常规计划。
    拦截原因＝手工下单（无需计划员处理），备注列只展示单独下单原因，不附"不推荐出单"。 */
 const poManualOrderNotes = [
   '市场促销活动配件单独下单，已手工创建采购订单',
@@ -7077,18 +7082,33 @@ const app = createApp({
       poRegSelected.value.forEach(r=>{ r.bill_status='已驳回'; r.approve_remark=poRegRejectRemark.value; r.approver='当前审批人'; r.approve_time=now; r.plan_batch='—'; r.plan_line='—'; r.update_time=now; });
       msg('已驳回 '+poRegSelected.value.length+' 行','success'); poRegRejectOpen.value=false; poRegRejectRemark.value=''; poRegRejectErr.value=''; poRegSelectedKeys.value=[];
     }
-    // 创建订单：配件号从配件主数据联想选择，其余字段自动带出；提交后直接生成「待审批」采购订单
+    // 创建计划：配件号从配件主数据联想选择，其余字段自动带出；提交后直接生成「待审批」计划行
     const poOrderOpen = ref(false);
     const poOrderErr = ref('');
     const poOrderRows = ref([]);
     const poOrderPartOptions = computed(()=> matData.map(m=>({ value:m.material_code, label:m.material_code+'  '+m.material_name })));
+    // 备注联想：取「活动登记表」已登记的活动名称去重，供创建计划时直接选择；
+    // 自动完成组件只做建议，不限制取值，因此仍可直接手工输入未登记的活动名称或任意备注。
+    const poOrderActOptions = computed(()=>{
+      const out = [], seen = {};
+      actRegData.forEach(function(x){
+        const n = String(x.activity_name || '').trim();
+        if(!n || seen[n]) return;
+        seen[n] = 1; out.push({ value:n });
+      });
+      return out;
+    });
+    function poOrderActFilter(input, option){
+      const s = String(input || '').toLowerCase();
+      return String((option && option.value) || '').toLowerCase().indexOf(s) >= 0;
+    }
     const poOrderCols = [
       { title:'配件号', key:'part_code', dataIndex:'part_code', width:190 },
       { title:'配件名称', key:'part_name', dataIndex:'part_name', width:150 },
       { title:'供应商代码', key:'supplier_code', dataIndex:'supplier_code', width:120 },
       { title:'供应商名称', key:'supplier_name', dataIndex:'supplier_name', width:180 },
-      { title:'订单数量', key:'qty', dataIndex:'qty', width:110 },
-      { title:'备注', key:'remark', dataIndex:'remark', width:150 },
+      { title:'计划数量', key:'qty', dataIndex:'qty', width:110 },
+      { title:'备注', key:'remark', dataIndex:'remark', width:240 },
       { title:'操作', key:'_op', width:70, fixed:'right' },
     ];
     let poOrderSeq = 0;
@@ -7136,9 +7156,9 @@ const app = createApp({
     }
     function poOrderSubmit(){
       const rows = poOrderRows.value;
-      if(!rows.length){ poOrderErr.value='请至少添加一条订单明细'; return; }
+      if(!rows.length){ poOrderErr.value='请至少添加一条计划明细'; return; }
       const bad = rows.find(r=> !r.part_code || !r.supplier_code || !(r.qty>0));
-      if(bad){ poOrderErr.value='请从配件主数据中选择配件号，并确认订单数量大于 0'; return; }
+      if(bad){ poOrderErr.value='请从配件主数据中选择配件号，并确认计划数量大于 0'; return; }
       let n=0;
       rows.forEach(r=>{
         const now = new Date().toISOString().slice(0,16).replace('T',' ');
@@ -7151,18 +7171,18 @@ const app = createApp({
           way:'手工下单', status:'待审批', planner:'当前计划员',
           approve_remark:'—', approver:'—', approve_time:'—', remark:r.remark||'—'
         });
-        // 手工创建订单后，常规采购计划中同配件的计划行标记「手工下单」拦截，避免系统重复出单；
-        // 弹窗填写的备注同步带入计划行「备注」列（如：某某活动单独下单）。
+        // 手工创建计划后，常规采购计划中同配件的计划行标记「手工下单」拦截，避免系统重复出单；
+        // 弹窗填写（或联想选择）的备注同步带入计划行「备注」列（如：某某活动单独下单）。
         poRegularData.forEach(p=>{
           if(p.part_code===r.part_code){
             p.is_blocked='是'; p.block_reason='手工下单';
-            p.remark=(r.remark && r.remark.trim()) ? r.remark.trim() : '手工创建订单单独下单';
+            p.remark=(r.remark && r.remark.trim()) ? r.remark.trim() : '手工创建计划单独下单';
             p.update_time=now; p.modifier='当前用户';
           }
         });
         n++;
       });
-      msg('已创建 '+n+' 张采购订单（待审批），可在「采购订单下达」中审批','success');
+      msg('已创建 '+n+' 条计划（待审批），可在「采购订单下达」中审批','success');
       poOrderOpen.value=false;
     }
 
@@ -7533,7 +7553,7 @@ const app = createApp({
       '替代拦截':'替代关系拦截，计划员无需处理',
       '一次买断件':'一次买断件，计划员无需处理',
       '直供件':'直供件，计划员无需处理',
-      '手工下单':'该配件已由计划员手工创建订单单独下单，系统不再生成常规计划，计划员无需处理',
+      '手工下单':'该配件已由计划员手工创建计划单独下单，系统不再生成常规计划，计划员无需处理',
     };
     const poRegEditBlockNote = computed(()=> poRegEditBlockNoteMap[poRegEditRow.value ? poRegEditRow.value.block_reason : ''] || '');
     // 活动零件拦截：优先读「历史需求处理 · 活动登记表」的实时登记（活动数量取登记总量），回退静态原型数据
@@ -7629,7 +7649,7 @@ const app = createApp({
           }
           pushLog('解除拦截','是否计划拦截、拦截原因','是','否','系统','登记活动信息（'+actType+'，活动数量 '+actQty+'）后拦截消除');
         } else {
-          // 系统自动拦截（计划员无需处理）：维持拦截，不产生变更日志；备注由「创建订单」回写，不在本弹窗维护。
+          // 系统自动拦截（计划员无需处理）：维持拦截，不产生变更日志；备注由「创建计划」回写，不在本弹窗维护。
         }
         upd.chg_log = log;
         const last = log[log.length-1]; if(last){ upd.last_change_type = last.type; upd.last_change_time = last.time; }
@@ -11469,7 +11489,7 @@ const app = createApp({
       poRegChgOpen, poRegChgRow, poRegOpenChgLog, poRegChgColumns, poRegChgColor,
       poRegImportOpen, poRegDoImport, poRegExportOpen, poRegExportMode, poRegExportFields, poRegToggleExportField,
       poRegExportCsv, poRegExportSource, poRegDoExport, poRegPush, poRegMoreMenu, poRegPlanTypes, poRegReceiveModes, poRegStatuses, poRegPurchaseTypes, poRegBlockReasonOptions, poRegPushStatuses,
-      poOrderOpen, poOrderErr, poOrderRows, poOrderCols, poOrderPartOptions, poOrderOpenModal, poOrderAddRow, poOrderDelRow, poOrderOnPart, poOrderOnSupplier, poOrderSubmit,
+      poOrderOpen, poOrderErr, poOrderRows, poOrderCols, poOrderPartOptions, poOrderActOptions, poOrderActFilter, poOrderOpenModal, poOrderAddRow, poOrderDelRow, poOrderOnPart, poOrderOnSupplier, poOrderSubmit,
       actRegStatuses, actRegTypes, actRegPartOptions, actRegFilters, actRegPage, actRegDoSearch, actRegResetSearch,
       actRegFiltered, actRegPaged, actRegColumns, actRegScrollX, actRegDayCols, actRegStatusColor,
       actRegFormOpen, actRegFormErr, actRegForm, actRegImgMax, actRegBeforeImg, actRegRemoveImg,

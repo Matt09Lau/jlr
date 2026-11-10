@@ -176,15 +176,15 @@ def check_po_regular_activity():
     return {"key":"po-regular-活动零件","ok":ok,"msg":detail}
 
 def check_po_order():
-    """采购计划-创建订单弹窗（2026-11-06）：
+    """采购计划-创建订单弹窗（2026-11-06；2026-11-10 更名为创建计划）：
     ① 按截图去掉「交付提前期」列；该字段仅不再展示，后台仍必须带出 lead_days 用于自动计算
-       要求到货日期（eta_date = 下单日期 + 提前期），否则生成的采购订单到货日期会失真；
+       要求到货日期（eta_date = 下单日期 + 提前期），否则生成的计划行到货日期会失真；
     ② 多供应商（同一配件在「配件与供应商关系」中有多条）时，供应商代码列改为可搜索下拉，
        改选后供应商名称与提前期同步切换；单供应商仍只读自动带出。
     源码级断言：弹窗与 7 列仍在、提前期计算链完整、供应商下拉与联动函数齐备、无旧单条取值残留。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
-    need = ["创建订单 · 采购计划", "poOrderCols", "poOrderRows", "poOrderOnPart", "poOrderEta",
-            "poOrderSubmit", "title:'订单数量'", "title:'备注'",
+    need = ["创建计划 · 采购计划", "poOrderCols", "poOrderRows", "poOrderOnPart", "poOrderEta",
+            "poOrderSubmit", "title:'计划数量'", "title:'备注'",
             "eta_date:poOrderEta(issueDate, r.lead_days)",
             "poOrderSupplierOptions", "poOrderOnSupplier", "supplier_options:[]",
             "record.supplier_options.length>1", ':options="record.supplier_options"',
@@ -196,26 +196,70 @@ def check_po_order():
            "const rel = code ? partSupplierData.find"]
     miss = [k for k in need if k not in src]
     stale = [k for k in bad if k in src]
+    # 「订单」字样在采购订单下达（poIssueColumns 的 title:'订单数量'）等页面合法存在，
+    # 因此本弹窗的列名断言只在 poOrderCols 区间内判定，禁止全局裸词。
+    mcols = re.search(r"const poOrderCols = \[(.*?)\n\s*\];", src, re.S)
+    if not mcols:
+        miss.append("poOrderCols 区间未定位")
+    else:
+        seg = mcols.group(1)
+        if "title:'计划数量'" not in seg:
+            miss.append("poOrderCols 缺「计划数量」列")
+        if "title:'订单数量'" in seg:
+            stale.append("poOrderCols 残留「订单数量」列")
     ok = (not miss) and (not stale)
     detail = f"缺失={miss if miss else '无'} 残留={stale if stale else '无'}"
-    return {"key":"po-regular-创建订单", "ok":ok, "msg":detail}
+    return {"key":"po-regular-创建计划", "ok":ok, "msg":detail}
+
+def check_po_create_plan():
+    """采购计划「创建订单」更名「创建计划」+ 备注列联想活动名称（2026-11-10）。
+    ① 入口按钮、弹窗标题、明细标题、提交按钮、空表文案、数量列名全部改称「计划」，旧称零残留；
+    ② 备注列由 a-input 改为 a-auto-complete：数据源取「活动登记表」actRegData 的活动名称去重，
+       既可联想选择，也不限制手工输入（无 :options 强约束、组件仅作建议）；
+    ③ 保存后将所选/所输备注回写同配件计划行「备注」列，缺省兜底文案同步为「手工创建计划单独下单」。
+    源码级断言：只看弹窗区间内的组件与函数，避免误伤采购订单下达等其它页面的「订单」字样。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    need = [">创建计划</a-button>",
+            "创建计划 · 采购计划",
+            "计划明细（可添加多条，每行一个配件）",
+            "暂无计划明细",
+            '<a-auto-complete v-model:value="record.remark"',
+            'placeholder="选择或输入活动名称"',
+            ':options="poOrderActOptions"',
+            ':filter-option="poOrderActFilter"',
+            "const poOrderActOptions = computed(",
+            "function poOrderActFilter(input, option){",
+            "actRegData.forEach(function(x){",
+            "out.push({ value:n });",
+            "poOrderActOptions, poOrderActFilter, poOrderOpenModal",
+            "p.remark=(r.remark && r.remark.trim()) ? r.remark.trim() : '手工创建计划单独下单';",
+            "已创建 '+n+' 条计划（待审批）"]
+    bad = [">创建订单</a-button>", "创建订单 · 采购计划",
+           "订单明细（可添加多条，每行一个配件）", "暂无订单明细",
+           'placeholder="备注（如：某某活动单独下单）"',
+           "手工创建订单单独下单", "创建订单回写"]
+    miss = [k for k in need if k not in src]
+    stale = [k for k in bad if k in src]
+    ok = (not miss) and (not stale)
+    detail = f"缺失={miss if miss else '无'} 残留={stale if stale else '无'}"
+    return {"key":"po-regular-创建计划/备注联想", "ok":ok, "msg":detail}
 
 def check_po_manual_order():
     """采购计划-手工下单拦截类型（2026-11-07）：
-    针对「手工创建订单」产生的行，新增拦截原因＝手工下单（无需计划员处理、编辑弹窗只读），
+    针对「手工创建计划」产生的行，新增拦截原因＝手工下单（无需计划员处理、编辑弹窗只读），
     备注写明单独下单原因（如某活动单独下单）；手工下单备注不附「不推荐出单」标签。
-    源码级断言：枚举/只读集合/不推荐出单集合/筛选分组/编辑提示/保存只读判定/订单提交回写/演示数据齐备。"""
+    源码级断言：枚举/只读集合/不推荐出单集合/筛选分组/编辑提示/保存只读判定/计划提交回写/演示数据齐备。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
     need = ["'直供件','手工下单']",
             "poNoActionReasons = ['非计划日','库存充足','替代拦截','一次买断件','直供件','手工下单']",
             "poNoIssueReasons = poNoActionReasons.filter(v=>v!=='手工下单')",
             "poNoActionReasons.includes(reason)",
             "无需审核（手工下单）",
-            "'手工下单':'该配件已由计划员手工创建订单单独下单",
+            "'手工下单':'该配件已由计划员手工创建计划单独下单",
             "poManualOrderNotes",
             "p.block_reason='手工下单'",
             "p.remark=(r.remark",
-            "备注（如：某某活动单独下单）"]
+            "选择或输入活动名称"]
     bad = ["poNoIssueReasons = ['非计划日','库存充足','替代拦截','一次买断件','直供件','手工下单']",
            "无需审核（不推荐出单）"]
     miss = [k for k in need if k not in src]
@@ -2096,10 +2140,14 @@ def main():
         r = check_po_regular_activity()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-regular-活动零件 {r['msg']}")
-    if only in (None, 'po-order', 'po-regular', 'po'):
+    if only in (None, 'po-order', 'po-regular', 'po', 'create-plan'):
         r = check_po_order()
         all_ok = all_ok and r["ok"]
-        print(f"[{'✓' if r['ok'] else '✗'}] po-regular-创建订单 {r['msg']}")
+        print(f"[{'✓' if r['ok'] else '✗'}] po-regular-创建计划 {r['msg']}")
+    if only in (None, 'po-create-plan', 'create-plan', 'po-order', 'po-regular', 'po'):
+        r = check_po_create_plan()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-创建计划/备注联想 {r['msg']}")
     if only in (None, 'po-manual-order', 'po-order', 'po-regular', 'po'):
         r = check_po_manual_order()
         all_ok = all_ok and r["ok"]
