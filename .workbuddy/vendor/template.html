@@ -5865,10 +5865,15 @@ const poRefData = Vue.reactive([]);
     const mpq = [20,50,100][i % 3];
     const moq = [100,200,300][i % 3];
     const plan = polPackQty(net, mpq, moq);
+    // 采购区间：参考零件首储亦需选定采购月份范围（未来 1~12 个月），展示如「1个月~3个月」
+    const piStart = 1 + (i * 2) % 6;            // 起始月 1~6
+    const piEnd = piStart + (1 + i % 4);        // 结束月，最长至起始月 + 4
+    const purchase_interval = piStart + '个月~' + piEnd + '个月';
     poRefData.push({
       id:'PRP'+(i+1), data_date:'2026-10-25',
       part_code:m.material_code, part_name:m.material_name, base:fcb(m.material_code),
       ref_vehicle:veh[i % veh.length], ref_part_code:refM.material_code,
+      purchase_interval:purchase_interval,
       forecast_qty:forecast, expected_stock:stock, net_demand:net, mpq, moq,
       plan_qty:plan, adjust_qty:plan, adjust_reason:'',
       bill_status:poRegStatuses[i % 4], approver:'', approve_time:'—',
@@ -8452,6 +8457,7 @@ const app = createApp({
           { title:'全国预期库存', key:'expected_stock', dataIndex:'expected_stock', width:120 },
           { title:'参考车型', key:'ref_vehicle', dataIndex:'ref_vehicle', width:110 },
           { title:'参考配件号', key:'ref_part_code', dataIndex:'ref_part_code', width:150 },
+          { title:'采购区间', key:'purchase_interval', dataIndex:'purchase_interval', width:120, sorter:(a,b)=> parseInt(String(a.purchase_interval)) - parseInt(String(b.purchase_interval)) },
           { title:'预测需求量', key:'forecast_qty', dataIndex:'forecast_qty', width:110, sorter:(a,b)=>a.forecast_qty-b.forecast_qty },
           { title:'净需求', key:'net_demand', dataIndex:'net_demand', width:96, sorter:(a,b)=>a.net_demand-b.net_demand },
           { title:'MOQ', key:'moq', dataIndex:'moq', width:80 },
