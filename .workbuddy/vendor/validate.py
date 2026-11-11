@@ -325,7 +325,7 @@ def check_po_edit_modal():
             'v-if="poRegEditPending"',
             "poRegEditPending, poRegOpenEdit",
             "Object.keys(poRegEditErr).forEach(k=>{ poRegEditErr[k]=''; });",
-            "仅保留 2 个通用调整字段，且不展示任何状态提示条",
+            "仅保留 2 个通用调整字段 + 要求交货时间公共字段，且不展示任何状态提示条",
             "const isPending = poRegEditPending.value;",
             "const upd = { modifier:'当前用户', update_time:ts, handled:true }",
             "if(!isPending){",
@@ -340,6 +340,51 @@ def check_po_edit_modal():
     stale = [k for k in bad if k in src]
     ok = (not miss) and (not stale)
     return {"key":"po-调整弹窗两形态", "ok":ok, "msg":f"缺失={miss if miss else '无'} 残留={stale if stale else '无'}"}
+
+def check_po_delivery_date():
+    """要求交货时间（2026-11-11）：创建计划弹窗 + 拦截调整弹窗 + 全链路展示。
+    ① 公共日期工具：禁用今天及之前（仅明天及以后可选）、提交兜底校验、最早可选日提示；
+    ② 创建计划弹窗：明细表新增列 + 每行 a-date-picker、必填校验、写回下达数据与手工下单拦截行；
+    ③ 拦截调整弹窗：两形态之外的公共字段、选填校验、保存写回计划行（不新增 9 类变更类型）；
+    ④ 展示：poRegColumns / 默认可见 / 详情 / 导出 / 历史页 / poIssueColumns / 两处 mock 数据。
+    """
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    need = [
+        "const poDeliveryDateMin = dayjs().add(1, 'day').format('YYYY-MM-DD');",
+        "function poDeliveryDisabledDate(current){",
+        "!current.isAfter(dayjs(), 'day')",
+        "function poDeliveryDateValid(v){",
+        ':disabled-date="poDeliveryDisabledDate"',
+        'value-format="YYYY-MM-DD"',
+        "title:'要求交货时间', key:'required_delivery_date', dataIndex:'required_delivery_date', width:150",
+        "{ title:'要求交货时间', key:'required_delivery_date', dataIndex:'required_delivery_date', width:120",
+        "const badDate = rows.find(r=> !poDeliveryDateValid(r.required_delivery_date));",
+        "required_delivery_date:r.required_delivery_date,",
+        "p.required_delivery_date=r.required_delivery_date;",
+        'v-model:value="poRegEditRow.required_delivery_date"',
+        "poRegEditErr.delivery=",
+        "upd.required_delivery_date = row.required_delivery_date || '';",
+        "delivery:''",
+        "poDeliveryDateMin, poDeliveryDisabledDate, poDeliveryDateValid, poOrderClearErr,",
+        "function poOrderClearErr(){ poOrderErr.value=''; }",
+        '@change="poOrderClearErr"',
+        "required_delivery_date:dayjs().add(7+(i%21),'day').format('YYYY-MM-DD')",
+        "required_delivery_date:dayjs().add(5+(i%20),'day').format('YYYY-MM-DD')",
+        "'required_delivery_date','bill_status'",
+        "要求交货时间为必填项",
+    ]
+    bad = ["poDeliveryDisabledDate(current){ return false; }"]
+    miss = [k for k in need if k not in src]
+    stale = [k for k in bad if k in src]
+    if src.count(':disabled-date="poDeliveryDisabledDate"') != 2:
+        miss.append("日期控件禁用绑定数异常(应 2：创建明细/拦截弹窗)")
+    if src.count("title:'要求交货时间'") != 3:
+        miss.append("要求交货时间列数异常(应 3：创建明细/采购计划/下达页)")
+    if src.count("required_delivery_date:dayjs().add(7+(i%21),'day')") != 2:
+        miss.append("采购计划/历史 mock 补值数异常(应 2)")
+    ok = (not miss) and (not stale)
+    return {"key":"po-要求交货时间", "ok":ok,
+            "msg":f"缺失={miss if miss else '无'} 残留={stale if stale else '无'}"}
 
 def check_activity_register():
     """历史需求处理-活动登记表（2026-11-06 迭代口径）：
@@ -1380,15 +1425,16 @@ def check_pg_no_max_months():
 def check_po_no_max_months():
     """采购计划（2026-11-09）：按 PRD 12.6「涉及到最大备货月数的逻辑都删除」口径，
     常规/历史采购计划列表、列设置、导出自选字段、单块详情弹窗共用 poRegColumns，
-    删除「最大备货月数」后统一为 57 数据列 + 1 操作列；「最高风控线」single_max_limit 保留。
+    删除「最大备货月数」后统一为 58 数据列 + 1 操作列（2026-11-11 新增「要求交货时间」列，由 57→58）；
+    「最高风控线」single_max_limit 保留。
     断言：源码级零残留 max_stock_months / maxStockMonths / title:'最大备货月数'，
-    poRegColumns 元素数 58，且保留最高风控线。裸词「最大备货月数」仅允许配件组章节 2 条注释。"""
+    poRegColumns 元素数 59，且保留最高风控线。裸词「最大备货月数」仅允许配件组章节 2 条注释。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
     stale = [k for k in ("max_stock_months", "maxStockMonths", "title:'最大备货月数'") if k in src]
     m = re.search(r'const poRegColumns\s*=\s*\[(.*?)\n\s*\];', src, re.S)
     n = len(re.findall(r"\{\s*title:'", m.group(1))) if m else -1
-    if n != 58:
-        stale.append("poRegColumns 元素数=%d(应为 57 数据列+操作列共 58)" % n)
+    if n != 59:
+        stale.append("poRegColumns 元素数=%d(应为 58 数据列+操作列共 59)" % n)
     if "single_max_limit" not in src:
         stale.append("最高风控线 single_max_limit 缺失")
     if "title:'最高风控线'" not in src or "title:'单品最大上限'" in src:
@@ -1396,7 +1442,7 @@ def check_po_no_max_months():
     if src.count("最大备货月数") != 2:
         stale.append("裸词「最大备货月数」出现 %d 次(应仅配件组 2 条注释)" % src.count("最大备货月数"))
     return {"key": "po-无最大备货月数", "ok": not stale,
-            "msg": f"poRegColumns={n}（57 数据列+操作列） 残留={stale if stale else '无'}"}
+            "msg": f"poRegColumns={n}（58 数据列+操作列） 残留={stale if stale else '无'}"}
 
 def check_qty_col_order():
     """4 个计划页数量列改名与调序（2026-11-10）。
@@ -2248,6 +2294,10 @@ def main():
         r = check_po_edit_modal()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-调整弹窗两形态 {r['msg']}")
+    if only in (None, 'delivery-date', 'po-order', 'po-regular', 'po'):
+        r = check_po_delivery_date()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] po-要求交货时间 {r['msg']}")
     if only in (None, 'activity-register'):
         r = check_activity_register()
         all_ok = all_ok and r["ok"]

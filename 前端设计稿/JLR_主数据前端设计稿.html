@@ -1254,7 +1254,7 @@ mark {
                 </div>
                 </template>
 
-                <!-- 已处理 / 非待提交：不再按拦截原因展示处理内容，仅保留 2 个通用调整字段，且不展示任何状态提示条 -->
+                <!-- 已处理 / 非待提交：不再按拦截原因展示处理内容，仅保留 2 个通用调整字段 + 要求交货时间公共字段，且不展示任何状态提示条 -->
                 <template v-else>
                   <div class="jlrs-form-grid">
                     <label><span><b class="jlrs-req">*</b>调整计划数量</span>
@@ -1264,6 +1264,21 @@ mark {
                       <a-textarea v-model:value="poRegEditRow.adjust_reason" :rows="3" placeholder="调整数量须填写原因，100 字以内" :maxlength="100"/></label>
                   </div>
                 </template>
+
+                <!-- 要求交货时间（公共字段）：两种弹窗形态均可维护，仅允许选择今天之后的日期 -->
+                <div class="jlrs-form-grid" style="margin-top:16px;padding-top:14px;border-top:1px dashed #e5e9f0;">
+                  <label><span>要求交货时间</span>
+                    <a-date-picker v-model:value="poRegEditRow.required_delivery_date" style="width:100%"
+                      value-format="YYYY-MM-DD" format="YYYY-MM-DD" placeholder="请选择今天之后的日期"
+                      :disabled-date="poDeliveryDisabledDate"/>
+                  </label>
+                  <label><span>要求到货日期（系统推算，只读）</span>
+                    <a-input :value="poRegEditRow.required_arrival_date || '—'" disabled/></label>
+                  <p style="grid-column:1 / -1;margin:0;color:#8c8c8c;font-size:12px;line-height:1.7;">
+                    要求交货时间由计划员按客户 / 业务要求指定，选填；填写后仅可选择今天之后的日期（最早 {{ poDeliveryDateMin }}），
+                    保存后写入计划行，并在列表、详情、导出与「采购订单下达」中展示。「要求到货日期」由系统按采购 LT 推算，仅供核对，不在此修改。
+                  </p>
+                </div>
 
                 <div class="jlrs-modal-footer">
                   <a-button @click="poRegEditOpen=false">取消</a-button>
@@ -1372,10 +1387,12 @@ mark {
 
             <!-- 创建计划弹窗：配件号从配件主数据联想选择；多供应商时供应商可下拉改选，其余字段自动带出；
                  备注列可从「活动登记表」联想选择活动名称，也允许直接手工输入；提交后生成「待审批」计划行 -->
-            <a-modal v-model:open="poOrderOpen" title="创建计划 · 采购计划" :width="1080" :footer="null" :mask-closable="false">
+            <a-modal v-model:open="poOrderOpen" title="创建计划 · 采购计划" :width="1240" :footer="null" :mask-closable="false">
               <a-alert v-if="poOrderErr" type="error" :message="poOrderErr" show-icon style="margin-bottom:12px;"/>
               <div class="bt-sec-t" style="margin:0 0 8px;">计划明细（可添加多条，每行一个配件）<span style="margin-left:8px;color:#888;font-size:12px;font-weight:400;">备注列可联想选择活动名称，也可直接手工输入</span></div>
-              <a-table :columns="poOrderCols" :data-source="poOrderRows" row-key="_id" :pagination="false" size="small" bordered :scroll="{x:1000}">
+              <a-alert type="info" show-icon style="margin-bottom:10px;"
+                :message="'要求交货时间为必填项，仅可选择今天之后的日期（最早 ' + poDeliveryDateMin + '）；系统按采购 LT 推算的「要求到货日期」在下达页供核对，不由本弹窗维护。'"/>
+              <a-table :columns="poOrderCols" :data-source="poOrderRows" row-key="_id" :pagination="false" size="small" bordered :scroll="{x:1210}">
                 <template #bodyCell="{ column, record }">
                   <template v-if="column.key==='part_code'">
                     <a-select v-model:value="record.part_code" size="small" style="width:100%" show-search allow-clear
@@ -1392,7 +1409,12 @@ mark {
                     <span v-else :style="record.supplier_code?'':'color:#bbb'">{{ record.supplier_code || '自动带出' }}</span>
                   </template>
                   <template v-else-if="column.key==='supplier_name'"><span :style="record.supplier_name?'':'color:#bbb'">{{ record.supplier_name || '自动带出' }}</span></template>
-                  <template v-else-if="column.key==='qty'"><a-input-number v-model:value="record.qty" size="small" :min="1" :precision="0" style="width:100%"/></template>
+                  <template v-else-if="column.key==='qty'"><a-input-number v-model:value="record.qty" size="small" :min="1" :precision="0" style="width:100%" @change="poOrderClearErr"/></template>
+                  <template v-else-if="column.key==='required_delivery_date'">
+                    <a-date-picker v-model:value="record.required_delivery_date" size="small" style="width:100%"
+                      value-format="YYYY-MM-DD" format="YYYY-MM-DD" placeholder="今天之后"
+                      :disabled-date="poDeliveryDisabledDate" :allow-clear="false" @change="poOrderClearErr"/>
+                  </template>
                   <template v-else-if="column.key==='remark'">
                     <a-auto-complete v-model:value="record.remark" size="small" style="width:100%" allow-clear
                       :options="poOrderActOptions" :filter-option="poOrderActFilter"
@@ -5830,6 +5852,7 @@ for(let i=0;i<64;i++){
     set_group:setGroup, set_fill_qty:setFillQty, suggest_set_qty:suggestSetQty, mpq,
     suggest_mpq_qty:suggestMpqQty, suggest_qty:suggestQty, is_blocked:isBlocked, block_reason:blockReason,
     adjust_qty:adjustQty, adjust_reason:((i % 7 === 3) ? '客户紧急订单追加，提前备货' : ''), required_arrival_date:requiredArrivalDate,
+    required_delivery_date:dayjs().add(7+(i%21),'day').format('YYYY-MM-DD'),
     bill_status:billStatus, approve_remark:approveRemark,
     update_time:'2026-10-'+(1+i%20)+' 09:'+(10+i%50), modifier:pick(fcPlanners),
     approver, approve_time:approveTime, push_status:(billStatus==='审批通过')?(i%2?'已推送':'待推送'):'—',
@@ -5937,6 +5960,7 @@ function poBuildFullRow(i, opts){
     set_group:setGroup, set_fill_qty:setFillQty, suggest_set_qty:suggestSetQty, mpq,
     suggest_mpq_qty:suggestMpqQty, suggest_qty:suggestQty, is_blocked:isBlocked, block_reason:blockReason,
     adjust_qty:adjustQty, adjust_reason:((i % 7 === 3) ? '客户紧急订单追加，提前备货' : ''), required_arrival_date:requiredArrivalDate,
+    required_delivery_date:dayjs().add(7+(i%21),'day').format('YYYY-MM-DD'),
     bill_status:billStatus, approve_remark:approveRemark,
     update_time:'2026-10-'+(1+i%20)+' 09:'+(10+i%50), modifier:pick(fcPlanners),
     approver, approve_time:approveTime, push_status:(billStatus==='审批通过')?(i%2?'已推送':'待推送'):'—',
@@ -6259,6 +6283,7 @@ for(let i=0;i<32;i++){
     part_code:src.part_code, part_name:src.part_name, supplier_code:src.supplier_code,
     supplier_name:src.supplier_name, qty:src.qty,
     issue_date:'2026-09-'+(15+i%10), eta_date:'2026-10-'+(10+i%15),
+    required_delivery_date:dayjs().add(5+(i%20),'day').format('YYYY-MM-DD'),
     way:way, status:st, planner:pick(fcPlanners),
     approve_remark:approve_remark, approver:approver, approve_time:approve_time, remark:remark
   });
@@ -6361,6 +6386,7 @@ const poIssueDef = {
     { title:'数量', key:'qty', dataIndex:'qty', width:100, sorter:(a,b)=>a.qty-b.qty },
     { title:'下单日期', key:'issue_date', dataIndex:'issue_date', width:110, sorter:(a,b)=>a.issue_date.localeCompare(b.issue_date) },
     { title:'要求到货日期', key:'eta_date', dataIndex:'eta_date', width:120, sorter:(a,b)=>a.eta_date.localeCompare(b.eta_date) },
+    { title:'要求交货时间', key:'required_delivery_date', dataIndex:'required_delivery_date', width:120, sorter:(a,b)=>String(a.required_delivery_date||'—').localeCompare(String(b.required_delivery_date||'—')) },
     { title:'下达方式', key:'way', dataIndex:'way', width:120, render:'tag', colorMap:{'IPOS离线文件':'blue','SAP接口':'purple','手工下单':'gold'} },
     { title:'状态', key:'status', dataIndex:'status', width:100, render:'tag', colorMap:{
       '待审批':'orange','审批通过':'blue','已驳回':'red',
@@ -7008,6 +7034,7 @@ const app = createApp({
       { title:'推荐计划数量', key:'suggest_qty', dataIndex:'suggest_qty', width:100, sorter:(a,b)=>a.suggest_qty-b.suggest_qty },
       { title:'是否多供应商', key:'multi_supplier', dataIndex:'multi_supplier', width:96 },
       { title:'要求到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:104 },
+      { title:'要求交货时间', key:'required_delivery_date', dataIndex:'required_delivery_date', width:120, sorter:(a,b)=>String(a.required_delivery_date||'').localeCompare(String(b.required_delivery_date||'')) },
       { title:'单据状态', key:'bill_status', dataIndex:'bill_status', width:84 },
       { title:'审批意见', key:'approve_remark', dataIndex:'approve_remark', width:100, ellipsis:true },
       { title:'更新时间', key:'update_time', dataIndex:'update_time', width:138 },
@@ -7016,7 +7043,7 @@ const app = createApp({
       { title:'审批时间', key:'approve_time', dataIndex:'approve_time', width:138 },
       { title:'操作', key:'action', width:170, fixed:'right' },
     ];
-    const poRegDefaultVisible = ['data_date','plan_type','part_code','part_name','suggest_raw_qty','adjust_qty','adjust_reason','is_blocked','block_reason','remark','cur_purchase_code','cur_purchase_name','suggest_mpq_qty','bill_status','action'];
+    const poRegDefaultVisible = ['data_date','plan_type','part_code','part_name','suggest_raw_qty','adjust_qty','adjust_reason','is_blocked','block_reason','remark','cur_purchase_code','cur_purchase_name','suggest_mpq_qty','required_delivery_date','bill_status','action'];
     const poRegHiddenCols = ref([]);
     const poRegVisibleColumns = computed(()=> poRegColumns.filter(c=>!poRegHiddenCols.value.includes(c.key)));
     const poRegScrollX = poRegColumns.reduce((s,c)=>s+(c.width||100),0);
@@ -7123,11 +7150,12 @@ const app = createApp({
       { title:'供应商代码', key:'supplier_code', dataIndex:'supplier_code', width:120 },
       { title:'供应商名称', key:'supplier_name', dataIndex:'supplier_name', width:180 },
       { title:'计划数量', key:'qty', dataIndex:'qty', width:110 },
+      { title:'要求交货时间', key:'required_delivery_date', dataIndex:'required_delivery_date', width:150 },
       { title:'备注', key:'remark', dataIndex:'remark', width:240 },
       { title:'操作', key:'_op', width:70, fixed:'right' },
     ];
     let poOrderSeq = 0;
-    function poOrderBlank(){ return { _id:'OR'+(++poOrderSeq)+'-'+Date.now(), part_code:'', part_name:'', supplier_options:[], supplier_code:'', supplier_name:'', lead_days:null, qty:null, remark:'' }; }
+    function poOrderBlank(){ return { _id:'OR'+(++poOrderSeq)+'-'+Date.now(), part_code:'', part_name:'', supplier_options:[], supplier_code:'', supplier_name:'', lead_days:null, qty:null, required_delivery_date:'', remark:'' }; }
     function poOrderAddRow(){ poOrderRows.value.push(poOrderBlank()); }
     function poOrderDelRow(r){ poOrderRows.value = poOrderRows.value.filter(x=>x._id!==r._id); }
     // 某配件在「配件与供应商关系」中的可选供应商（按供应商代码去重）；多于一家时订单明细支持下拉改选
@@ -7143,7 +7171,9 @@ const app = createApp({
       return out;
     }
     // 选中配件号后，自动带出名称、供应商与建议订单数量；提前期同样带出但仅在后台用于计算到货日期（表格不再展示）
+    function poOrderClearErr(){ poOrderErr.value=''; }
     function poOrderOnPart(r, code){
+      poOrderClearErr();
       const m = code ? matData.find(x=>x.material_code===code) : null;
       const opts = poOrderSupplierOptions(code);
       const plan = code ? poRegularData.find(x=>x.part_code===code) : null;
@@ -7163,6 +7193,19 @@ const app = createApp({
       r.lead_days = opt ? opt.delivery_lead_time : 15;
     }
     function poOrderOpenModal(){ poOrderErr.value=''; poOrderRows.value=[poOrderBlank()]; poOrderOpen.value=true; }
+    /* ===== 要求交货时间（公共字段，2026-11-11）=====
+       创建计划弹窗 与 拦截调整弹窗 共用：由计划员按客户 / 业务要求指定，仅允许选择今天之后的日期。
+       disabledDate 供日期控件禁用今天及之前，Valid 供提交时兜底校验，Min 供提示文案展示最早可选日。
+       与「要求到货日期」（系统按采购 LT 推算的参考值）并存，两者口径不同、互不影响。 */
+    const poDeliveryDateMin = dayjs().add(1, 'day').format('YYYY-MM-DD');
+    function poDeliveryDisabledDate(current){
+      return !!current && !current.isAfter(dayjs(), 'day');
+    }
+    function poDeliveryDateValid(v){
+      if(!v) return false;
+      const d = dayjs(v);
+      return d.isValid() && d.isAfter(dayjs(), 'day');
+    }
     // 要求到货日期 = 下单日期 + 交付提前期（天）；提前期由配件主数据后台带出，不在订单明细表展示
     function poOrderEta(issueDate, leadDays){
       const d = new Date(issueDate + 'T00:00:00');
@@ -7174,6 +7217,8 @@ const app = createApp({
       if(!rows.length){ poOrderErr.value='请至少添加一条计划明细'; return; }
       const bad = rows.find(r=> !r.part_code || !r.supplier_code || !(r.qty>0));
       if(bad){ poOrderErr.value='请从配件主数据中选择配件号，并确认计划数量大于 0'; return; }
+      const badDate = rows.find(r=> !poDeliveryDateValid(r.required_delivery_date));
+      if(badDate){ poOrderErr.value='请为每条明细填写「要求交货时间」，且仅可选择今天之后的日期（最早 '+poDeliveryDateMin+'）'; return; }
       let n=0;
       rows.forEach(r=>{
         const now = new Date().toISOString().slice(0,16).replace('T',' ');
@@ -7183,6 +7228,7 @@ const app = createApp({
           part_code:r.part_code, part_name:r.part_name||'—',
           supplier_code:r.supplier_code, supplier_name:r.supplier_name||'—',
           qty:Number(r.qty), issue_date:issueDate, eta_date:poOrderEta(issueDate, r.lead_days),
+          required_delivery_date:r.required_delivery_date,
           way:'手工下单', status:'待审批', planner:'当前计划员',
           approve_remark:'—', approver:'—', approve_time:'—', remark:r.remark||'—'
         });
@@ -7192,6 +7238,7 @@ const app = createApp({
           if(p.part_code===r.part_code){
             p.is_blocked='是'; p.block_reason='手工下单';
             p.remark=(r.remark && r.remark.trim()) ? r.remark.trim() : '手工创建计划单独下单';
+            p.required_delivery_date=r.required_delivery_date;
             p.update_time=now; p.modifier='当前用户';
           }
         });
@@ -7535,7 +7582,7 @@ const app = createApp({
 
     // 编辑 / 调整弹窗
     const poRegEditOpen = ref(false); const poRegEditRow = ref(null); const poRegEditTarget = ref(null);
-    const poRegEditErr = reactive({ adjustQty:'', adjustReason:'', supplier:'', planner:'', contract:'', activity:'' });
+    const poRegEditErr = reactive({ adjustQty:'', adjustReason:'', supplier:'', planner:'', contract:'', activity:'', delivery:'' });
     const poRegEditErrList = computed(()=> Object.values(poRegEditErr).filter(Boolean));
     function poRegOpenEdit(r){
       poRegEditTarget.value = r;
@@ -7554,7 +7601,7 @@ const app = createApp({
     /* 调整弹窗两种形态：
        ① 待处理＝单据状态「待提交」＋本行拦截尚未处理过＋仍有待处理的拦截原因 → 按拦截原因展示对应处理内容；
        ② 处理完成（handled 已置位、拦截已解除）或单据已流转出「待提交」→ 仅保留「调整计划数量」「调整原因」2 个通用调整字段，
-          不再重复要求选择供应商 / 指定计划员 / 确认合同等一次性动作。 */
+          以及独立于两种形态的公共字段「要求交货时间」；不再重复要求选择供应商 / 指定计划员 / 确认合同等一次性动作。 */
     const poRegEditPending = computed(()=>{
       const r = poRegEditRow.value; if(!r) return false;
       return r.bill_status==='待提交' && !r.handled && r.is_blocked==='是' && !!r.block_reason && r.block_reason!=='—';
@@ -7607,6 +7654,10 @@ const app = createApp({
       // 调整原因：待处理时仅「系统自动拦截（无需处理）」可不填；再次调整一律必填
       const needReason = isPending ? !isReadOnly : true;
       if(needReason && (!row.adjust_reason || !row.adjust_reason.trim())){ poRegEditErr.adjustReason='调整原因必填（100 字以内）'; ok=false; } else poRegEditErr.adjustReason='';
+      // 要求交货时间：选填；填写时必须是今天之后的日期（控件已禁用历史日期，此处为提交兜底）
+      if(row.required_delivery_date && !poDeliveryDateValid(row.required_delivery_date)){
+        poRegEditErr.delivery='要求交货时间仅可选择今天之后的日期（最早 '+poDeliveryDateMin+'）'; ok=false;
+      } else poRegEditErr.delivery='';
       if(!ok){ msg('请修正表单中的错误项','error'); return; }
       let doneMsg = '调整已保存';
       if(poRegEditTarget.value){
@@ -7616,6 +7667,11 @@ const app = createApp({
         const pushLog = (type, field, oldV, newV, source, reasonTxt)=>{ log.push({ id:t.id+'-LG'+String(log.length+1).padStart(2,'0'), time:ts, type, field, old_value:oldV, new_value:newV, operator:'当前用户', source, reason:reasonTxt, content: poRegChgContent({ type, field, old_value:oldV, new_value:newV, reason:reasonTxt }) }); };
         // handled：标记该拦截已处理过，再次打开调整弹窗不再重复展示按原因的一次性处理内容
         const upd = { modifier:'当前用户', update_time:ts, handled:true };
+        // 要求交货时间：公共字段，任意弹窗形态均可维护；变化即写回计划行。
+        // 不新增变更类型，PRD 4.4.3.2 的 9 类目录保持不变，日期变化以列表 / 详情 / 更新时间体现。
+        if(row.required_delivery_date !== t.required_delivery_date){
+          upd.required_delivery_date = row.required_delivery_date || '';
+        }
         // 变更类型严格取自 PRD 4.4.3.2「变更类型」目录（9 类），变更来源按目录固定：
         // 系统＝计划生成/解除拦截；人工＝数量调整/调整供应商/批量导入调整/提交审批/审批通过/驳回/计划导出执行
         if(!isPending){
@@ -11510,6 +11566,7 @@ const app = createApp({
       poRegImportOpen, poRegDoImport, poRegExportOpen, poRegExportMode, poRegExportFields, poRegToggleExportField,
       poRegExportCsv, poRegExportSource, poRegDoExport, poRegPush, poRegMoreMenu, poRegPlanTypes, poRegReceiveModes, poRegStatuses, poRegPurchaseTypes, poRegBlockReasonOptions, poRegPushStatuses,
       poOrderOpen, poOrderErr, poOrderRows, poOrderCols, poOrderPartOptions, poOrderActOptions, poOrderActFilter, poOrderOpenModal, poOrderAddRow, poOrderDelRow, poOrderOnPart, poOrderOnSupplier, poOrderSubmit,
+      poDeliveryDateMin, poDeliveryDisabledDate, poDeliveryDateValid, poOrderClearErr,
       actRegStatuses, actRegTypes, actRegPartOptions, actRegFilters, actRegPage, actRegDoSearch, actRegResetSearch,
       actRegFiltered, actRegPaged, actRegColumns, actRegScrollX, actRegDayCols, actRegStatusColor,
       actRegFormOpen, actRegFormErr, actRegForm, actRegImgMax, actRegBeforeImg, actRegRemoveImg,
