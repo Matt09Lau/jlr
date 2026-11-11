@@ -1388,11 +1388,11 @@ mark {
                       value-format="YYYY-MM-DD" format="YYYY-MM-DD" placeholder="请选择今天之后的日期"
                       :disabled-date="poDeliveryDisabledDate"/>
                   </label>
-                  <label><span>要求到货日期（系统推算，只读）</span>
+                  <label><span>计划到货日期（系统推算，只读）</span>
                     <a-input :value="poRegEditRow.required_arrival_date || '—'" disabled/></label>
                   <p style="grid-column:1 / -1;margin:0;color:#8c8c8c;font-size:12px;line-height:1.7;">
                     要求交货时间由计划员按客户 / 业务要求指定，选填；填写后仅可选择今天之后的日期（最早 {{ poDeliveryDateMin }}），
-                    保存后写入计划行，并在列表、详情、导出与「采购订单下达」中展示。「要求到货日期」由系统按采购 LT 推算，仅供核对，不在此修改。
+                    保存后写入计划行，并在列表、详情、导出与「采购订单下达」中展示。「计划到货日期」由系统按采购 LT 推算，仅供核对，不在此修改。
                   </p>
                 </div>
 
@@ -1507,7 +1507,7 @@ mark {
               <a-alert v-if="poOrderErr" type="error" :message="poOrderErr" show-icon style="margin-bottom:12px;"/>
               <div class="bt-sec-t" style="margin:0 0 8px;">计划明细（可添加多条，每行一个配件）<span style="margin-left:8px;color:#888;font-size:12px;font-weight:400;">备注列可联想选择活动名称，也可直接手工输入</span></div>
               <a-alert type="info" show-icon style="margin-bottom:10px;"
-                :message="'要求交货时间为必填项，仅可选择今天之后的日期（最早 ' + poDeliveryDateMin + '）；系统按采购 LT 推算的「要求到货日期」在下达页供核对，不由本弹窗维护。'"/>
+                :message="'要求交货时间为必填项，仅可选择今天之后的日期（最早 ' + poDeliveryDateMin + '）；系统按采购 LT 推算的「计划到货日期」在下达页供核对，不由本弹窗维护。'"/>
               <a-table :columns="poOrderCols" :data-source="poOrderRows" row-key="_id" :pagination="false" size="small" bordered :scroll="{x:1210}">
                 <template #bodyCell="{ column, record }">
                   <template v-if="column.key==='part_code'">
@@ -2172,7 +2172,7 @@ mark {
                   <a-descriptions-item label="近3个月月均销量">{{ stoDetailRow.avg3m_qty }}</a-descriptions-item>
                   <a-descriptions-item label="当前可用天数">{{ stoDetailRow.avail_days }}</a-descriptions-item>
                   <a-descriptions-item label="库间LT（天）">{{ stoDetailRow.transfer_lt }}</a-descriptions-item>
-                  <a-descriptions-item label="要求到货日期">{{ stoDetailRow.required_arrival_date }}</a-descriptions-item>
+                  <a-descriptions-item label="计划到货日期">{{ stoDetailRow.required_arrival_date }}</a-descriptions-item>
                   <a-descriptions-item label="推荐计划数量（取整前）">{{ stoDetailRow.raw_qty }}</a-descriptions-item>
                   <a-descriptions-item label="推荐计划数量（分配后）">{{ stoDetailRow.alloc_qty }}</a-descriptions-item>
                   <a-descriptions-item label="推荐计划数量(MPQ取整后)">{{ stoDetailRow.mpq_qty }}</a-descriptions-item>
@@ -6115,7 +6115,7 @@ const stoFromWhs = window.CSPPWarehouseNetwork.centers.map(c=>c+' '+window.CSPPW
    预期库存/可用库存数量/欠交数量/库间在途数量/缺货数量 ×（发货仓）/（收货仓）两组 /
    近3个月月均销量 / 当前可用天数 /
    推荐计划数量(取整前) / 推荐计划数量(分配后) / 推荐计划数量(MPQ取整后) / 推荐计划数量 /
-   库间LT / 要求到货日期 / 体积 / 体积单位 / 预计调拨体积 / 导出状态 / 导出时间 / 是否下单
+   库间LT / 计划到货日期 / 体积 / 体积单位 / 预计调拨体积 / 导出状态 / 导出时间 / 是否下单
    计划类型：本周＝紧急调拨计划/常规调拨计划（批次 EW/W），下周＝下周预计调拨计划（批次 W）；
    工具栏仅保留「导出」；详情弹窗为纯只读字段展示，不提供备注编辑与保存。 */
 const stoPlanData = Vue.reactive([]);
@@ -6184,7 +6184,7 @@ const stoPlanData = Vue.reactive([]);
       const unmetQty = Math.max(0, mpqQty - allocQty);
       const estVolume = Math.round(allocQty * unitVolume * 100) / 100;
       const transferLt = [1,2,3,5,7][id % 5];                                  // 库间LT（天）
-      const reqArrival = new Date(new Date(genDate).getTime() + transferLt*86400000).toISOString().slice(0,10); // 要求到货日期＝计划生成日＋库间LT
+      const reqArrival = new Date(new Date(genDate).getTime() + transferLt*86400000).toISOString().slice(0,10); // 计划到货日期＝计划生成日＋库间LT
       stoPlanData.push({
         id:'STO'+(1000+id), period:period,
         data_gen_date:genDate, plan_type:planType, plan_batch:planBatch, plan_line:planLine,
@@ -6501,7 +6501,7 @@ const poIssueDef = {
     { title:'供应商名称', key:'supplier_name', dataIndex:'supplier_name', width:220, ellipsis:true },
     { title:'数量', key:'qty', dataIndex:'qty', width:100, sorter:(a,b)=>a.qty-b.qty },
     { title:'下单日期', key:'issue_date', dataIndex:'issue_date', width:110, sorter:(a,b)=>a.issue_date.localeCompare(b.issue_date) },
-    { title:'要求到货日期', key:'eta_date', dataIndex:'eta_date', width:120, sorter:(a,b)=>a.eta_date.localeCompare(b.eta_date) },
+    { title:'计划到货日期', key:'eta_date', dataIndex:'eta_date', width:120, sorter:(a,b)=>a.eta_date.localeCompare(b.eta_date) },
     { title:'要求交货时间', key:'required_delivery_date', dataIndex:'required_delivery_date', width:120, sorter:(a,b)=>String(a.required_delivery_date||'—').localeCompare(String(b.required_delivery_date||'—')) },
     { title:'下达方式', key:'way', dataIndex:'way', width:120, render:'tag', colorMap:{'IPOS离线文件':'blue','SAP接口':'purple','手工下单':'gold'} },
     { title:'状态', key:'status', dataIndex:'status', width:100, render:'tag', colorMap:{
@@ -7200,7 +7200,7 @@ const app = createApp({
       { title:'最小包装量', key:'mpq', dataIndex:'mpq', width:82 },
       { title:'推荐计划数量', key:'suggest_qty', dataIndex:'suggest_qty', width:100, sorter:(a,b)=>a.suggest_qty-b.suggest_qty },
       { title:'是否多供应商', key:'multi_supplier', dataIndex:'multi_supplier', width:96 },
-      { title:'要求到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:104 },
+      { title:'计划到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:104 },
       { title:'要求交货时间', key:'required_delivery_date', dataIndex:'required_delivery_date', width:120, sorter:(a,b)=>String(a.required_delivery_date||'').localeCompare(String(b.required_delivery_date||'')) },
       { title:'单据状态', key:'bill_status', dataIndex:'bill_status', width:84 },
       { title:'审批意见', key:'approve_remark', dataIndex:'approve_remark', width:100, ellipsis:true },
@@ -7352,7 +7352,7 @@ const app = createApp({
       r.lead_days = opts.length ? opts[0].delivery_lead_time : (plan ? plan.purchase_lt : 15);
       r.qty = plan ? (plan.adjust_qty || plan.suggest_mpq_qty || plan.suggest_qty || 10) : 10;
     }
-    // 改选供应商：供应商名称与交付提前期同步切换（提前期影响自动计算的要求到货日期）
+    // 改选供应商：供应商名称与交付提前期同步切换（提前期影响自动计算的计划到货日期）
     function poOrderOnSupplier(r, code){
       const opt = (r.supplier_options||[]).find(x=>x.value===code);
       r.supplier_code = code || '';
@@ -7363,7 +7363,7 @@ const app = createApp({
     /* ===== 要求交货时间（公共字段，2026-11-11）=====
        创建计划弹窗 与 拦截调整弹窗 共用：由计划员按客户 / 业务要求指定，仅允许选择今天之后的日期。
        disabledDate 供日期控件禁用今天及之前，Valid 供提交时兜底校验，Min 供提示文案展示最早可选日。
-       与「要求到货日期」（系统按采购 LT 推算的参考值）并存，两者口径不同、互不影响。 */
+       与「计划到货日期」（系统按采购 LT 推算的参考值）并存，两者口径不同、互不影响。 */
     const poDeliveryDateMin = dayjs().add(1, 'day').format('YYYY-MM-DD');
     function poDeliveryDisabledDate(current){
       return !!current && !current.isAfter(dayjs(), 'day');
@@ -7373,7 +7373,7 @@ const app = createApp({
       const d = dayjs(v);
       return d.isValid() && d.isAfter(dayjs(), 'day');
     }
-    // 要求到货日期 = 下单日期 + 交付提前期（天）；提前期由配件主数据后台带出，不在订单明细表展示
+    // 计划到货日期 = 下单日期 + 交付提前期（天）；提前期由配件主数据后台带出，不在订单明细表展示
     function poOrderEta(issueDate, leadDays){
       const d = new Date(issueDate + 'T00:00:00');
       d.setDate(d.getDate() + Number(leadDays || 15));
@@ -8126,7 +8126,7 @@ const app = createApp({
       { title:'近3个月月均销量', key:'avg3m_qty', dataIndex:'avg3m_qty', width:132, sorter:(a,b)=>a.avg3m_qty-b.avg3m_qty },
       { title:'当前可用天数', key:'avail_days', dataIndex:'avail_days', width:112, sorter:(a,b)=>a.avail_days-b.avail_days },
       { title:'库间LT', key:'transfer_lt', dataIndex:'transfer_lt', width:84, sorter:(a,b)=>a.transfer_lt-b.transfer_lt },
-      { title:'要求到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:120 },
+      { title:'计划到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:120 },
       { title:'导出状态', key:'export_status', dataIndex:'export_status', width:92 },
       { title:'是否下单', key:'is_placed', dataIndex:'is_placed', width:92 },
       { title:'操作', key:'action', width:80, fixed:'right' },
