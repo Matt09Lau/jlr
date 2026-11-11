@@ -346,7 +346,9 @@ def check_po_delivery_date():
     ① 公共日期工具：禁用今天及之前（仅明天及以后可选）、提交兜底校验、最早可选日提示；
     ② 创建计划弹窗：明细表新增列 + 每行 a-date-picker、必填校验、写回下达数据与手工下单拦截行；
     ③ 拦截调整弹窗：两形态之外的公共字段、选填校验、保存写回计划行（不新增 9 类变更类型）；
-    ④ 展示：poRegColumns / 默认可见 / 详情 / 导出 / 历史页 / poIssueColumns / 两处 mock 数据。
+    ④ 展示：poRegColumns / 默认可见 / 详情 / 导出 / 历史页 / poIssueColumns / 两处 mock 数据；
+    ⑤ 弹窗文案精简（2026-11-11）：创建弹窗「备注列可联想…」小字与蓝色必填 info 条、
+       拦截弹窗「要求交货时间由计划员…」灰色长说明三处均删除，仅保留字段与校验错误提示。
     """
     src = open(HTML, encoding="utf-8", errors="replace").read()
     need = [
@@ -371,9 +373,12 @@ def check_po_delivery_date():
         "required_delivery_date:dayjs().add(7+(i%21),'day').format('YYYY-MM-DD')",
         "required_delivery_date:dayjs().add(5+(i%20),'day').format('YYYY-MM-DD')",
         "'required_delivery_date','bill_status'",
-        "要求交货时间为必填项",
+        "请为每条明细填写「要求交货时间」，且仅可选择今天之后的日期",
     ]
-    bad = ["poDeliveryDisabledDate(current){ return false; }"]
+    bad = ["poDeliveryDisabledDate(current){ return false; }",
+           "要求交货时间为必填项",
+           "要求交货时间由计划员按客户",
+           "备注列可联想选择活动名称"]
     miss = [k for k in need if k not in src]
     stale = [k for k in bad if k in src]
     if src.count(':disabled-date="poDeliveryDisabledDate"') != 2:

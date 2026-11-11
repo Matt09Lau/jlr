@@ -1021,10 +1021,6 @@
                   </label>
                   <label><span>计划到货日期（系统推算，只读）</span>
                     <a-input :value="poRegEditRow.required_arrival_date || '—'" disabled/></label>
-                  <p style="grid-column:1 / -1;margin:0;color:#8c8c8c;font-size:12px;line-height:1.7;">
-                    要求交货时间由计划员按客户 / 业务要求指定，选填；填写后仅可选择今天之后的日期（最早 {{ poDeliveryDateMin }}），
-                    保存后写入计划行，并在列表、详情、导出与「采购订单下达」中展示。「计划到货日期」由系统按采购 LT 推算，仅供核对，不在此修改。
-                  </p>
                 </div>
 
                 <div class="jlrs-modal-footer">
@@ -1136,9 +1132,7 @@
                  备注列可从「活动登记表」联想选择活动名称，也允许直接手工输入；提交后生成「待审批」计划行 -->
             <a-modal v-model:open="poOrderOpen" title="创建计划 · 采购计划" :width="1240" :footer="null" :mask-closable="false">
               <a-alert v-if="poOrderErr" type="error" :message="poOrderErr" show-icon style="margin-bottom:12px;"/>
-              <div class="bt-sec-t" style="margin:0 0 8px;">计划明细（可添加多条，每行一个配件）<span style="margin-left:8px;color:#888;font-size:12px;font-weight:400;">备注列可联想选择活动名称，也可直接手工输入</span></div>
-              <a-alert type="info" show-icon style="margin-bottom:10px;"
-                :message="'要求交货时间为必填项，仅可选择今天之后的日期（最早 ' + poDeliveryDateMin + '）；系统按采购 LT 推算的「计划到货日期」在下达页供核对，不由本弹窗维护。'"/>
+              <div class="bt-sec-t" style="margin:0 0 8px;">计划明细（可添加多条，每行一个配件）</div>
               <a-table :columns="poOrderCols" :data-source="poOrderRows" row-key="_id" :pagination="false" size="small" bordered :scroll="{x:1210}">
                 <template #bodyCell="{ column, record }">
                   <template v-if="column.key==='part_code'">
