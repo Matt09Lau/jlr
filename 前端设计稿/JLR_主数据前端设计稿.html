@@ -281,6 +281,11 @@ mark {
   .login-title{font-size:26px;font-weight:600;color:rgba(0,0,0,.88);margin:14px 0 6px;}
   .login-sub{font-size:13px;color:rgba(0,0,0,.45);letter-spacing:1px;}
   .login-note{margin:18px 0 26px;font-size:13px;line-height:1.8;color:rgba(0,0,0,.55);padding-left:12px;border-left:2px solid #e8ecf1;}
+  .login-agree{display:flex;align-items:center;gap:2px;margin:-8px 0 16px;font-size:12px;color:rgba(0,0,0,.55);}
+  .login-agree a{color:#1677ff;cursor:pointer;}
+  .login-agree a:hover{text-decoration:underline;}
+  .privacy-body{font-size:13px;line-height:1.9;color:rgba(0,0,0,.65);}
+  .privacy-body ul{padding-left:18px;}
   .login-btn.ant-btn{height:44px;width:100%;font-size:15px;letter-spacing:2px;border-radius:6px;}
   .login-hint{margin-top:10px;font-size:12px;color:#cf1322;}
   .login-status{margin-top:22px;padding:14px 16px;border-radius:6px;border:1px solid #e8ecf1;background:#fafbfc;}
@@ -295,7 +300,9 @@ mark {
   .login-demo .demo-chip{font-size:12px;color:rgba(0,0,0,.55);border:1px solid #e8ecf1;border-radius:10px;padding:1px 9px;cursor:pointer;}
   .login-demo .demo-chip:hover{color:#1677ff;border-color:#91caff;}
   .login-demo .demo-chip.on{color:#1677ff;border-color:#1677ff;background:#f0f8ff;}
-  .login-footer{position:absolute;left:0;right:0;bottom:26px;display:flex;justify-content:space-between;padding:0 90px;font-size:12px;color:rgba(0,0,0,.4);}
+  .login-footer{position:absolute;left:0;right:0;bottom:22px;display:flex;flex-direction:column;gap:5px;padding:0 90px;font-size:12px;color:rgba(0,0,0,.4);}
+  .login-footer .lf-row{display:flex;justify-content:space-between;gap:16px;}
+  .login-footer .lf-sub{font-size:11px;color:rgba(0,0,0,.32);}
 
   /* ===== 顶部栏 ===== */
   .top-bar{height:46px;background:#10233f;display:flex;align-items:center;flex-shrink:0;user-select:none;}
@@ -621,6 +628,11 @@ mark {
         <div class="login-sub">JLRS / CSPP</div>
         <p class="login-note">本系统仅支持统一身份认证（SSO）登录，不使用本地账号与密码，也没有其他登录入口。</p>
 
+        <div class="login-agree">
+          <a-checkbox v-model:checked="privacyAgreed"/>
+          <span>我已阅读并同意<a @click="privacyOpen=true">《隐私权政策》</a></span>
+        </div>
+
         <a-button type="primary" class="login-btn" :loading="loginBusy" :disabled="ssoState==='down'" @click="ssoLogin">
           {{ loginBusy ? '正在跳转统一身份认证…' : '登 录' }}
         </a-button>
@@ -639,9 +651,27 @@ mark {
         </div>
       </div>
       <div class="login-footer">
-        <span>版本 V1.0.0（设计稿）</span>
-        <span>技术支持：IT 服务台 · 分机 8888</span>
+        <div class="lf-row">
+          <span>© 2026 用友汽车信息科技（上海）股份有限公司 版权所有</span>
+          <span>沪ICP备XXXXXXXX号 · 沪公网安备 XXXXXXXXXXXXXXXX号</span>
+        </div>
+        <div class="lf-row lf-sub">
+          <span>版本 V1.0.0（设计稿）</span>
+          <span>技术支持：IT 服务台 · 分机 8888</span>
+        </div>
       </div>
+
+      <a-modal v-model:open="privacyOpen" title="隐私权政策" :footer="null" width="560px">
+        <div class="privacy-body">
+          <p>为完成统一身份认证，本系统仅接收并使用统一身份平台返回的必要信息：</p>
+          <ul>
+            <li>身份标识、姓名、工号、所属部门，用于识别登录人与建立系统账号；</li>
+            <li>登录时间、登录结果与操作日志，用于安全审计与问题排查；</li>
+            <li>本系统不收集与业务无关的个人信息，不向第三方提供上述信息。</li>
+          </ul>
+          <p>继续登录即表示您已阅读并同意本政策。如需查询、更正或删除个人信息，请联系 IT 服务台。</p>
+        </div>
+      </a-modal>
     </div>
   </div>
 
@@ -6587,6 +6617,8 @@ const app = createApp({
     const authed = ref(!hashIsLogin && sessionStorage.getItem('jlrs_sso_authed') === '1');
     const loginBusy = ref(false);
     const ssoState = ref('normal');
+    const privacyAgreed = ref(false);
+    const privacyOpen = ref(false);
     const pendingKey = ref(keyFromHash());
     const SSO_TIPS = {
       normal:  { level:'info',  title:'统一身份认证 · 单点登录', desc:'点击「登录」将跳转 JLR 统一身份认证平台完成认证，认证通过后自动进入系统。', contact:'' },
@@ -6606,6 +6638,10 @@ const app = createApp({
     ];
     function ssoLogin(){
       if(loginBusy.value || ssoState.value === 'down') return;
+      if(!privacyAgreed.value){
+        antd.message.warning('请先阅读并同意《隐私权政策》');
+        return;
+      }
       loginBusy.value = true;
       setTimeout(function(){
         loginBusy.value = false;
@@ -11605,7 +11641,7 @@ const app = createApp({
     /* no draft page script */
     return {
       ...draftExpose,
-      authed, loginBusy, ssoState, ssoTip, ssoDemoStates, ssoLogin, ssoLogout,
+      authed, loginBusy, ssoState, ssoTip, ssoDemoStates, ssoLogin, ssoLogout, privacyAgreed, privacyOpen,
       gpView, gpQ, gpFiltered, gpSearch, gpCols, gpEdit, gpIsCoeff, gpOpenEdit, gpBack, gpSave,
       zhCN, msg,
       topTabs, topTab, clickTopTab,
