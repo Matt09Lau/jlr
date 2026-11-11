@@ -263,6 +263,40 @@ mark {
   #app{height:100%;}
   .layout-root{display:flex;flex-direction:column;height:100vh;min-width:1180px;overflow:hidden;}
 
+  /* ===== SSO 登录首页（系统唯一对外入口，无本地账号密码通道） ===== */
+  .login-page{height:100vh;display:flex;background:#fff;min-width:960px;overflow:auto;}
+  .login-brand{position:relative;width:44%;min-width:400px;background:#10233f;color:#fff;display:flex;flex-direction:column;justify-content:space-between;padding:54px 56px;overflow:hidden;}
+  .login-brand::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(22,119,255,.26),rgba(16,35,63,0) 62%);}
+  .login-brand::after{content:'';position:absolute;right:-140px;bottom:-180px;width:520px;height:520px;border-radius:50%;border:1px solid rgba(255,255,255,.12);box-shadow:0 0 0 60px rgba(255,255,255,.03),0 0 0 140px rgba(255,255,255,.02);}
+  .login-brand>*{position:relative;z-index:1;}
+  .jlr-wordmark{font-family:Georgia,"Times New Roman",serif;font-style:italic;font-size:40px;font-weight:700;letter-spacing:4px;line-height:1;}
+  .brand-cn{margin-top:8px;font-size:13px;letter-spacing:8px;color:rgba(255,255,255,.6);}
+  .brand-title{font-size:34px;font-weight:600;line-height:1.45;letter-spacing:1px;}
+  .brand-line{width:48px;height:3px;background:#1677ff;margin:22px 0;}
+  .brand-desc{font-size:14px;color:rgba(255,255,255,.72);letter-spacing:1px;}
+  .brand-foot{font-size:11px;letter-spacing:2px;color:rgba(255,255,255,.38);}
+  .login-main{flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 90px;position:relative;min-width:480px;}
+  .login-box{max-width:420px;width:100%;margin:0 auto;}
+  .login-eyebrow{font-size:11px;letter-spacing:2px;color:#1677ff;font-weight:600;}
+  .login-title{font-size:26px;font-weight:600;color:rgba(0,0,0,.88);margin:14px 0 6px;}
+  .login-sub{font-size:13px;color:rgba(0,0,0,.45);letter-spacing:1px;}
+  .login-note{margin:18px 0 26px;font-size:13px;line-height:1.8;color:rgba(0,0,0,.55);padding-left:12px;border-left:2px solid #e8ecf1;}
+  .login-btn.ant-btn{height:44px;width:100%;font-size:15px;letter-spacing:2px;border-radius:6px;}
+  .login-hint{margin-top:10px;font-size:12px;color:#cf1322;}
+  .login-status{margin-top:22px;padding:14px 16px;border-radius:6px;border:1px solid #e8ecf1;background:#fafbfc;}
+  .login-status .st-title{font-size:13px;font-weight:600;color:rgba(0,0,0,.88);}
+  .login-status .st-desc{margin-top:4px;font-size:12px;line-height:1.7;color:rgba(0,0,0,.55);}
+  .login-status .st-contact{margin-top:6px;font-size:12px;color:#1677ff;}
+  .login-status.is-info{border-color:#bae0ff;background:#f0f8ff;}
+  .login-status.is-warn{border-color:#ffe58f;background:#fffbe6;}
+  .login-status.is-error{border-color:#ffccc7;background:#fff2f0;}
+  .login-demo{margin-top:18px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;}
+  .login-demo .demo-tag{font-size:11px;color:#bfbfbf;margin-right:2px;}
+  .login-demo .demo-chip{font-size:12px;color:rgba(0,0,0,.55);border:1px solid #e8ecf1;border-radius:10px;padding:1px 9px;cursor:pointer;}
+  .login-demo .demo-chip:hover{color:#1677ff;border-color:#91caff;}
+  .login-demo .demo-chip.on{color:#1677ff;border-color:#1677ff;background:#f0f8ff;}
+  .login-footer{position:absolute;left:0;right:0;bottom:26px;display:flex;justify-content:space-between;padding:0 90px;font-size:12px;color:rgba(0,0,0,.4);}
+
   /* ===== 顶部栏 ===== */
   .top-bar{height:46px;background:#10233f;display:flex;align-items:center;flex-shrink:0;user-select:none;}
   .top-tabs{display:flex;align-items:stretch;height:100%;}
@@ -566,7 +600,52 @@ mark {
 <script type="text/x-template" id="app-tpl">
 <div class="app-container">
   <a-config-provider :locale="zhCN">
-  <div class="layout-root">
+  <!-- ================= SSO 登录首页：系统唯一对外入口 ================= -->
+  <div v-if="!authed" class="login-page">
+    <div class="login-brand">
+      <div>
+        <div class="jlr-wordmark">JLR</div>
+        <div class="brand-cn">捷豹路虎</div>
+      </div>
+      <div>
+        <div class="brand-title">配件供应链<br>管理系统</div>
+        <div class="brand-line"></div>
+        <div class="brand-desc">配件计划、订单与库存协同管理平台</div>
+      </div>
+      <div class="brand-foot">CSPP · CHINA PARTS SUPPLY CHAIN PLATFORM</div>
+    </div>
+    <div class="login-main">
+      <div class="login-box">
+        <div class="login-eyebrow">UNIFIED IDENTITY · 统一身份认证</div>
+        <h1 class="login-title">捷豹路虎配件供应链管理系统</h1>
+        <div class="login-sub">JLRS / CSPP</div>
+        <p class="login-note">本系统仅支持统一身份认证（SSO）登录，不使用本地账号与密码，也没有其他登录入口。</p>
+
+        <a-button type="primary" class="login-btn" :loading="loginBusy" :disabled="ssoState==='down'" @click="ssoLogin">
+          {{ loginBusy ? '正在跳转统一身份认证…' : '登 录' }}
+        </a-button>
+        <div v-if="ssoState==='down'" class="login-hint">身份认证服务不可用期间，本系统按设计不可登录。</div>
+
+        <div class="login-status" :class="'is-' + ssoTip.level">
+          <div class="st-title">{{ ssoTip.title }}</div>
+          <div class="st-desc">{{ ssoTip.desc }}</div>
+          <div v-if="ssoTip.contact" class="st-contact">IT 服务台：{{ ssoTip.contact }}</div>
+        </div>
+
+        <div class="login-demo">
+          <span class="demo-tag">设计稿演示状态</span>
+          <span v-for="s in ssoDemoStates" :key="s.key" class="demo-chip" :class="{on:ssoState===s.key}"
+            @click="ssoState=s.key">{{ s.label }}</span>
+        </div>
+      </div>
+      <div class="login-footer">
+        <span>版本 V1.0.0（设计稿）</span>
+        <span>技术支持：IT 服务台 · 分机 8888</span>
+      </div>
+    </div>
+  </div>
+
+  <div v-else class="layout-root">
 
     <!-- ================= 顶部栏 ================= -->
     <div class="top-bar">
@@ -578,7 +657,14 @@ mark {
       <div class="top-right">
         <span class="item" @click="msg('暂无新消息')">🔔 消息</span>
         <span class="item" @click="msg('语言切换（设计稿示意）')">🇨🇳 简体中文 <span style="font-size:10px;">▾</span></span>
-        <span class="item"><span class="avatar">超</span>超级管理员 <span style="font-size:10px;">▾</span></span>
+        <a-dropdown :trigger="['click']">
+          <span class="item"><span class="avatar">超</span>超级管理员 <span style="font-size:10px;">▾</span></span>
+          <template #overlay>
+            <a-menu @click="ssoLogout">
+              <a-menu-item key="logout">退出登录</a-menu-item>
+            </a-menu>
+          </template>
+        </a-dropdown>
       </div>
     </div>
 
@@ -6495,8 +6581,53 @@ const app = createApp({
       if(h==='strategy-stocking')return 'wh-abc';
       return VALID_KEYS.includes(h) ? h : 'wh-abc';
     }
+
+    /* ---- SSO 登录首页（唯一登录通道，无本地账号密码） ---- */
+    const hashIsLogin = (window.location.hash||'').replace(/^#/,'').trim() === 'login';
+    const authed = ref(!hashIsLogin && sessionStorage.getItem('jlrs_sso_authed') === '1');
+    const loginBusy = ref(false);
+    const ssoState = ref('normal');
+    const pendingKey = ref(keyFromHash());
+    const SSO_TIPS = {
+      normal:  { level:'info',  title:'统一身份认证 · 单点登录', desc:'点击「登录」将跳转 JLR 统一身份认证平台完成认证，认证通过后自动进入系统。', contact:'' },
+      denied:  { level:'error', title:'认证未通过', desc:'认证未通过，请联系管理员核实身份状态（账号停用或转岗后失效）。', contact:'分机 8888' },
+      expired: { level:'warn',  title:'登录已过期', desc:'登录已过期，请重新登录，完成后将回到您原来访问的页面。', contact:'' },
+      noperm:  { level:'warn',  title:'无访问权限', desc:'当前账号无本系统访问权限，请联系管理员申请后再登录。', contact:'分机 8888' },
+      down:    { level:'error', title:'身份认证服务暂不可用', desc:'身份认证服务暂不可用，请联系 IT 服务台；此状态下系统按设计不可登录，不是本系统故障。', contact:'分机 8888 · 7×24' },
+      logout:  { level:'info',  title:'已安全退出', desc:'您已退出系统。如需继续使用，请重新登录。', contact:'' }
+    };
+    const ssoTip = computed(()=> SSO_TIPS[ssoState.value] || SSO_TIPS.normal);
+    const ssoDemoStates = [
+      { key:'normal', label:'正常' },
+      { key:'denied', label:'认证失败' },
+      { key:'expired', label:'会话过期' },
+      { key:'noperm', label:'无权限' },
+      { key:'down', label:'服务不可用' }
+    ];
+    function ssoLogin(){
+      if(loginBusy.value || ssoState.value === 'down') return;
+      loginBusy.value = true;
+      setTimeout(function(){
+        loginBusy.value = false;
+        authed.value = true;
+        sessionStorage.setItem('jlrs_sso_authed', '1');
+        ssoState.value = 'normal';
+        window.location.hash = pendingKey.value || 'wh-abc';
+      }, 900);
+    }
+    function ssoLogout(){
+      authed.value = false;
+      sessionStorage.removeItem('jlrs_sso_authed');
+      ssoState.value = 'logout';
+      window.location.hash = 'login';
+    }
+
     const activeMenu = ref(keyFromHash());
-    window.addEventListener('hashchange', ()=>{ const k = keyFromHash(); if(k!==activeMenu.value) activeMenu.value = k; if(k==='svc-dash'){ setTimeout(initSvcCharts, 60); } else { disposeSvcCharts(); } });
+    window.addEventListener('hashchange', ()=>{
+      if((window.location.hash||'').replace(/^#/,'').trim()==='login'){ authed.value = false; return; }
+      const k = keyFromHash(); if(k!==activeMenu.value) activeMenu.value = k;
+      if(k==='svc-dash'){ setTimeout(initSvcCharts, 60); } else { disposeSvcCharts(); }
+    });
     const menus = [
       { type:'group', key:'base', title:'基础数据管理' },
       { type:'item', key:'mat-master', parent:'base', title:'配件主数据', icon:'📄' },
@@ -6563,7 +6694,7 @@ const app = createApp({
     /* 长周期 / 一次买断等结果页：默认展示态，点击「编辑」进入编辑态（预测值 / 调整有效期 / 调整原因可改），保存后回到展示态 */
     const fcEditMode = ref(false);
     /* 切换页面时退出编辑态，避免跨页误改 */
-    watch(activeMenu, ()=> { fcEditMode.value = false; });
+    watch(activeMenu, ()=> { fcEditMode.value = false; pendingKey.value = activeMenu.value; });
     /* 长周期 / 一次买断 / 常规预测结果页使用「编辑 / 保存」开关；仓库级常规预测保持行内常编辑 */
     const isFcLongBuyout = computed(()=> activeMenu.value==='fc-long' || activeMenu.value==='fc-buyout' || activeMenu.value==='fc-regular');
     const fcRowEditable = computed(()=>{
@@ -11474,6 +11605,7 @@ const app = createApp({
     /* no draft page script */
     return {
       ...draftExpose,
+      authed, loginBusy, ssoState, ssoTip, ssoDemoStates, ssoLogin, ssoLogout,
       gpView, gpQ, gpFiltered, gpSearch, gpCols, gpEdit, gpIsCoeff, gpOpenEdit, gpBack, gpSave,
       zhCN, msg,
       topTabs, topTab, clickTopTab,
