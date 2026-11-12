@@ -1747,7 +1747,7 @@ def check_sto_summary():
     return {"ok": True, "msg": "已执行计划汇总渲染正常（43 列严格对齐 6.4.3.2 计算逻辑表 / 三套仓网切换 / 仅导出无编辑）"}
 
 def check_sto_export():
-    """调拨计划导出（sto-export）：严格按 PRD 6.4.2.2「STO 下单模板」字段，列表＝10 模板列 + 导出状态 + 操作。
+    """调拨计划导出（sto-export）：严格按 PRD 6.4.2.2「STO 下单模板」字段，列表＝12 模板列 + 导出状态 + 操作。
     断言：列集/顺序与模板严格一致、SAP 固定值带出、查询条件 5 项与模板数据字段一致、模板外旧列不得残留、
     顶部仅「待导出」tab、无导入/审批/新增、导出按钮存在。"""
     re_ = rendered(dump("sto-export"))
@@ -1757,7 +1757,7 @@ def check_sto_export():
     ehds = [re.sub(r"<[^>]+>", "", h).strip() for h in re.findall(r"<th[^>]*>(.*?)</th>", re_, re.S)]
     ehds = [h for h in ehds if h]  # 剔除勾选列的空表头
     tpl_cols = ["Order Type (Purchasing)", "发货仓", "Purchasing Organization", "Purchasing Group",
-                "Company Code", "计划批次", "计划行", "配件号", "数量", "收货仓",
+                "Company Code", "备注", "计划批次", "计划行", "配件号", "数量", "计划到货日期", "收货仓",
                 "导出状态", "操作"]
     if ehds != tpl_cols:
         bad.append("sto-export(列集/顺序与6.4.2.2模板不一致:" + " / ".join(ehds) + ")")
@@ -1773,7 +1773,7 @@ def check_sto_export():
     # 模板外旧列不得残留（只查列头，避免命中筛选区同名标签）
     for col in ["数据生成日期", "配件名称", "推荐计划数量(分配后)", "推荐计划数量(MPQ取整后)",
                 "推荐计划数量(取整前)", "收货仓最低风控线", "收货仓目标库存", "ABC分类", "车型代码",
-                "计划员", "体积", "体积单位", "预计调拨体积", "库间LT", "计划到货日期",
+                "计划员", "体积", "体积单位", "预计调拨体积", "库间LT",
                 "预期库存（发货仓）", "预期库存（收货仓）", "可用库存数量（发货仓）", "可用库存数量（收货仓）",
                 "欠交数量（发货仓）", "欠交数量（收货仓）", "库间在途数量（发货仓）", "库间在途数量（收货仓）",
                 "缺货数量（发货仓）", "缺货数量（收货仓）", "近3个月月均销量", "当前可用天数", "导出时间", "是否下单"]:
@@ -1795,7 +1795,7 @@ def check_sto_export():
         bad.append("sto-export(缺「导出」按钮)")
     if bad:
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
-    return {"ok": True, "msg": "调拨计划导出渲染正常（12 列＝6.4.2.2 模板 10 列＋导出状态/操作；仅 待导出 1 个tab、导出即自动记录导出时间）"}
+    return {"ok": True, "msg": "调拨计划导出渲染正常（14 列＝6.4.2.2 模板 12 列＋导出状态/操作；仅 待导出 1 个tab、导出即自动记录导出时间）"}
 
 
 def check_po_plan():
@@ -1882,7 +1882,7 @@ def check_po_roll():
 def check_po_archive():
     """历史采购计划（po-history）+ 采购计划导出（po-export）两页渲染与口径校验。
     历史页：列表列须与采购计划全量一致（默认全量 57 数据列，仅去掉顶部状态tab，归档只读）；
-    导出页：列集严格按 4.4.6.2 PO下单模板 11 列 + 导出状态/操作，含 仅 待导出 一个 tab（无「全部」「已导出」tab、无标记按钮），
+    导出页：列集严格按 4.4.6.2 PO下单模板 14 列 + 导出状态/操作，含 仅 待导出 一个 tab（无「全部」「已导出」tab、无标记按钮），
             导出按钮名为「导出」，导出成功后自动打「已导出」标签（不再显示在页面中）。"""
     bad = []
     # ---- 历史采购计划 ----
@@ -1925,7 +1925,7 @@ def check_po_archive():
     acts = re.findall(r'class="link-btn"[^>]*>([^<]*)<', rh)
     if "变更记录" not in [a.strip() for a in acts]:
         bad.append("po-history(缺变更记录入口)")
-    # ---- 采购计划导出：列集严格按 4.4.6.2「PO下单模板」11 列 + 2 个页面控制列 ----
+    # ---- 采购计划导出：列集严格按 4.4.6.2「PO下单模板」14 列 + 2 个页面控制列 ----
     re_ = rendered(dump("po-export"))
     if re_.count("ant-table-row") <= 0:
         bad.append("po-export(rows=0)")
@@ -1940,13 +1940,14 @@ def check_po_archive():
     ehds = [re.sub(r"<[^>]+>", "", h).strip() for h in re.findall(r"<th[^>]*>(.*?)</th>", re_, re.S)]
     ehds = [h for h in ehds if h]  # 剔除勾选列的空表头
     tpl_cols = ["Order Type (Purchasing)", "供应商代码", "Purchasing Organization",
-                "Purchasing Group", "Company Code", "计划批次", "计划行", "配件号", "订单数量",
+                "Purchasing Group", "Company Code", "Salesperson Responsible in the Event of Queries",
+                "计划批次", "计划行", "配件号", "订单数量", "Delivery Date",
                 "Net Price in Purchasing Document (in Document Currency)", "Plant",
-                "导出状态", "操作"]
+                "Tax on sales/purchases code", "导出状态", "操作"]
     if ehds != tpl_cols:
         bad.append("po-export(列集/顺序与4.4.6.2模板不一致:" + " / ".join(ehds) + ")")
     # SAP 固定值须在单元格中带出
-    for fixed in ["ZDFP", "CJV0", "CJLR", "CJDC"]:
+    for fixed in ["ZDFP", "CJV0", "001", "CJLR", "CJDC", "J0"]:
         if fixed not in re_:
             bad.append("po-export(缺固定值:" + fixed + ")")
     # 查询条件须与 4.4.6.2 模板字段一致：4 个筛选标签 配件号/供应商代码/计划批次/计划行
@@ -1970,16 +1971,19 @@ def check_po_archive():
         bad.append("po-export(缺「导出」按钮)")
     if bad:
         return {"ok": False, "msg": "异常: " + ", ".join(bad)}
-    return {"ok": True, "msg": "2 页渲染正常（历史列与采购计划全量一致；导出页 13 列＝4.4.6.2 模板 11 列＋导出状态/操作，仅 待导出 1 个tab，导出即自动记录导出时间）"}
+    return {"ok": True, "msg": "2 页渲染正常（历史列与采购计划全量一致；导出页 16 列＝4.4.6.2 模板 14 列＋导出状态/操作，仅 待导出 1 个tab，导出即自动记录导出时间）"}
 
 def check_po_export_template():
-    """4.4.6.2 PO下单模板严格性：列表业务列与导出 CSV 表头为同一组 11 列，
-       6 项 SAP 固定值由 constVal 带出，导出不受列设置影响。"""
+    """4.4.6.2 PO下单模板严格性：列表业务列与导出 CSV 表头为同一组 14 列，
+       7 项 SAP 固定值由 constVal 带出（Purchasing Group 按 2026-11-12 模板改为 001），导出不受列设置影响。
+       新增：Salesperson Responsible in the Event of Queries、Delivery Date、Tax on sales/purchases code。"""
     bad = []
     tpl = open(HTML, encoding="utf-8", errors="replace").read()
     heads = ["Order Type (Purchasing)", "供应商代码", "Purchasing Organization",
-             "Purchasing Group", "Company Code", "计划批次", "计划行", "配件号", "订单数量",
-             "Net Price in Purchasing Document (in Document Currency)", "Plant"]
+             "Purchasing Group", "Company Code", "Salesperson Responsible in the Event of Queries",
+             "计划批次", "计划行", "配件号", "订单数量", "Delivery Date",
+             "Net Price in Purchasing Document (in Document Currency)", "Plant",
+             "Tax on sales/purchases code"]
     m = re.search(r'const poExpTemplateColumns = \[(.*?)\n    \];', tpl, re.S)
     if not m:
         bad.append("缺 poExpTemplateColumns 定义")
@@ -1988,11 +1992,21 @@ def check_po_export_template():
         for h in heads:
             if "title:'" + h + "'" not in body:
                 bad.append("模板缺表头:" + h)
-        if body.count("constVal") != 6:
-            bad.append("固定值列数应为 6，实为 " + str(body.count("constVal")))
-        for f in ["'ZDFP'", "'CJV0'", "'CJLR'", "'CJDC'"]:
+        if body.count("constVal") != 7:
+            bad.append("固定值列数应为 7，实为 " + str(body.count("constVal")))
+        for f in ["'ZDFP'", "'CJV0'", "'001'", "'CJLR'", "'CJDC'", "'J0'"]:
             if f not in body:
                 bad.append("缺固定值:" + f)
+        if "key:'purchasing_group', width:150, constVal:'1'" in body:
+            bad.append("Purchasing Group 固定值仍为旧值 1，应为 001")
+        for k, d in [("Salesperson Responsible in the Event of Queries", "remark"),
+                     ("Delivery Date", "required_delivery_date")]:
+            if "title:'" + k + "'" not in body or "dataIndex:'" + d + "'" not in body:
+                bad.append("新增列取值来源缺失:" + k)
+        # 表头顺序须与 2026-11-12 模板逐项一致
+        order = re.findall(r"title:'([^']+)'", body)
+        if order != heads:
+            bad.append("PO 模板列顺序不符:" + " / ".join(order))
         if "导出状态" in body or "key:'action'" in body:
             bad.append("模板列中混入了页面控制列")
     # 导出 CSV 必须只用模板列，不得引用可见列（列设置不能影响 PO 模板）
@@ -2002,22 +2016,23 @@ def check_po_export_template():
     else:
         b2 = m2.group(1)
         if "poExpTemplateColumns" not in b2:
-            bad.append("导出未使用模板 11 列")
+            bad.append("导出未使用模板 14 列")
         if "poExpVisibleColumns" in b2:
             bad.append("导出受列设置影响（仍引用 poExpVisibleColumns）")
         if "poExpVal(r, c)" not in b2:
             bad.append("导出未走 poExpVal（固定值可能丢失）")
     return {"ok": not bad,
-            "msg": "正常（11 列表头 + 6 项固定值；CSV 严格模板列、不受列设置影响）" if not bad else "异常: " + ", ".join(bad)}
+            "msg": "正常（14 列表头 + 7 项固定值；CSV 严格模板列、不受列设置影响）" if not bad else "异常: " + ", ".join(bad)}
 
 def check_sto_export_template():
-    """6.4.2.2 STO下单模板严格性：列表业务列与导出 CSV 表头为同一组 10 列，
+    """6.4.2.2 STO下单模板严格性：列表业务列与导出 CSV 表头为同一组 12 列，
+       2026-11-12 模板新增「备注」（恒为空）与「计划到货日期」（对应 SAP Delivery Date 列）。
        4 项 SAP 固定值（Order Type=ZC、Purchasing Organization=CJV0/CN01、Purchasing Group=000、Company Code=CJLR/CN02）由 constVal 带出，
        导出不受列设置影响。其中 Order Type 为纯常量、Purchasing Organization/Company Code 为随发货仓切换的函数式 constVal。"""
     bad = []
     tpl = open(HTML, encoding="utf-8", errors="replace").read()
     heads = ["Order Type (Purchasing)", "发货仓", "Purchasing Organization", "Purchasing Group",
-             "Company Code", "计划批次", "计划行", "配件号", "数量", "收货仓"]
+             "Company Code", "备注", "计划批次", "计划行", "配件号", "数量", "计划到货日期", "收货仓"]
     m = re.search(r'const stoExpTemplateColumns = \[(.*?)\n    \];', tpl, re.S)
     if not m:
         bad.append("缺 stoExpTemplateColumns 定义")
@@ -2027,15 +2042,22 @@ def check_sto_export_template():
             if "title:'" + h + "'" not in body:
                 bad.append("模板缺表头:" + h)
         # 4 个模板固定值列（Order Type=ZC / Purchasing Organization / Purchasing Group=000 / Company Code）
-        # + 2 个仓库列用 constVal 箭头函数抽取 plant code（与模板示例 CJDC/CJV1 一致），共 6 处 constVal
-        if body.count("constVal") != 6:
-            bad.append("constVal 列数应为 6（4 模板固定值 + 2 仓库代码抽取），实为 " + str(body.count("constVal")))
+        # + 2 个仓库列用 constVal 箭头函数抽取 plant code + 1 个「备注」空值常量，共 7 处 constVal
+        if body.count("constVal") != 7:
+            bad.append("constVal 列数应为 7（4 模板固定值 + 2 仓库代码抽取 + 1 备注空值），实为 " + str(body.count("constVal")))
         for f in ["'ZC'", "'000'", "stoExpOrgConst", "stoExpCompConst"]:
             if f not in body:
                 bad.append("缺固定值/函数:" + f)
         # 发货仓/收货仓须用 constVal 箭头函数抽取纯 plant code（去除名称），与模板示例一致
         if body.count("constVal: r =>") != 2:
             bad.append("发货仓/收货仓须各用 constVal 箭头函数抽取 plant code")
+        if "title:'备注', key:'remark', width:120, constVal:''" not in body:
+            bad.append("缺「备注」模板空列（STO 全自动下计划、无审批备注）")
+        if "title:'计划到货日期'" not in body or "dataIndex:'required_arrival_date'" not in body:
+            bad.append("缺「计划到货日期」列或取值来源")
+        order = re.findall(r"title:'([^']+)'", body)
+        if order != heads:
+            bad.append("STO 模板列顺序不符:" + " / ".join(order))
         if "导出状态" in body or "key:'action'" in body:
             bad.append("模板列中混入了页面控制列")
     # 导出 CSV 必须只用模板列，不得引用可见列（列设置不能影响 STO 模板）
@@ -2045,13 +2067,13 @@ def check_sto_export_template():
     else:
         b2 = m2.group(1)
         if "stoExpTemplateColumns" not in b2:
-            bad.append("导出未使用模板 10 列")
+            bad.append("导出未使用模板 12 列")
         if "stoExpVisibleColumns" in b2:
             bad.append("导出受列设置影响（仍引用 stoExpVisibleColumns）")
         if "stoExpVal(r, c)" not in b2:
             bad.append("导出未走 stoExpVal（固定值可能丢失）")
     return {"ok": not bad,
-            "msg": "正常（10 列表头 + 4 项固定值；CSV 严格模板列、不受列设置影响）" if not bad else "异常: " + ", ".join(bad)}
+            "msg": "正常（12 列表头 + 4 项固定值 + 备注空列；CSV 严格模板列、不受列设置影响）" if not bad else "异常: " + ", ".join(bad)}
 
 def check_warehouse_gb09():
     """仓网中心仓 JB09 → GB09 更名一致性校验。"""
@@ -2069,6 +2091,44 @@ def check_warehouse_gb09():
             bad.append(f"{label} 未出现 GB09")
     return {"ok": not bad,
             "msg": "GB09 更名一致（JB09 零残留）" if not bad else "异常: " + ", ".join(bad)}
+
+def check_tpl_fields_20261112():
+    """2026-11-12 下单模板字段同步：PO 11→14 列、STO 10→12 列，template/成品两文件一致。
+    纯源码断言，规避远端 SSO 登录页导致的 rows=0 假红。"""
+    bad = []
+    paths = [os.path.join(VENDOR_DIR, "template.html"), HTML]
+    po_heads = ["Order Type (Purchasing)", "供应商代码", "Purchasing Organization",
+                "Purchasing Group", "Company Code", "Salesperson Responsible in the Event of Queries",
+                "计划批次", "计划行", "配件号", "订单数量", "Delivery Date",
+                "Net Price in Purchasing Document (in Document Currency)", "Plant",
+                "Tax on sales/purchases code"]
+    sto_heads = ["Order Type (Purchasing)", "发货仓", "Purchasing Organization", "Purchasing Group",
+                 "Company Code", "备注", "计划批次", "计划行", "配件号", "数量", "计划到货日期", "收货仓"]
+    for p in paths:
+        tag = os.path.basename(p)
+        s = open(p, encoding="utf-8", errors="replace").read()
+        for name, heads in (("PO", po_heads), ("STO", sto_heads)):
+            arr = "poExpTemplateColumns" if name == "PO" else "stoExpTemplateColumns"
+            m = re.search(r"const " + arr + r" = \[(.*?)\n    \];", s, re.S)
+            if not m:
+                bad.append(tag + " 缺 " + arr)
+                continue
+            got = re.findall(r"title:'([^']+)'", m.group(1))
+            if got != heads:
+                bad.append(tag + " " + name + " 模板列不符:" + " / ".join(got))
+        for kw in ["constVal:'001'", "constVal:'J0'", "constVal:''",
+                   "dataIndex:'required_delivery_date'", "dataIndex:'required_arrival_date'"]:
+            if kw not in s:
+                bad.append(tag + " 缺 " + kw)
+        # 旧口径零残留
+        for kw in ["PO下单模板 11 列", "「PO下单模板」11 列", "PO 下单模板的 11 列",
+                   "STO 下单模板」10 列", "STO 下单模板的 10 列", "10 模板列"]:
+            if kw in s:
+                bad.append(tag + " 旧列数口径残留:" + kw)
+    return {"ok": not bad,
+            "msg": "正常（PO 14 列 / STO 12 列，两文件一致；新增字段与 001/J0 固定值齐备、旧口径零残留）"
+                   if not bad else "异常: " + ", ".join(bad)}
+
 
 def main():
     only = sys.argv[1] if len(sys.argv) > 1 else None
@@ -2311,6 +2371,10 @@ def main():
         r = check_warehouse_gb09()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] 仓网-JB09→GB09 {r['msg']}")
+    if only in (None, 'tpl-fields', 'po-export', 'sto-export'):
+        r = check_tpl_fields_20261112()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] tpl-fields    {r['msg']}")
     print("==== 汇总:", "全部通过" if all_ok else "存在失败", "====")
 
 if __name__ == "__main__":

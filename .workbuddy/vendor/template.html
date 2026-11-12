@@ -1357,7 +1357,7 @@
             </a-modal>
           </template>
 
-          <!-- ============ 采购计划导出（po-export）：列集与导出模板严格按 4.4.6.2 PO下单模板 11 列，含导出状态tab ============ -->
+          <!-- ============ 采购计划导出（po-export）：列集与导出模板严格按 4.4.6.2 PO下单模板 14 列，含导出状态tab ============ -->
           <template v-else-if="activeMenu==='po-export'">
 
             <!-- 顶部状态tab：仅 待导出 -->
@@ -1935,7 +1935,7 @@
               </div>
             </div>
 
-            <!-- 详情弹窗（与列表严格同源：10 个 STO 模板字段 + 导出状态，只读） -->
+            <!-- 详情弹窗（与列表严格同源：12 个 STO 模板字段 + 导出状态，只读） -->
             <a-modal v-model:open="stoExpDetailOpen" title="详情 · 调拨计划导出" :width="760" :footer="null" :mask-closable="false">
               <template v-if="stoExpDetailRow">
                 <a-descriptions bordered :column="2" size="small" style="margin-bottom:20px;">
@@ -5669,6 +5669,8 @@ for(let i=0;i<48;i++){
   r.wh = r.wh_code + ' ' + r.wh_name;
   r.export_status = (i % 3 === 0) ? '已导出' : '待导出';
   r.exported_time = (r.export_status==='已导出') ? ('2026-10-'+(1+i%20)+' 15:'+(10+i%50)) : '—';
+  /* 下单模板 Salesperson Responsible in the Event of Queries 仅保存手工填写的备注，系统生成行留空 */
+  r.remark = (i % 6 === 1) ? '客户紧急订单追加，需优先备货' : '';
   poExpData.push(r);
 }
 
@@ -7521,25 +7523,31 @@ const app = createApp({
     const poHistExportSource = computed(()=> poHistFiltered.value);
     function poHistDoExport(){ poHistCsv(poHistExportSource.value.slice()); }
 
-    /* ================= 采购计划导出（po-export）：列集与导出文件严格按 4.4.6.2「PO下单模板」11 列，顶部仅 待导出 一个状态tab ================= */
+    /* ================= 采购计划导出（po-export）：列集与导出文件严格按 4.4.6.2「PO下单模板」14 列，顶部仅 待导出 一个状态tab ================= */
     const poExpTabs = [
       { key:'待导出', label:'待导出' },
     ];
     const poExpTab = ref('待导出');
-    /* 列集严格对齐 PRD 4.4.6.2「PO下单模板」：11 个模板表头（其中 6 项为 SAP 固定值），
+    /* 列集严格对齐 PRD 4.4.6.2「PO下单模板」：14 个模板表头（其中 7 项为 SAP 固定值），
+       新增 Salesperson Responsible in the Event of Queries（取采购计划.备注，仅手工填写的备注）、
+       Delivery Date（取采购计划.要求交货时间）、Tax on sales/purchases code（固定值 J0）；
+       Purchasing Group 固定值按模板由 1 调整为 001。
        另保留「导出状态」「操作」两个页面控制列；控制列不参与 PO 模板导出。 */
     const poExpTemplateColumns = [
       { title:'Order Type (Purchasing)', key:'order_type', width:180, constVal:'ZDFP' },
       { title:'供应商代码', key:'supplier_code', dataIndex:'cur_supplier_code', width:120 },
       { title:'Purchasing Organization', key:'purchasing_org', width:180, constVal:'CJV0' },
-      { title:'Purchasing Group', key:'purchasing_group', width:150, constVal:'1' },
+      { title:'Purchasing Group', key:'purchasing_group', width:150, constVal:'001' },
       { title:'Company Code', key:'company_code', width:130, constVal:'CJLR' },
+      { title:'Salesperson Responsible in the Event of Queries', key:'salesperson', dataIndex:'remark', width:360 },
       { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:150 },
       { title:'计划行', key:'plan_line', dataIndex:'plan_line', width:190 },
       { title:'配件号', key:'material', dataIndex:'cur_purchase_code', width:130 },
       { title:'订单数量', key:'order_qty', dataIndex:'adjust_qty', width:100, sorter:(a,b)=>a.adjust_qty-b.adjust_qty },
+      { title:'Delivery Date', key:'delivery_date', dataIndex:'required_delivery_date', width:140 },
       { title:'Net Price in Purchasing Document (in Document Currency)', key:'net_price', width:340, constVal:'1' },
       { title:'Plant', key:'plant', width:90, constVal:'CJDC' },
+      { title:'Tax on sales/purchases code', key:'tax_code', width:230, constVal:'J0' },
     ];
     const poExpColumns = poExpTemplateColumns.concat([
       { title:'导出状态', key:'export_status', dataIndex:'export_status', width:90, fixed:'right' },
@@ -7578,7 +7586,7 @@ const app = createApp({
     function poExpOpenDetail(r){ poExpDetailRow.value=r; poExpDetailOpen.value=true; }
     const poExpCanExport = computed(()=> poExpSelected.value.length>0 || poExpFiltered.value.length>0);
     function poExpCsv(rows){
-      /* 导出文件严格按 4.4.6.2 PO 下单模板的 11 列表头输出，与列表列设置无关 */
+      /* 导出文件严格按 4.4.6.2 PO 下单模板的 14 列表头输出，与列表列设置无关 */
       const cols = poExpTemplateColumns;
       const esc = v => { const s=(v===null||v===undefined)?'':String(v); return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
       const lines = [cols.map(c=>esc(c.title)).join(',')]
@@ -7650,21 +7658,24 @@ const app = createApp({
       { title:'操作', key:'action', width:80, fixed:'right' },
     ];
 
-    /* 调拨计划导出（sto-export）：严格按 PRD 6.4.2.2「STO 下单模板」字段输出，列表＝10 模板列 + 导出状态 + 操作。
-       模板 10 列：Order Type (Purchasing)=ZC（固定值）、发货仓、Purchasing Organization（固定值，随发货仓 CJDC→CJV0 / CN00→CN01）、
-       Purchasing Group=000（固定值）、Company Code（固定值，随发货仓 CJLR / CN02）、计划批次、计划行、配件号、数量（取推荐计划数量＝rec_qty）、收货仓。
-       其中 发货仓/收货仓/计划批次/计划行/配件号/数量 为数据字段，其余 4 个为 SAP 固定值（3 个随发货仓切换）。
-       导出 CSV 严格按 10 模板列（不受列设置影响）。 */
+    /* 调拨计划导出（sto-export）：严格按 PRD 6.4.2.2「STO 下单模板」字段输出，列表＝12 模板列 + 导出状态 + 操作。
+       模板 12 列：Order Type (Purchasing)=ZC（固定值）、发货仓、Purchasing Organization（固定值，随发货仓 CJDC→CJV0 / CN00→CN01）、
+       Purchasing Group=000（固定值）、Company Code（固定值，随发货仓 CJLR / CN02）、备注（模板固定为空，STO 全自动下计划无审批）、
+       计划批次、计划行、配件号、数量（取推荐计划数量＝rec_qty）、计划到货日期（取调拨计划.required_arrival_date，对应 SAP Delivery Date）、收货仓。
+       其中 发货仓/计划批次/计划行/配件号/数量/计划到货日期 为数据字段，4 项为 SAP 固定值（3 项随发货仓切换），备注恒为空、收货仓按 plant code 输出。
+       导出 CSV 严格按 12 模板列（不受列设置影响）。 */
     const stoExpTemplateColumns = [
       { title:'Order Type (Purchasing)', key:'order_type', width:170, constVal:'ZC' },
       { title:'发货仓', key:'from_wh', dataIndex:'from_wh', width:130, constVal: r => (r.from_wh||'').split(/\s+/)[0] },
       { title:'Purchasing Organization', key:'purchasing_org', width:210, constVal: stoExpOrgConst },
       { title:'Purchasing Group', key:'purchasing_group', width:160, constVal:'000' },
       { title:'Company Code', key:'company_code', width:140, constVal: stoExpCompConst },
+      { title:'备注', key:'remark', width:120, constVal:'' },
       { title:'计划批次', key:'plan_batch', dataIndex:'plan_batch', width:140 },
       { title:'计划行', key:'plan_line', dataIndex:'plan_line', width:150 },
       { title:'配件号', key:'material', dataIndex:'part_code', width:130 },
       { title:'数量', key:'qty', dataIndex:'rec_qty', width:100, sorter:(a,b)=>a.rec_qty-b.rec_qty },
+      { title:'计划到货日期', key:'delivery_date', dataIndex:'required_arrival_date', width:140 },
       { title:'收货仓', key:'to_wh', dataIndex:'to_wh', width:130, constVal: r => (r.to_wh||'').split(/\s+/)[0] },
     ];
     const stoExpColumns = stoExpTemplateColumns.concat([
@@ -7781,7 +7792,7 @@ const app = createApp({
     const stoExpCanExport = computed(()=> stoExpSelected.value.length>0 || stoExpFiltered.value.length>0);
     const stoExpExportSource = computed(()=> stoExpSelected.value.length ? stoExpSelected.value : stoExpFiltered.value);
     function stoExpCsv(rows){
-      /* 导出文件严格按 6.4.2.2 STO 下单模板的 10 列表头输出，与列表列设置无关 */
+      /* 导出文件严格按 6.4.2.2 STO 下单模板的 12 列表头输出，与列表列设置无关 */
       const cols = stoExpTemplateColumns;
       const esc = v => { const s=(v===null||v===undefined)?'':String(v); return /[",\n\r]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s; };
       const lines = [cols.map(c=>esc(c.title)).join(',')]
