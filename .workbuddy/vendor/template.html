@@ -5847,7 +5847,7 @@ const poAtbData = Vue.reactive([]);
     }, polTrend(src)));
   }
 })();
-// Bridge Buy 计划：每个配件一行，买断区间内（第 1 年 ~ 买断年）多年预测需求一次性出单，扣减属地预期库存
+// Bridge Buy 计划：每个配件一行，买断区间内（第 1 年 ~ 买断年）多年预测需求一次性出单，扣减预期库存
 const poBridgeData = Vue.reactive([]);
 (function buildPoBridge(){
   const whs = warehouses.map(w=>[w.code,w.name]);
@@ -8490,7 +8490,7 @@ const app = createApp({
           { title:'调整计划数量', key:'adjust_qty', dataIndex:'adjust_qty', width:118 },
           { title:'推荐计划数量', key:'plan_qty', dataIndex:'plan_qty', width:118 },
           { title:'调整原因', key:'adjust_reason', dataIndex:'adjust_reason', width:150, ellipsis:true },
-          { title:'属地预期库存', key:'expected_stock', dataIndex:'expected_stock', width:126 },
+          { title:'预期库存', key:'expected_stock', dataIndex:'expected_stock', width:126 },
           { title:'收货仓库', key:'wh_name', dataIndex:'wh_name', width:120 },
           { title:'买断区间', key:'buyout_interval', dataIndex:'buyout_interval', width:120, sorter:(a,b)=>a.buyout_year-b.buyout_year },
           { title:'区间预测需求量', key:'forecast_qty', dataIndex:'forecast_qty', width:140, sorter:(a,b)=>a.forecast_qty-b.forecast_qty },
