@@ -4890,7 +4890,8 @@ mark {
         <a-row :gutter="16">
           <a-col :span="12" v-for="c in (activeDef.editable ? activeDef.columns.filter(x=>x.editable) : activeDef.columns.filter(x=>x.key!=='action'))" :key="c.key">
             <a-form-item :label="c.title">
-              <a-select v-if="c.options" v-model:value="genEditRow[c.dataIndex]" :options="c.options" style="width:100%"/>
+              <a-auto-complete v-if="c.freeInput" v-model:value="genEditRow[c.dataIndex]" :options="(c.options||[]).map(v=>({value:v}))" style="width:100%" placeholder="可选择，也可直接录入"/>
+              <a-select v-else-if="c.options" v-model:value="genEditRow[c.dataIndex]" :options="c.options" style="width:100%"/>
               <a-input v-else v-model:value="genEditRow[c.dataIndex]" style="width:100%"/>
             </a-form-item>
           </a-col>
@@ -5188,6 +5189,9 @@ const materialGroups = ['001 发动机系统','002 底盘系统','003 车身系�
 const baseUnits = ['PC（个）','EA（件）','L（升）','SET（套）'];
 const manufacturers = ['JLR Genuine','Bosch 博世','Continental 大陆','Mahle 马勒','Denso 电装','Valeo 法雷奥','ZF 采埃孚'];
 const productHierarchies = ['A1 发动机系统','A2 制动系统','A3 悬挂系统','A4 电气系统','A5 保养耗材'];
+/* 采购类别：IPOS 同步值为 Y / IH / D，展示时映射为中文枚举；同时支持手工录入 */
+const purchaseCatMap = { Y:'CJLR国产', IH:'CJLR自制', D:'CJLR直供' };
+const purchaseCatOptions = ['CJLR国产','CJLR自制','CJLR直供','JLRC国产','JLR进口'];
 const matData = Vue.reactive([]);
 partPool.forEach((p, idx)=>{
   const t = pick(materialTypes);
@@ -5205,6 +5209,7 @@ partPool.forEach((p, idx)=>{
     volume: +(0.001 + Math.pow(rnd(),3)*0.3).toFixed(4),
     gross_weight: +(0.05 + rnd()*12).toFixed(2),
     planner: pick(planners),
+    purchase_category: purchaseCatMap[pick(['Y','IH','D'])],
     sync_data_time: '2026-09-' + pad2(rint(10,18)) + ' 0' + rint(1,3) + ':' + pad2(rint(10,59)),
   });
 });
@@ -5320,6 +5325,18 @@ const matMasterDef = {
   ],
   data: matData,
 };
+/* 配件扩展属性：在配件主数据列基础上增加「采购类别」（IPOS 同步 Y/IH/D 映射展示，支持手工录入） */
+const matExtColumns = [
+  ...matMasterDef.columns.slice(0,4),
+  {title:'采购类别', key:'purchase_category', dataIndex:'purchase_category', width:130, render:'tag',
+    colorMap:{'CJLR国产':'green','CJLR自制':'blue','CJLR直供':'gold','JLRC国产':'cyan','JLR进口':'purple'},
+    options: purchaseCatOptions, freeInput:true, sorter:(a,b)=>a.purchase_category.localeCompare(b.purchase_category)},
+  ...matMasterDef.columns.slice(4),
+];
+const matExtFilters = [
+  ...matMasterDef.filters,
+  {key:'pcat', label:'采购类别', type:'select', field:'purchase_category', options: purchaseCatOptions.map(v=>({value:v,label:v}))},
+];
 const whMasterDef = {
   isExtension:false, detailTitle:'仓库', idField:'warehouse_code', scrollX:900,
   columns:[
@@ -6576,7 +6593,7 @@ const partGroupDef = {
 
 const pageDefs = {
   'mat-master': matMasterDef,
-  'mat-ext': Object.assign({}, matMasterDef, { isExtension:true }),
+  'mat-ext': Object.assign({}, matMasterDef, { isExtension:true, columns: matExtColumns, filters: matExtFilters, scrollX:1880 }),
   'wh-master': whMasterDef,
   'dealer-ext': dealerExtDef,
   'supplier': supplierDef,
