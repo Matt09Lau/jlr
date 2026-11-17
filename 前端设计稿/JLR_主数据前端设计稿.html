@@ -4965,6 +4965,22 @@ mark {
             <a-tag v-if="c.render==='tag'" :color="genTagColor(c, genDetailRow)" style="margin:0;">{{ genDetailRow[c.dataIndex] }}</a-tag>
             <span v-else-if="c.render==='block'">{{ genDetailRow[c.dataIndex]==='X' ? '已冻结' : '正常' }}</span>
             <span v-else-if="c.render==='partlink'">{{ genDetailRow[c.csvField || c.dataIndex] }}<a v-if="hasTrend(genDetailRow)" style="margin-left:8px;" @click.stop="openTrendModal(genDetailRow)">查看趋势图</a></span>
+            <span v-else-if="c.render==='chain'" class="chain-wrap">
+              <template v-for="(seg,idx) in (genDetailRow.material_chain_segments||[])" :key="'dseg-'+idx">
+                <span v-if="idx===0" class="chain-node" :class="{off: seg.condition_type!=='ZSSA'}">{{ seg.from }}</span>
+                <span class="chain-arrow">
+                  <svg width="26" height="10" viewBox="0 0 26 10">
+                    <line x1="0" y1="5" x2="19" y2="5" stroke-width="1.5"
+                      :stroke="seg.condition_type==='ZSSA' ? '#52c41a' : '#bfbfbf'"
+                      :stroke-dasharray="seg.condition_type==='ZSSA' ? 'none' : '3 2'"/>
+                    <polyline points="19,1.5 24.5,5 19,8.5" fill="none" stroke-width="1.5"
+                      stroke-linecap="round" stroke-linejoin="round"
+                      :stroke="seg.condition_type==='ZSSA' ? '#52c41a' : '#bfbfbf'"/>
+                  </svg>
+                </span>
+                <span class="chain-node" :class="{off: seg.condition_type!=='ZSSA'}">{{ seg.to }}</span>
+              </template>
+            </span>
             <span v-else>{{ genDetailRow[c.csvField || c.dataIndex] }}</span>
           </a-descriptions-item>
           <a-descriptions-item v-for="c in (activeDef.detailExtra||[])" :key="c.key" :label="c.title">{{ genDetailRow[c.dataIndex] || '—' }}</a-descriptions-item>
@@ -5404,40 +5420,57 @@ function makeChainSegments(...codes){
   return segs;
 }
 {
-  /* 循环次数取实际配件号数量上限，确保每条链起点都有效 */
+  /* 先按 2~4 个件组装出完整的替代链，再为链上每个零件各生成一行，
+     每行都携带整条链的 segments —— 查询链上任意零件看到的都是完整链条 */
   const pool = matCodes.slice().sort(()=>rnd()-0.5);
-  const total = Math.min(40, pool.length);
-  for(let i=0;i<total;i++){
-    const a = pool[i];
-    let b = pick(matCodes);
-    let tries = 0; while(b === a && tries++<20) b = pick(matCodes);
-    let c = pick(matCodes);
-    tries = 0; while((c === a || c === b) && tries++<20) c = pick(matCodes);
-    const has3 = rnd()<0.4;
-    const codes = has3 ? [a, b, c] : [a, b];
-    const segments = makeChainSegments(...codes);
-    const upd = '2026-11-' + pad2(rint(1,16)) + ' ' + pad2(rint(8,18)) + ':' + pad2(rint(0,59));
-    replaceData.push({
-      id: 'R' + (i+1),
-      material_code: a,
-      new_material_code: b,
-      material_chain_segments: segments,
-      latest_purchasable_material_code: has3 ? c : b,
-      manual_purchasable_material_code: rnd()<0.3 ? pick(matCodes) : '',
-      creator_name: pick(chainUsers),
-      create_time: '2026-10-' + pad2(rint(1,28)) + ' ' + pad2(rint(8,18)) + ':' + pad2(rint(0,59)),
-      updater_name: pick(chainUsers),
-      update_time: upd,
-    });
-    replaceExtData.push({
-      id: 'E' + (i+1),
-      material_code: a,
-      latest_purchasable_material_code: has3 ? c : b,
-      manual_purchasable_material_code: rnd()<0.35 ? pick(matCodes) : '',
-      updater_name: pick(chainUsers),
-      update_time: upd,
-    });
+  const chains = [];
+  let p = 0;
+  while(p < pool.length){
+    let len = rint(2, 4);
+    if(pool.length - p - len === 1) len += 1;   /* 避免最后只剩 1 个件落单 */
+    len = Math.min(len, pool.length - p);
+    chains.push(pool.slice(p, p + len));
+    p += len;
   }
+  let seq = 0;
+  chains.forEach(chain=>{
+    const segments = makeChainSegments(...chain);
+    const tail = chain[chain.length - 1];
+    /* 最新可采购件：沿已激活段向后推进，遇到未激活段即止 */
+    let purchasable = chain[0];
+    for(const seg of segments){
+      if(seg.condition_type !== 'ZSSA') break;
+      purchasable = seg.to;
+    }
+    const ctime = '2026-10-' + pad2(rint(1,28)) + ' ' + pad2(rint(8,18)) + ':' + pad2(rint(0,59));
+    const upd = '2026-11-' + pad2(rint(1,16)) + ' ' + pad2(rint(8,18)) + ':' + pad2(rint(0,59));
+    const creator = pick(chainUsers);
+    const updater = pick(chainUsers);
+    const manual = rnd()<0.3 ? pick(matCodes) : '';
+    chain.forEach(node=>{
+      seq++;
+      replaceData.push({
+        id: 'R' + seq,
+        material_code: node,
+        new_material_code: tail,
+        material_chain_segments: segments,
+        latest_purchasable_material_code: purchasable,
+        manual_purchasable_material_code: manual,
+        creator_name: creator,
+        create_time: ctime,
+        updater_name: updater,
+        update_time: upd,
+      });
+      replaceExtData.push({
+        id: 'E' + seq,
+        material_code: node,
+        latest_purchasable_material_code: purchasable,
+        manual_purchasable_material_code: manual,
+        updater_name: updater,
+        update_time: upd,
+      });
+    });
+  });
 }
 
 /* ================= 通用页面定义（pageDefs，数据驱动） ================= */
@@ -5562,7 +5595,7 @@ const replaceDef = {
   columns:[
     {title:'配件号', key:'material_code', dataIndex:'material_code', width:145, fixed:'left', render:'link', sorter:(a,b)=>a.material_code.localeCompare(b.material_code)},
     {title:'最新配件号', key:'new_material_code', dataIndex:'new_material_code', width:145, sorter:(a,b)=>a.new_material_code.localeCompare(b.new_material_code)},
-    {title:'物料替代链', key:'material_chain', dataIndex:'material_chain_segments', width:420, render:'chain'},
+    {title:'物料替代链', key:'material_chain', dataIndex:'material_chain_segments', width:560, render:'chain'},
     {title:'最新可采购件', key:'latest_purchasable_material_code', dataIndex:'latest_purchasable_material_code', width:150},
     {title:'人工调整可采购件', key:'manual_purchasable_material_code', dataIndex:'manual_purchasable_material_code', width:165},
     {title:'更新时间', key:'update_time', dataIndex:'update_time', width:165, sorter:(a,b)=>a.update_time.localeCompare(b.update_time)},
