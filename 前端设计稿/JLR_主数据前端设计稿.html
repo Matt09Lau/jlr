@@ -2942,14 +2942,14 @@ mark {
                         <template v-for="(seg,idx) in record.material_chain_segments" :key="'seg-'+idx">
                           <!-- 起始节点：仅首段渲染 from，后续段 from 与前一段 to 复用，不再画 -->
                           <span v-if="idx===0" :title="seg.from + '（起点）'" :style="chainNodeStyle(seg,true)">{{ seg.from }}</span>
-                          <!-- SVG 箭头：水平直线 + 实心三角，颜色随本段激活状态 -->
+                          <!-- SVG 箭头：水平直线 + 描边空心三角，颜色随本段激活状态 -->
                           <span :title="seg.condition_label" style="display:inline-flex;align-items:center;margin:0 2px;">
                             <svg width="26" height="10" viewBox="0 0 26 10" xmlns="http://www.w3.org/2000/svg">
                               <line x1="0" y1="5" x2="20" y2="5" stroke-width="1.5"
                                 :stroke="seg.condition_type==='ZSSA' ? '#52c41a' : '#bfbfbf'"
                                 :stroke-dasharray="seg.condition_type==='ZSSA' ? 'none' : '3 2'"/>
-                              <polygon points="20,0 26,5 20,10"
-                                :fill="seg.condition_type==='ZSSA' ? '#52c41a' : '#bfbfbf'"/>
+                              <polygon points="20,0 26,5 20,10" fill="none" stroke-width="1.5" stroke-linejoin="round"
+                                :stroke="seg.condition_type==='ZSSA' ? '#52c41a' : '#bfbfbf'"/>
                             </svg>
                           </span>
                           <!-- 终点节点 -->
@@ -5308,23 +5308,27 @@ const replaceData = Vue.reactive([]);
 const replaceExtData = Vue.reactive([]);
 const chainUsers = ['张伟','李娜','王强','刘洋','陈静'];
 const matCodes = matData.map(m=>m.material_code);
-/* 生成带激活/未激活状态的替代链段 */
+/* 生成带激活/未激活状态的替代链段（至少返回 1 段，避免链条为空） */
 function makeChainSegments(...codes){
   const segs = [];
-  for(let i=0;i<codes.length-1;i++){
+  for(let i=0;i<Math.max(codes.length-1,1);i++){
     const cond = rnd()<0.75 ? 'ZSSA' : 'ZSSS';
-    segs.push({ from: codes[i], to: codes[i+1], condition_type: cond, condition_label: cond==='ZSSA'?'已激活':'未激活' });
+    const from = codes[i] || codes[0];
+    const to = codes[i+1] || codes[0];
+    segs.push({ from, to, condition_type: cond, condition_label: cond==='ZSSA'?'已激活':'未激活' });
   }
   return segs;
 }
 {
+  /* 循环次数取实际配件号数量上限，确保每条链起点都有效 */
   const pool = matCodes.slice().sort(()=>rnd()-0.5);
-  for(let i=0;i<40;i++){
-    const a = pool[i % pool.length];  /* 循环复用，确保始终取到有效配件号 */
+  const total = Math.min(40, pool.length);
+  for(let i=0;i<total;i++){
+    const a = pool[i];
     let b = pick(matCodes);
-    while(b === a) b = pick(matCodes);  /* 确保后续替代件与当前件不同 */
+    let tries = 0; while(b === a && tries++<20) b = pick(matCodes);
     let c = pick(matCodes);
-    while(c === a || c === b) c = pick(matCodes);
+    tries = 0; while((c === a || c === b) && tries++<20) c = pick(matCodes);
     const has3 = rnd()<0.4;
     const codes = has3 ? [a, b, c] : [a, b];
     const segments = makeChainSegments(...codes);
