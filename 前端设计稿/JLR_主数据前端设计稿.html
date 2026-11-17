@@ -2932,28 +2932,39 @@ mark {
                   <template v-if="column.render==='link'">
                     <a @click.stop="openGenDetail(record)">{{ record[column.dataIndex] }}</a>
                   </template>
-                  <!-- 物料替代链：每段关系独立展示，已激活实线绿箭头，未激活灰底虚线红箭头 -->
+                  <!-- 物料替代链：节点统一样式，仅按激活/未激活区分；箭头为真正的水平直线 + 三角 -->
                   <template v-else-if="column.render==='chain'">
-                    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:2px;line-height:2;">
-                      <span v-for="(seg,idx) in (record.material_chain_segments||[])" :key="'seg-'+idx" style="display:contents;">
-                        <span :style="{
-                          padding:'2px 6px',borderRadius:'3px',fontSize:'12px',fontFamily:'monospace',
+                    <div style="display:flex;flex-wrap:nowrap;align-items:center;gap:0;font-family:monospace;font-size:12px;">
+                      <template v-for="(seg,idx) in (record.material_chain_segments||[])" :key="'seg-'+idx">
+                        <!-- 起始节点（每段的 from，包括首段的起点） -->
+                        <span v-if="idx===0" :title="seg.condition_label" :style="{
+                          padding:'3px 8px',borderRadius:'3px',whiteSpace:'nowrap',
                           background: seg.condition_type==='ZSSA' ? '#f6ffed' : '#fafafa',
-                          border: seg.condition_type==='ZSSA' ? '1px solid #b7eb8f' : '1px dashed #d9d9d9',
+                          border: seg.condition_type==='ZSSA' ? '1px solid #b7eb8f' : '1px dashed #bfbfbf',
                           color: seg.condition_type==='ZSSA' ? '#389e0d' : '#8c8c8c'
-                        }" :title="seg.condition_label">{{ seg.from }}</span>
-                        <span :style="{
-                          margin:'0 4px',fontSize:'13px',fontWeight:600,
-                          color: seg.condition_type==='ZSSA' ? '#52c41a' : '#bfbfbf',
-                          letterSpacing:'-2px'
-                        }" :title="seg.condition_label">{{ seg.condition_type==='ZSSA' ? '—→' : '- -→' }}</span>
-                        <span v-if="idx===record.material_chain_segments.length-1" :style="{
-                          padding:'2px 6px',borderRadius:'3px',fontSize:'12px',fontFamily:'monospace',
-                          background: seg.condition_type==='ZSSA' ? '#e6f7ff' : '#fafafa',
-                          border: seg.condition_type==='ZSSA' ? '1px solid #91d5ff' : '1px dashed #d9d9d9',
-                          color: seg.condition_type==='ZSSA' ? '#0958d9' : '#8c8c8c'
-                        }" :title="seg.condition_label">{{ seg.to }}</span>
-                      </span>
+                        }">{{ seg.from }}</span>
+                        <!-- 中间节点（前一段的 to == 当前段的 from，复用同一节点，不取 from 再画一次） -->
+                        <!-- 箭头：一段水平直线 + 三角箭头，颜色跟随本段激活状态 -->
+                        <span :title="seg.condition_label" :style="{
+                          display:'inline-block',width:'22px',height:'0',
+                          borderTop: seg.condition_type==='ZSSA' ? '1.5px solid #52c41a' : '1.5px dashed #bfbfbf',
+                          margin:'0 2px',position:'relative'
+                        }">
+                          <span :style="{
+                            position:'absolute',right:'-4px',top:'-4px',display:'block',
+                            width:'0',height:'0',
+                            borderTop:'5px solid transparent',borderBottom:'5px solid transparent',
+                            borderLeft: seg.condition_type==='ZSSA' ? '6px solid #52c41a' : '6px solid #bfbfbf'
+                          }"></span>
+                        </span>
+                        <!-- 终点节点 -->
+                        <span :title="seg.condition_label" :style="{
+                          padding:'3px 8px',borderRadius:'3px',whiteSpace:'nowrap',
+                          background: seg.condition_type==='ZSSA' ? '#f6ffed' : '#fafafa',
+                          border: seg.condition_type==='ZSSA' ? '1px solid #b7eb8f' : '1px dashed #bfbfbf',
+                          color: seg.condition_type==='ZSSA' ? '#389e0d' : '#8c8c8c'
+                        }">{{ seg.to }}</span>
+                      </template>
                     </div>
                   </template>
                   <template v-else-if="column.render==='tag'">
