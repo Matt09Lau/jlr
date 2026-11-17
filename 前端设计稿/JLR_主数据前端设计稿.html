@@ -5419,6 +5419,29 @@ function makeChainSegments(...codes){
   }
   return segs;
 }
+/* 采购合同有效期模拟（对应 Purchasing Document / Date of Document / Valid to）
+   有效：Date of Document ≤ 当日，且 Valid to 为空（长期有效）或 ≥ 当日 */
+const CONTRACT_TODAY = '2026-11-17';
+const contractByPart = {};
+partPool.forEach(p=>{
+  const list = [];
+  const hasContract = rnd() > 0.08;               /* 少量配件无合同 */
+  const n = hasContract ? (rnd() < 0.6 ? 1 : 2) : 0;
+  for(let k=0;k<n;k++){
+    const expired = rnd() < 0.2;
+    list.push({
+      purchasing_document: '45000' + String(rint(1000,9999)),
+      date_of_document: '2025-' + pad2(rint(1,12)) + '-' + pad2(rint(1,28)),
+      valid_to: expired ? '2026-0' + rint(1,9) + '-' + pad2(rint(1,28))
+                        : (rnd() < 0.15 ? '' : '2027-' + pad2(rint(1,12)) + '-' + pad2(rint(1,28))),
+    });
+  }
+  contractByPart[p[0]] = list;
+});
+function partHasValidContract(code){
+  const list = contractByPart[code] || [];
+  return list.some(c=> c.date_of_document <= CONTRACT_TODAY && (!c.valid_to || c.valid_to >= CONTRACT_TODAY));
+}
 {
   /* 先按 2~4 个件组装出完整的替代链，再为链上每个零件各生成一行，
      每行都携带整条链的 segments —— 查询链上任意零件看到的都是完整链条 */
@@ -5436,12 +5459,8 @@ function makeChainSegments(...codes){
   chains.forEach(chain=>{
     const segments = makeChainSegments(...chain);
     const tail = chain[chain.length - 1];
-    /* 最新可采购件：沿已激活段向后推进，遇到未激活段即止 */
-    let purchasable = chain[0];
-    for(const seg of segments){
-      if(seg.condition_type !== 'ZSSA') break;
-      purchasable = seg.to;
-    }
+    /* 最新可采购件：只看末级配件是否有有效合同；无有效合同则为空，不再向上回溯匹配上一级 */
+    const purchasable = partHasValidContract(tail) ? tail : '';
     const ctime = '2026-10-' + pad2(rint(1,28)) + ' ' + pad2(rint(8,18)) + ':' + pad2(rint(0,59));
     const upd = '2026-11-' + pad2(rint(1,16)) + ' ' + pad2(rint(8,18)) + ':' + pad2(rint(0,59));
     const creator = pick(chainUsers);
@@ -5610,7 +5629,7 @@ const replaceDef = {
     {key:'ctime', title:'创建时间', dataIndex:'create_time'},
     {key:'updater', title:'修改人', dataIndex:'updater_name'},
   ],
-  detailNote:'数据来源为数据平台（Hive）同步，页面只读；不提供新增、删除、导入、导出。人工调整请在「替代链扩展属性」页面维护。',
+  detailNote:'数据来源为数据平台（Hive）同步，页面只读；不提供新增、删除、导入、导出。人工调整请在「替代链扩展属性」页面维护。最新可采购件只看替代链末级配件是否有有效合同（Purchasing Document：Date of Document ≤ 当日，且 Valid to 为空或 ≥ 当日），末级无有效合同时该字段为空，不再向上回溯匹配上一级配件。',
   data: replaceData,
 };
 const replaceExtDef = {
@@ -5629,7 +5648,7 @@ const replaceExtDef = {
     {key:'latest', label:'最新可采购件', type:'input', field:'latest_purchasable_material_code', placeholder:'最新可采购件'},
     {key:'manual', label:'人工调整可采购件', type:'input', field:'manual_purchasable_material_code', placeholder:'人工调整可采购件'},
   ],
-  detailNote:'人工调整可采购件为空表示未做人工覆盖，按最新可采购件口径使用；本页仅该字段可维护，更新后自动记录修改人与更新时间。',
+  detailNote:'人工调整可采购件为空表示未做人工覆盖，按最新可采购件口径使用；最新可采购件为空表示替代链末级配件无有效合同，系统不再向上级配件回溯匹配。本页仅人工调整可采购件可维护，更新后自动记录修改人与更新时间。',
   data: replaceExtData,
 };
 const dealerExtDef = {
