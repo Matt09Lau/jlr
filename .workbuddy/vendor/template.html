@@ -2485,6 +2485,12 @@
             <a-alert v-if="activeMenu==='fc-best'" type="info" show-icon style="margin-bottom:12px;"
               message="模型池按实际算法配置：回归模型 XGBoost（协变量：保有量/气温/降水量）；周期性模型（单变量）ES（指数平滑）、holt-winters、WMA、STL（时序分解）、Prophet；非周期性模型 ARIMA、Transformer、RNN。"/>
 
+            <!-- 长周期预测报表：待审批 / 已审批 双页签；审批在待审批，生成预计划 / Bridge buy 在已审批，调整两页签均可操作 -->
+            <a-tabs v-if="activeMenu==='fc-long'" v-model:activeKey="fcLongTab" type="card" style="margin-bottom:12px;">
+              <a-tab-pane key="待审批" tab="待审批"/>
+              <a-tab-pane key="已审批" tab="已审批"/>
+            </a-tabs>
+
             <!-- 筛选卡片 -->
             <div class="card">
               <div class="filter-row">
@@ -2517,13 +2523,10 @@
                 <a-button v-if="isFcLongBuyout && activeMenu!=='fc-long' && fcEditMode" type="primary" @click="fcSaveForecast">保存</a-button>
                 <a-button v-if="activeMenu==='fc-wh-regular'" @click="fcSaveForecast">保存</a-button>
                 <a-button v-if="activeMenu==='fc-buyout' || (activeMenu==='fc-buyout-draft' && draftEnabled.value)" @click="fcAllTimeOpen=true">生成All time buy计划</a-button>
-                <a-button v-if="activeMenu==='fc-long'" :disabled="!fcLongSelApproved" @click="fcBridgeOpen=true;fcBridgeDone=false" title="须所选配件均审批通过后方可生成">生成bridge buy计划</a-button>
-                <a-button v-if="activeMenu==='fc-long'" :disabled="!fcLongSelApproved" @click="fcPreOpen=true;fcPreDone=false" title="须所选配件均审批通过；预计划仅供供应商数据同步，不生成实际计划">生成预计划</a-button>
+                <a-button v-if="activeMenu==='fc-long' && fcLongTab==='已审批'" :disabled="!fcLongSelApproved" @click="fcBridgeOpen=true;fcBridgeDone=false" title="须所选配件均审批通过后方可生成">生成bridge buy计划</a-button>
+                <a-button v-if="activeMenu==='fc-long' && fcLongTab==='已审批'" :disabled="!fcLongSelApproved" @click="fcPreOpen=true;fcPreDone=false" title="须所选配件均审批通过；预计划仅供供应商数据同步，不生成实际计划">生成预计划</a-button>
                 <a-button v-if="activeMenu==='fc-long' || (activeMenu==='fc-long-draft' && draftEnabled.value)" :disabled="!fcBatchSelIds.length" @click="fcLongBatchM.open=true">批量圆整（{{ fcBatchSelIds.length }}）</a-button>
-                <span v-if="activeMenu==='fc-long'" style="display:inline-flex;align-items:center;gap:6px;margin-left:6px;padding-left:10px;border-left:1px solid #eee;">
-                  <a-button :disabled="!fcLongCanApprove" @click="fcLongApproveOpen=true">审批</a-button>
-                  <a-button danger :disabled="!fcLongCanApprove" @click="fcLongRejectOpen=true">驳回</a-button>
-                </span>
+                <a-button v-if="activeMenu==='fc-long' && fcLongTab==='待审批'" @click="fcLongApproveOpen=true">审批</a-button>
                 <a-button v-if="activeMenu==='fc-regular' || activeMenu==='fc-wh-regular'" @click="fcGenRegularPo">生成采购计划</a-button>
                 <a-button v-if="activeDef.isExtension" type="default" @click="genImportOpen=true">⬆ 导入</a-button>
                 <a-button v-if="activeMenu==='part-group'" type="primary" @click="openPgModal('add')">＋ 新建分组</a-button>
@@ -2589,10 +2592,6 @@
                   <!-- 长周期汇总值：按数值策略（圆整规则）计算 -->
                   <template v-else-if="column.render==='longtotal'">
                     {{ fcLongTotal(record) }}
-                  </template>
-                  <!-- 长周期审批状态标识 -->
-                  <template v-else-if="column.render==='fcapp'">
-                    <a-tag :color="record.app_status==='审批通过'?'green':(record.app_status==='调整待审批'?'orange':'blue')" style="margin:0;">{{ record.app_status }}</a-tag>
                   </template>
                   <!-- 调整原因：人工调整过预测值的行必填 -->
                   <template v-else-if="column.render==='edittext' && fcLongRowEditing(record)">
@@ -2841,7 +2840,7 @@
             <!-- 长周期预测报表：审批弹窗 -->
             <a-modal v-model:open="fcLongApproveOpen" title="审批 · 长周期预测报表" :width="560" :footer="null" :mask-closable="false">
               <a-alert type="info" show-icon style="margin-bottom:14px;"
-                :message="'将对已勾选的 '+fcLongSelRows.length+' 个配件（含调整后需再次审批的行）执行审批'"/>
+                :message="fcLongApproveDesc"/>
               <a-alert v-if="fcLongApproveErr" type="error" :message="fcLongApproveErr" show-icon style="margin-bottom:12px;"/>
               <div class="jlrs-form-grid">
                 <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>审批意见</span>
@@ -2853,23 +2852,10 @@
               </div>
             </a-modal>
 
-            <!-- 长周期预测报表：驳回弹窗 -->
-            <a-modal v-model:open="fcLongRejectOpen" title="驳回 · 长周期预测报表" :width="560" :footer="null" :mask-closable="false">
-              <a-alert v-if="fcLongRejectErr" type="error" :message="fcLongRejectErr" show-icon style="margin-bottom:12px;"/>
-              <div class="jlrs-form-grid">
-                <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>驳回意见</span>
-                  <a-textarea v-model:value="fcLongRejectRemark" :rows="3" placeholder="请输入驳回意见，100 字以内" :maxlength="100"/></label>
-              </div>
-              <div class="jlrs-modal-footer">
-                <a-button @click="fcLongRejectOpen=false">取 消</a-button>
-                <a-button danger @click="fcLongRejectConfirm">确 定</a-button>
-              </div>
-            </a-modal>
-
             <!-- 长周期预测报表：操作日志弹窗 -->
             <a-modal v-model:open="fcLongLogOpen" :title="fcLongLogTitle" :width="860" :footer="null" :mask-closable="false">
               <a-alert type="info" show-icon style="margin-bottom:12px;"
-                message="记录审批状态变更与 Kevin 人工调整的完整轨迹：审批通过 / 驳回 / 调整后再审批均留痕；调整过的零件须单独再次审批。"/>
+                message="记录审批状态变更与 Kevin 人工调整的完整轨迹：审批通过 / 调整后再审批均留痕；调整过的零件须单独再次审批。"/>
               <a-table :columns="[{title:'时间',dataIndex:'time',width:160},{title:'配件号',dataIndex:'part_code',width:150},{title:'操作人',dataIndex:'user',width:90},{title:'动作',dataIndex:'action',width:130},{title:'说明',dataIndex:'detail',ellipsis:true}]"
                 :data-source="fcLongLogRows" row-key="time" :pagination="{pageSize:8}" size="small" bordered
                 :locale="{emptyText:'暂无操作日志（设计稿示意：保存调整 / 审批后即留痕）'}"/>
@@ -2881,7 +2867,7 @@
               <template v-if="!fcPreDone">
                 <a-alert type="info" show-icon style="margin-bottom:12px;"
                   :message="'已选择 '+fcLongSelRows.length+' 个配件（须均已审批通过）。预计划仅用于供应商数据同步，不实际生成采购 / 调拨计划，不进入审批与执行流程。'"/>
-                <a-table :columns="[{title:'配件号',dataIndex:'part_code',width:150},{title:'配件名称',dataIndex:'part_name',ellipsis:true},{title:'审批状态',dataIndex:'app_status',width:120},{title:'预测合计',dataIndex:'total',width:110}]"
+                <a-table :columns="[{title:'配件号',dataIndex:'part_code',width:150},{title:'配件名称',dataIndex:'part_name',ellipsis:true},{title:'预测合计',dataIndex:'total',width:110}]"
                   :data-source="fcLongSelRows.map(r=>Object.assign({},r,{total:Math.round((r.y1+r.y2+r.y3+r.y4+r.y5+r.y6+r.y7+r.y8+r.y9+r.y10)||0)}))"
                   row-key="id" :pagination="false" size="small" bordered
                   :locale="{emptyText:'请先在长周期预测报表中勾选已审批通过的配件'}"/>
@@ -5258,10 +5244,9 @@ const fcFcFilters = [
   { key:'planner', label:'计划员', type:'select', field:'planner', options:fcPlanners.map(v=>({ value:v, label:v })) },
   { key:'abc', label:'ABC分类', type:'select', field:'abc', options:fcABCs.map(v=>({ value:v, label:v+' 类' })) },
 ];
-/* 长周期预测报表专用查询条件：在通用预测条件上增加「审核状态」「是否取整」 */
+/* 长周期预测报表专用查询条件：审核状态由「待审批 / 已审批」页签承载，仅保留「是否取整」 */
 const fcLongFilters = [
   ...fcFcFilters,
-  { key:'app_status', label:'审核状态', type:'select', field:'app_status', options:[{value:'待审批',label:'待审批'},{value:'审批通过',label:'审批通过'},{value:'调整待审批',label:'调整待审批'}] },
   { key:'rounded', label:'是否取整', type:'select', field:'rounded', options:[{value:'是',label:'是'},{value:'否',label:'否'}] },
 ];
 /* 调整原因：人工调整预测值后必填（调整过的行未填时保存拦截，并给出行号 / 配件号） */
@@ -5286,7 +5271,6 @@ const fcLongDef = {
     { title:'汇总值', key:'longtotal', dataIndex:'longtotal', width:110, render:'longtotal', sorter:(a,b)=>fcLongTotal(a)-fcLongTotal(b) },
     { title:'调整有效期', key:'adj_valid', dataIndex:'adj_valid_until', width:120, render:'editval', sorter:(a,b)=>String(a.adj_valid_until||'').localeCompare(String(b.adj_valid_until||'')) },
     fcReasonCol,
-    { title:'审核状态', key:'app_status', dataIndex:'app_status', width:120, render:'fcapp', sorter:(a,b)=>String(a.app_status||'').localeCompare(String(b.app_status||'')) },
     { title:'是否取整', key:'rounded', dataIndex:'rounded', width:100, render:'tag', colorMap:{'是':'green','否':'orange'} },
     { title:'审批人', key:'app_by', dataIndex:'app_by', width:100 },
     { title:'审批时间', key:'app_time', dataIndex:'app_time', width:140 },
@@ -6423,8 +6407,7 @@ const app = createApp({
     const fcLongEditDraft = reactive({});     // 行内编辑草稿（y1~y10 + adj_reason）
     function fcLongRowEditing(r){ return activeMenu.value==='fc-long' && fcLongEditId.value===r.id; }
     function fcLongStartEdit(r){
-      /* 仅「审批通过」的行可由 Kevin 调整；调整后状态回到「调整待审批」，须单独再审批 */
-      if(r.app_status!=='审批通过'){ antd.message.warning('仅「审批通过」的预测可由 Kevin 调整，请先完成审批'); return; }
+      /* 待审批 / 已审批两个页签均可调整；调整后转为「调整待审批」，须重新审批 */
       const d = {}; fcLongKeys.forEach(k=>{ d[k] = r[k]; }); d.adj_reason = r.adj_reason || '';
       Object.keys(fcLongEditDraft).forEach(k=> delete fcLongEditDraft[k]);
       Object.assign(fcLongEditDraft, d);
@@ -6448,27 +6431,30 @@ const app = createApp({
       r.adj_reason = fcLongEditDraft.adj_reason;
       if(changed){
         r.app_status = '调整待审批'; r.adj_times = (r.adj_times||0)+1;
-        fcLongLog(r, 'Kevin调整预测', 'Kevin', '审批通过后调整 10 年预测值，须单独再次审批（第 '+r.adj_times+' 次调整）');
+        fcLongLog(r, 'Kevin调整预测', 'Kevin', '人工调整 10 年预测值，调整后须重新审批（第 '+r.adj_times+' 次调整）');
         antd.message.success('已保存调整；该零件状态转为「调整待审批」，须再次审批');
       } else {
         antd.message.success('已保存，预测值未发生变化');
       }
       fcLongEditId.value = null;
     }
-    /* 审批：对勾选行（待审批 / 调整待审批）审批或驳回 */
+    /* 审批：按钮始终可点；未勾选则对全部待审批零件审批，勾选则仅对选中零件审批；无驳回 */
+    const fcLongTab = ref('待审批');
     const fcLongApproveOpen = ref(false);
     const fcLongApproveRemark = ref('审批通过');
     const fcLongApproveErr = ref('');
-    const fcLongRejectOpen = ref(false);
-    const fcLongRejectRemark = ref('');
-    const fcLongRejectErr = ref('');
     const fcLongSelRows = computed(()=> fcLongData.filter(r=> fcLongSel.value.indexOf(r.id)>=0));
     const fcLongSelApproved = computed(()=> fcLongSelRows.value.length>0 && fcLongSelRows.value.every(r=> r.app_status==='审批通过'));
-    const fcLongCanApprove = computed(()=> fcLongSelRows.value.length>0 && fcLongSelRows.value.some(r=> r.app_status==='待审批' || r.app_status==='调整待审批'));
+    const fcLongApproveTargets = computed(()=> fcLongSel.value.length
+      ? fcLongSelRows.value
+      : fcLongData.filter(r=> r.app_status!=='审批通过'));
+    const fcLongApproveDesc = computed(()=> fcLongSel.value.length
+      ? ('将对已勾选的 '+fcLongSelRows.value.length+' 个配件执行审批')
+      : ('未勾选配件，将对全部待审批的 '+fcLongApproveTargets.value.length+' 个配件执行审批'));
     function fcLongApproveConfirm(){
       if(!fcLongApproveRemark.value || !fcLongApproveRemark.value.trim()){ fcLongApproveErr.value='请填写审批意见'; return; }
       const now = polNow(); let n=0;
-      fcLongSelRows.value.forEach(function(r){
+      fcLongApproveTargets.value.forEach(function(r){
         if(r.app_status==='审批通过') return;
         const wasAdjusted = r.app_status==='调整待审批';
         r.app_status='审批通过'; r.app_by='审批人'; r.app_time=now; r.app_remark=fcLongApproveRemark.value;
@@ -6476,19 +6462,10 @@ const app = createApp({
         n++;
       });
       fcLongApproveOpen.value=false; fcLongApproveRemark.value='审批通过'; fcLongApproveErr.value='';
-      antd.message.success('已审批 '+n+' 个配件'+(n?'':'（所选均已审批通过）'));
+      fcLongSel.value=[];
+      antd.message.success('已审批 '+n+' 个配件'+(n?'':'（无待审批配件）'));
     }
-    function fcLongRejectConfirm(){
-      if(!fcLongRejectRemark.value || !fcLongRejectRemark.value.trim()){ fcLongRejectErr.value='请填写驳回意见'; return; }
-      const now = polNow(); let n=0;
-      fcLongSelRows.value.forEach(function(r){
-        if(r.app_status==='审批通过') return;
-        r.app_status='待审批'; r.app_by='审批人'; r.app_time=now; r.app_remark=fcLongRejectRemark.value;
-        fcLongLog(r, '驳回', '审批人', fcLongRejectRemark.value); n++;
-      });
-      fcLongRejectOpen.value=false; fcLongRejectRemark.value=''; fcLongRejectErr.value='';
-      antd.message.success('已驳回 '+n+' 个配件，退回待审批');
-    }
+    watch(fcLongTab, ()=>{ fcLongSel.value=[]; genPage.current=1; });
     /* 操作日志弹窗：查看单个零件或全部变更轨迹 */
     const fcLongLogOpen = ref(false);
     const fcLongLogRows = ref([]);
@@ -8494,7 +8471,12 @@ const app = createApp({
       const def = pageDefs[activeMenu.value];
       if(!def) return [];
       const ap = genApplied[activeMenu.value] || {};
+      /* 长周期预测报表按「待审批 / 已审批」页签过滤数据 */
+      const tabFilter = activeMenu.value==='fc-long'
+        ? (r=> fcLongTab.value==='待审批' ? r.app_status!=='审批通过' : r.app_status==='审批通过')
+        : (r=> true);
       return def.data.filter(r=>{
+        if(!tabFilter(r)) return false;
         for(const f of def.filters){
           const v = ap[f.key];
           if(v===undefined || v==='') continue;
@@ -11559,8 +11541,8 @@ const app = createApp({
       fcRegMdl, fcOpenRegMdl, closeRegMdl, refreshRegMdlCharts, fcApplyRegMdl,
       canEditFc, fcEditMode, isFcLongBuyout, fcRowEditable, fcSaveForecast,
       fcLongEditId, fcLongEditDraft, fcLongRowEditing, fcLongStartEdit, fcLongCancelEdit, fcLongSaveEdit,
-      fcLongApproveOpen, fcLongApproveRemark, fcLongApproveErr, fcLongRejectOpen, fcLongRejectRemark, fcLongRejectErr,
-      fcLongSelRows, fcLongSelApproved, fcLongCanApprove, fcLongApproveConfirm, fcLongRejectConfirm,
+      fcLongTab, fcLongApproveOpen, fcLongApproveRemark, fcLongApproveErr,
+      fcLongSelRows, fcLongSelApproved, fcLongApproveTargets, fcLongApproveDesc, fcLongApproveConfirm,
       fcLongLogOpen, fcLongLogRows, fcLongLogTitle, fcLongOpenLog, fcLongLog,
       fcPreOpen, fcPreDone, fcPreGenerate, fcPrePlanData,
       genEditOpen, genEditRow, genImportOpen, genTagColor,
