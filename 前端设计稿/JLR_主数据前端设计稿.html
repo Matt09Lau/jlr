@@ -2932,40 +2932,31 @@ mark {
                   <template v-if="column.render==='link'">
                     <a @click.stop="openGenDetail(record)">{{ record[column.dataIndex] }}</a>
                   </template>
-                  <!-- 物料替代链：节点统一样式，仅按激活/未激活区分；箭头为真正的水平直线 + 三角 -->
+                  <!-- 物料替代链：先收集节点数组与箭头数组，再交错渲染；箭头用 SVG line+polygon 保证水平对齐 -->
                   <template v-else-if="column.render==='chain'">
-                    <div style="display:flex;flex-wrap:nowrap;align-items:center;gap:0;font-family:monospace;font-size:12px;">
-                      <template v-for="(seg,idx) in (record.material_chain_segments||[])" :key="'seg-'+idx">
-                        <!-- 起始节点（每段的 from，包括首段的起点） -->
-                        <span v-if="idx===0" :title="seg.condition_label" :style="{
-                          padding:'3px 8px',borderRadius:'3px',whiteSpace:'nowrap',
-                          background: seg.condition_type==='ZSSA' ? '#f6ffed' : '#fafafa',
-                          border: seg.condition_type==='ZSSA' ? '1px solid #b7eb8f' : '1px dashed #bfbfbf',
-                          color: seg.condition_type==='ZSSA' ? '#389e0d' : '#8c8c8c'
-                        }">{{ seg.from }}</span>
-                        <!-- 中间节点（前一段的 to == 当前段的 from，复用同一节点，不取 from 再画一次） -->
-                        <!-- 箭头：一段水平直线 + 三角箭头，颜色跟随本段激活状态 -->
-                        <span :title="seg.condition_label" :style="{
-                          display:'inline-block',width:'22px',height:'0',
-                          borderTop: seg.condition_type==='ZSSA' ? '1.5px solid #52c41a' : '1.5px dashed #bfbfbf',
-                          margin:'0 2px',position:'relative'
-                        }">
-                          <span :style="{
-                            position:'absolute',right:'-4px',top:'-4px',display:'block',
-                            width:'0',height:'0',
-                            borderTop:'5px solid transparent',borderBottom:'5px solid transparent',
-                            borderLeft: seg.condition_type==='ZSSA' ? '6px solid #52c41a' : '6px solid #bfbfbf'
-                          }"></span>
-                        </span>
-                        <!-- 终点节点 -->
-                        <span :title="seg.condition_label" :style="{
-                          padding:'3px 8px',borderRadius:'3px',whiteSpace:'nowrap',
-                          background: seg.condition_type==='ZSSA' ? '#f6ffed' : '#fafafa',
-                          border: seg.condition_type==='ZSSA' ? '1px solid #b7eb8f' : '1px dashed #bfbfbf',
-                          color: seg.condition_type==='ZSSA' ? '#389e0d' : '#8c8c8c'
-                        }">{{ seg.to }}</span>
-                      </template>
-                    </div>
+                    <!-- 单一节点（无替代链） -->
+                    <span v-if="!record.material_chain_segments || record.material_chain_segments.length===0"
+                      style="color:#8c8c8c;font-family:monospace;">（无替代链）</span>
+                    <template v-else>
+                      <div style="display:flex;flex-wrap:nowrap;align-items:center;gap:0;font-family:monospace;font-size:12px;">
+                        <template v-for="(seg,idx) in record.material_chain_segments" :key="'seg-'+idx">
+                          <!-- 起始节点：仅首段渲染 from，后续段 from 与前一段 to 复用，不再画 -->
+                          <span v-if="idx===0" :title="seg.from + '（起点）'" :style="chainNodeStyle(seg,true)">{{ seg.from }}</span>
+                          <!-- SVG 箭头：水平直线 + 实心三角，颜色随本段激活状态 -->
+                          <span :title="seg.condition_label" style="display:inline-flex;align-items:center;margin:0 2px;">
+                            <svg width="26" height="10" viewBox="0 0 26 10" xmlns="http://www.w3.org/2000/svg">
+                              <line x1="0" y1="5" x2="20" y2="5" stroke-width="1.5"
+                                :stroke="seg.condition_type==='ZSSA' ? '#52c41a' : '#bfbfbf'"
+                                :stroke-dasharray="seg.condition_type==='ZSSA' ? 'none' : '3 2'"/>
+                              <polygon points="20,0 26,5 20,10"
+                                :fill="seg.condition_type==='ZSSA' ? '#52c41a' : '#bfbfbf'"/>
+                            </svg>
+                          </span>
+                          <!-- 终点节点 -->
+                          <span :title="seg.to + ' — ' + seg.condition_label" :style="chainNodeStyle(seg,false)">{{ seg.to }}</span>
+                        </template>
+                      </div>
+                    </template>
                   </template>
                   <template v-else-if="column.render==='tag'">
                     <a-tag :color="genTagColor(column, record)" style="margin:0;">{{ record[column.dataIndex] }}</a-tag>
@@ -5329,11 +5320,13 @@ function makeChainSegments(...codes){
 {
   const pool = matCodes.slice().sort(()=>rnd()-0.5);
   for(let i=0;i<40;i++){
-    const a = pool[i];
-    const b = pick(matCodes);
-    const c = pick(matCodes);
+    const a = pool[i % pool.length];  /* 循环复用，确保始终取到有效配件号 */
+    let b = pick(matCodes);
+    while(b === a) b = pick(matCodes);  /* 确保后续替代件与当前件不同 */
+    let c = pick(matCodes);
+    while(c === a || c === b) c = pick(matCodes);
     const has3 = rnd()<0.4;
-    const codes = [a, b, ...(has3?[c]:[])];
+    const codes = has3 ? [a, b, c] : [a, b];
     const segments = makeChainSegments(...codes);
     const upd = '2026-11-' + pad2(rint(1,16)) + ' ' + pad2(rint(8,18)) + ':' + pad2(rint(0,59));
     replaceData.push({
@@ -8886,6 +8879,16 @@ const app = createApp({
     const genEditRow = ref(null);
     const genEditTarget = ref(null);
     const genImportOpen = ref(false);
+    /* 替代链节点样式：ZSSA 已激活=绿实边，ZSSS 未激活=灰虚线；起点/终点统一样式 */
+    function chainNodeStyle(seg, isStart){
+      const active = seg.condition_type === 'ZSSA';
+      return {
+        padding:'3px 8px', borderRadius:'3px', whiteSpace:'nowrap', fontSize:'12px', fontFamily:'monospace',
+        background: active ? '#f6ffed' : '#fafafa',
+        border: active ? '1px solid #b7eb8f' : '1px dashed #bfbfbf',
+        color: active ? '#389e0d' : '#8c8c8c',
+      };
+    }
     function genTagColor(column, record){
       if(column.colorMap){ return column.colorMap[record[column.dataIndex]] || 'default'; }
       return 'blue';
