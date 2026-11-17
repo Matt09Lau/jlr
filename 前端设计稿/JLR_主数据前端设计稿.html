@@ -1850,12 +1850,10 @@ mark {
           <!-- ============ 6. 采购计划扩展：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划 ============ -->
           <template v-else-if="poPlanKeys.includes(activeMenu)">
 
-            <!-- 审批状态页签（顶部，与常规采购计划一致）；预计划仅供查看，无审批页签 -->
+            <!-- 审批状态页签（顶部，与常规采购计划一致）；预计划无审批页签 -->
             <a-tabs v-if="!poPlanPage.viewOnly" v-model:activeKey="poPlanTab" type="card" style="margin-bottom:12px;">
               <a-tab-pane v-for="t in poPlanTabs" :key="t.key" :tab="t.label + (t.key==='全部' ? '' : '（'+poPlanTabCount(t.key)+'）')"/>
             </a-tabs>
-            <a-alert v-if="poPlanPage.viewOnly" type="info" show-icon style="margin-bottom:12px;"
-              message="预计划仅供查看：由长周期预测报表审批通过后生成，仅用于供应商数据同步，不进入审批与执行流程。" />
 
             <!-- 筛选卡片 -->
             <div class="card">
@@ -3281,7 +3279,7 @@ mark {
               <template v-else>
                 <a-alert type="success" show-icon style="margin-bottom:12px;"
                   :message="'已生成 '+fcPrePlanData.length+' 条预计划，仅供供应商数据同步，不生成实际计划。可前往「计划管理 → 预计划」查看。'"/>
-                <a-table :columns="[{title:'配件号',dataIndex:'part_code',width:150},{title:'配件名称',dataIndex:'part_name',ellipsis:true},{title:'预计划数量',dataIndex:'plan_qty',width:120},{title:'供应商',dataIndex:'supplier',width:140},{title:'同步状态',dataIndex:'sync_status',width:100}]"
+                <a-table :columns="[{title:'配件号',dataIndex:'part_code',width:150},{title:'配件名称',dataIndex:'part_name',ellipsis:true},{title:'计划数量',dataIndex:'plan_qty',width:120},{title:'供应商',dataIndex:'supplier',width:140}]"
                   :data-source="fcPrePlanData" row-key="id" :pagination="{pageSize:8}" size="small" bordered/>
                 <div class="jlrs-modal-footer">
                   <a-button @click="fcPreDone=false">重新生成</a-button>
@@ -6510,6 +6508,23 @@ function polTrend(src, buyoutIdx){
 }
 // 预计划（供应商数据同步用）：由长周期预测报表审批通过的配件生成，不实际生成计划
 const fcPrePlanData = Vue.reactive([]);
+// 样例数据（设计稿演示）：十年预测 + 预期库存 + 计划数量，字段口径与「生成预计划」一致
+(function buildFcPrePlan(){
+  for(let i=0;i<12;i++){
+    const src = fcLongData[i % fcLongData.length];
+    const ys = {}; fcLongKeys.forEach(k=> ys[k] = Number(src[k])||0);
+    const life = Math.round(fcLongKeys.reduce((a,k)=> a+ys[k],0));
+    const stock = Math.round(rnd()*Math.max(1,life)*0.45);
+    fcPrePlanData.push(Object.assign({
+      id:'PRE'+(i+1), data_date:'2026-10-'+String(10+i%18).padStart(2,'0'),
+      part_code:src.part_code, part_name:src.part_name, base:src.base,
+      planner:src.planner, abc:src.abc, stopped:src.stopped,
+      expected_stock:stock, life_demand:life, plan_qty:life,
+      supplier:(supplierData[i % supplierData.length]||{}).supplier_name || '—',
+      bill_status:'—', remark:'预计划·由长周期预测审批通过后生成',
+    }, ys));
+  }
+})();
 // All Time Buy 计划：以一次买断预测（十年累计）为需求口径，扣减全国预期库存
 const poAtbData = Vue.reactive([]);
 (function buildPoAtb(){
@@ -7132,12 +7147,16 @@ const app = createApp({
       sel.forEach(function(r,idx){
         const total = Math.round(fcLongKeys.reduce((a,k)=> a+(Number(r[k])||0),0));
         sum += total;
-        fcPrePlanData.push({
+        const ys = {}; fcLongKeys.forEach(k=> ys[k] = Number(r[k])||0);
+        const stock = Math.round(rnd()*Math.max(1,total)*0.45);
+        fcPrePlanData.push(Object.assign({
           id:'PRE'+Date.now()+'_'+idx, data_date:polNow().slice(0,10),
-          part_code:r.part_code, part_name:r.part_name, plan_qty:total,
+          part_code:r.part_code, part_name:r.part_name, base:r.base,
+          planner:r.planner, abc:r.abc, stopped:r.stopped,
+          expected_stock:stock, life_demand:total, plan_qty:total,
           supplier:(supplierData[idx % supplierData.length]||{}).supplier_name || '—',
-          sync_status:'待同步', bill_status:'—', remark:'预计划·仅供应商数据同步，不生成实际计划',
-        });
+          bill_status:'—', remark:'预计划·由长周期预测审批通过后生成',
+        }, ys));
       });
       fcPreDone.value = true;
       antd.message.success('已生成 '+sel.length+' 条预计划（合计 '+sum+'），仅供供应商数据同步，不生成实际计划');
@@ -9377,17 +9396,25 @@ const app = createApp({
         filters:[
           { key:'part_code', label:'配件号', type:'input', w:140 },
           { key:'part_name', label:'配件名称', type:'input', w:170 },
+          { key:'data_date', label:'数据日期', type:'input', w:130 },
+          { key:'base', label:'base', type:'input', w:140 },
+          { key:'planner', label:'计划员', type:'select', w:110, options:fcPlanners },
+          { key:'abc', label:'ABC分类', type:'select', w:110, options:fcABCs },
           { key:'supplier', label:'供应商', type:'input', w:140 },
-          { key:'sync_status', label:'同步状态', type:'select', w:120, options:['待同步','已同步'] },
         ],
         columns:[
-          { title:'配件号', key:'part_code', dataIndex:'part_code', width:150 },
-          { title:'配件名称', key:'part_name', dataIndex:'part_name', width:210, ellipsis:true },
-          { title:'预计划数量', key:'plan_qty', dataIndex:'plan_qty', width:130, sorter:(a,b)=>a.plan_qty-b.plan_qty },
-          { title:'供应商', key:'supplier', dataIndex:'supplier', width:160 },
-          { title:'同步状态', key:'sync_status', dataIndex:'sync_status', width:110 },
-          { title:'数据日期', key:'data_date', dataIndex:'data_date', width:130 },
-          { title:'备注', key:'remark', dataIndex:'remark', width:260, ellipsis:true },
+          { title:'数据日期', key:'dd', dataIndex:'data_date', width:110, sorter:(a,b)=>String(a.data_date||'').localeCompare(String(b.data_date||'')) },
+          { title:'配件号', key:'part_code', dataIndex:'part_code', width:140 },
+          { title:'配件名称', key:'part_name', dataIndex:'part_name', width:190, ellipsis:true },
+          { title:'base', key:'base', dataIndex:'base', width:130 },
+          { title:'计划员', key:'planner', dataIndex:'planner', width:90 },
+          { title:'ABC分类', key:'abc', dataIndex:'abc', width:90 },
+          ...Array.from({length:10},(_,k)=> ({ title:(k+1)+'年预测', key:'y'+(k+1), dataIndex:'y'+(k+1), width:100, sorter:(a,b)=>a['y'+(k+1)]-b['y'+(k+1)] })),
+          { title:'预测合计', key:'life_demand', dataIndex:'life_demand', width:110, sorter:(a,b)=>a.life_demand-b.life_demand },
+          { title:'预期库存', key:'expected_stock', dataIndex:'expected_stock', width:115, sorter:(a,b)=>a.expected_stock-b.expected_stock },
+          { title:'计划数量', key:'plan_qty', dataIndex:'plan_qty', width:110, sorter:(a,b)=>a.plan_qty-b.plan_qty },
+          { title:'供应商', key:'supplier', dataIndex:'supplier', width:150 },
+          { title:'备注', key:'remark', dataIndex:'remark', width:240, ellipsis:true },
           { title:'操作', key:'action', width:100, fixed:'right' },
         ],
       },

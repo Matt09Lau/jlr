@@ -1026,7 +1026,7 @@ def check_long_reform():
         "生成预计划函数": "function fcPreGenerate" in src and "fcPrePlanData.length = 0" in src,
         "预计划只读页注册": "'po-preplan'" in src and "viewOnly:true" in src,
         "预计划菜单": "key:'po-preplan', parent:'po', title:'预计划'" in src,
-        "预计划只读提示": "预计划仅供查看" in src,
+        "预计划无顶部说明文案": "预计划仅供查看：由长周期预测报表审批通过后生成" not in src,
         "只读页隐藏审批": "v-if=\"!poPlanPage.viewOnly\"" in src,
         "审批按钮无Hugh": "审批通过(Hugh)" not in src and "驳回(Hugh)" not in src and "'Hugh再次审批'" not in src,
         "无顶部操作日志按钮": "@click=\"fcLongOpenLog(null)\"" not in src,
@@ -1040,6 +1040,30 @@ def check_long_reform():
     ok = not bad
     detail = f"通过={len(checks)-len(bad)}/{len(checks)}" + (f" 缺失={bad}" if bad else "")
     return {"key":"长周期改造","ok":ok,"msg":detail}
+
+
+def check_preplan_page():
+    """预计划页（源码级）：无页面说明文案；查询含数据日期且无同步状态；列表含十年预测/预期库存/计划数量且无同步状态；有样例数据。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    a = src.find("'po-preplan': {")
+    b = src.find("'po-ref': {", a)
+    seg = src[a:b] if a >= 0 and b > a else ""
+    checks = {
+        "无页面说明文案": "预计划仅供查看：由长周期预测报表审批通过后生成" not in src,
+        "查询含数据日期": "{ key:'data_date', label:'数据日期', type:'input', w:130 }" in seg,
+        "查询无同步状态": "sync_status" not in seg,
+        "列表十年预测": "{ title:'数据日期', key:'dd'" in seg and "Array.from({length:10},(_,k)=> ({ title:(k+1)+'年预测', key:'y'+(k+1)" in seg and "{ title:'预测合计', key:'life_demand'" in seg,
+        "列表预期库存": "{ title:'预期库存', key:'expected_stock'" in seg,
+        "列表计划数量": "{ title:'计划数量', key:'plan_qty'" in seg,
+        "列表无同步状态": "sync_status" not in seg,
+        "样例数据": "function buildFcPrePlan" in src and "id:'PRE'+(i+1)" in src,
+        "生成函数带十年预测": "const ys = {}; fcLongKeys.forEach(k=> ys[k] = Number(r[k])||0);" in src,
+        "生成弹窗列无同步状态": "{title:'同步状态',dataIndex:'sync_status'" not in src,
+    }
+    bad = [k for k,v in checks.items() if not v]
+    ok = not bad
+    detail = f"通过={len(checks)-len(bad)}/{len(checks)}" + (f" 缺失={bad}" if bad else "")
+    return {"key":"预计划页","ok":ok,"msg":detail}
 
 def check_fc_adjust_reason():
     """预测结果调整：每个可调整的结果页 / 弹窗均有「调整原因」列，且保存时按行校验必填。"""
@@ -2271,6 +2295,9 @@ def main():
         r = check_long_reform()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] 长周期改造      {r['msg']}")
+        r = check_preplan_page()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] 预计划页        {r['msg']}")
         r = check_fc_long_round()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-long-圆整策略  {r['msg']}")
