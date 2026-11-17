@@ -5358,6 +5358,8 @@ const whData = Vue.reactive(warehouses.map((w, i)=>({
   warehouse_type: w.type,
   warehouse_roles: w.roles.map(r=>r==='中心仓'?2:1),
   warehouse_type_text: w.roles.length>1?'中心库 / 区域库':whTypeTextMap[w.type],
+  country: String(w.code).startsWith('GB') ? '英国' : '中国',   /* 国家：IPOS 同步 */
+  is_enabled: '禁用',                                          /* 是否启用：新增字段，默认禁用 */
   sync_data_time: '2026-09-' + pad2(rint(10,18)) + ' 0' + rint(1,3) + ':' + pad2(rint(10,59)),
 })));
 
@@ -5537,18 +5539,23 @@ const matExtFilters = [
   {key:'pcat', label:'采购类别', type:'select', field:'purchase_category', options: purchaseCatOptions.map(v=>({value:v,label:v}))},
 ];
 const whMasterDef = {
-  isExtension:false, detailTitle:'仓库', idField:'warehouse_code', scrollX:900,
+  isExtension:false, editable:true, detailTitle:'仓库', idField:'warehouse_code', scrollX:1060,
   columns:[
-    {title:'仓库编码', key:'warehouse_code', dataIndex:'warehouse_code', width:120, fixed:'left', render:'link'},
-    {title:'仓库名称', key:'warehouse_name', dataIndex:'warehouse_name', width:160},
+    {title:'仓库编码', key:'warehouse_code', dataIndex:'warehouse_code', width:120, fixed:'left', render:'link', editable:true, readonly:true},
+    {title:'仓库名称', key:'warehouse_name', dataIndex:'warehouse_name', width:160, editable:true, readonly:true},
     {title:'仓库类型', key:'warehouse_type', dataIndex:'warehouse_type_text', width:120, render:'tag', colorMap:{1:'blue',2:'geekblue',3:'cyan'}, sorter:(a,b)=>a.warehouse_type-b.warehouse_type},
+    {title:'国家', key:'country', dataIndex:'country', width:100, editable:true, readonly:true, sorter:(a,b)=>a.country.localeCompare(b.country)},
+    {title:'是否启用', key:'is_enabled', dataIndex:'is_enabled', width:110, render:'tag', colorMap:{'启用':'green','禁用':'default'},
+      editable:true, options:[{value:'启用',label:'启用'},{value:'禁用',label:'禁用'}]},
     {title:'数据同步时间', key:'sync_data_time', dataIndex:'sync_data_time', width:165},
-    {title:'操作', key:'action', width:80, fixed:'right'},
+    {title:'操作', key:'action', width:110, fixed:'right'},
   ],
   filters:[
     {key:'code', label:'仓库编码', type:'input', field:'warehouse_code', placeholder:'仓库编码'},
     {key:'name', label:'仓库名称', type:'input', field:'warehouse_name', placeholder:'仓库名称'},
     {key:'type', label:'仓库类型', type:'select', field:'warehouse_type', options:[{value:1,label:'区域库'},{value:2,label:'中心库'},{value:3,label:'收货仓'}]},
+    {key:'country', label:'国家', type:'select', field:'country', options:[{value:'中国',label:'中国'},{value:'英国',label:'英国'}]},
+    {key:'enabled', label:'是否启用', type:'select', field:'is_enabled', options:[{value:'启用',label:'启用'},{value:'禁用',label:'禁用'}]},
   ],
   data: whData,
 };
