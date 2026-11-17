@@ -493,13 +493,13 @@ def check_fc_buyout_btns():
     return {"key":"fc-buyout-按钮","ok":ok,"msg":detail}
 
 def check_fc_long_btns():
-    """长周期预测报表：编辑已移入每行；工具栏含「生成bridge buy计划」「生成预计划」「审批通过(Hugh)」「驳回(Hugh)」「操作日志」；不应再有顶部「编辑」「保存」。"""
+    """长周期预测报表：编辑已移入每行；工具栏含「生成bridge buy计划」「生成预计划」「审批」「驳回」，不含 Hugh 字样与顶部「操作日志」；不应再有顶部「编辑」「保存」。"""
     dump("fc-long")
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
         return {"key":"fc-long-按钮","ok":False,"msg":"渲染失败/错误页"}
     r = strip_scripts(rendered(data))
-    need = ["生成bridge buy计划", "生成预计划", "审批通过(Hugh)", "驳回(Hugh)", "操作日志"]
+    need = ["生成bridge buy计划", "生成预计划", ">审批</a-button>", ">驳回</a-button>"]
     miss = [k for k in need if k not in r]
     bad = [k for k in ["生成采购计划", "生成All time buy计划", "系数调整"] if k in r]
     ok = (not miss) and (not bad)
@@ -954,21 +954,20 @@ def check_po_atb_bridge_integer():
         "fcAllTimeAllRounded = computed(()=> fcGenRoundedBad(fcBuyoutData, fcLongKeys).length === 0)",
         "fcBridgeAllRounded = computed(()=> fcGenRoundedBad(fcLongData, fcLongKeys).length === 0)",
         "const bad = fcGenRoundedBad(fcBuyoutData, fcLongKeys);",
-        "const bad = fcGenRoundedBad(fcLongData, fcLongKeys);",
         "v-if=\"!fcAllTimeAllRounded\"",
-        "v-if=\"!fcBridgeAllRounded\"",
         ":disabled=\"!fcBatchSelIds.length || !fcAllTimeAllRounded\"",
-        ":disabled=\"!fcLongSel.length || !fcBridgeAllRounded || !fcLongSelApproved\"",
+        ":disabled=\"!fcLongSel.length || !fcLongSelApproved\"",
         "计划数量须为整数，生成前系统将校验「一次买断预测结果」全部配件（10 年）均已圆整",
-        "计划数量须为整数，生成前系统将校验「长周期预测报表」全部配件（10 年）均已圆整",
         "一次买断预测结果仍存在未圆整（含小数）的年份，请先对全部配件执行「圆整」处理后再生成 All Time Buy 计划",
-        "长周期预测报表仍存在未圆整（含小数）的年份，请先对全部配件执行「圆整」处理后再生成 bridge buy 计划",
     ]
     stale = [
         "const bad = fcGenRoundedBad(fcAllTimeSelRowsRaw.value, fcLongKeys);",
         "const bad = fcGenRoundedBad(fcBridgeSelRowsRaw.value, fcLongKeys);",
         "所选配件存在未圆整（含小数）的年份，请先对选中的配件执行「圆整」处理后再生成 All Time Buy 计划",
-        "所选配件存在未圆整（含小数）的年份，请先对选中的配件执行「圆整」处理后再生成 bridge buy 计划",
+        "const bad = fcGenRoundedBad(fcLongData, fcLongKeys);",
+        "v-if=\"!fcBridgeAllRounded\"",
+        ":disabled=\"!fcLongSel.length || !fcBridgeAllRounded || !fcLongSelApproved\"",
+        "长周期预测报表仍存在未圆整（含小数）的年份，请先对全部配件执行「圆整」处理后再生成 bridge buy 计划",
     ]
     miss = [k for k in need if k not in src]
     bad = [k for k in stale if k in src]
@@ -994,17 +993,17 @@ def check_fc_long_editmode():
     return {"key":"fc-long-行内编辑","ok":ok,"msg":detail}
 
 def check_long_reform():
-    """长周期预测报表改造（源码级）：审批状态标识 + Hugh 审批门禁 + Kevin 调整再审批 + 操作日志 + 预计划生成 + 预计划只读页。"""
+    """长周期预测报表改造（源码级）：审核状态标识 + 审批门禁 + Kevin 调整再审批 + 操作日志 + 预计划生成 + 预计划只读页。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
     checks = {
         "审批状态字段": "app_status:" in src and "fcLongLog" in src,
-        "审批状态列": "title:'审批状态', key:'app_status'" in src and "render:'fcapp'" in src,
+        "审核状态列": "title:'审核状态', key:'app_status'" in src and "render:'fcapp'" in src,
         "审批状态tag渲染": "column.render==='fcapp'" in src,
-        "审批通过函数": "function fcLongApproveConfirm" in src and "r.app_status='审批通过'; r.app_by='Hugh'" in src,
+        "审批通过函数": "function fcLongApproveConfirm" in src and "r.app_status='审批通过'; r.app_by='审批人'" in src,
         "驳回函数": "function fcLongRejectConfirm" in src,
         "Kevin调整转调整待审批": "r.app_status = '调整待审批'" in src and "fcLongLog(r, 'Kevin调整预测', 'Kevin'" in src,
-        "调整后再审批留痕": "'Hugh再次审批'" in src,
-        "bridge按钮审批门禁": ":disabled=\"!fcLongSel.length || !fcBridgeAllRounded || !fcLongSelApproved\"" in src,
+        "调整后再审批留痕": "'再次审批'" in src,
+        "bridge按钮审批门禁": ":disabled=\"!fcLongSel.length || !fcLongSelApproved\"" in src,
         "审批通过计算属性": "const fcLongSelApproved = computed(" in src,
         "操作日志弹窗": "fcLongLogOpen" in src and "fcLongOpenLog" in src,
         "操作日志渲染": "fcLongOpenLog(record)" in src,
@@ -1014,6 +1013,15 @@ def check_long_reform():
         "预计划菜单": "key:'po-preplan', parent:'po', title:'预计划'" in src,
         "预计划只读提示": "预计划仅供查看" in src,
         "只读页隐藏审批": "v-if=\"!poPlanPage.viewOnly\"" in src,
+        "审批按钮无Hugh": "审批通过(Hugh)" not in src and "驳回(Hugh)" not in src and "'Hugh再次审批'" not in src,
+        "无顶部操作日志按钮": "@click=\"fcLongOpenLog(null)\"" not in src,
+        "审核状态查询条件": "key:'app_status', label:'审核状态', type:'select'" in src,
+        "是否取整查询条件": "key:'rounded', label:'是否取整', type:'select'" in src,
+        "是否取整列": "title:'是否取整', key:'rounded'" in src and "colorMap:{'是':'green','否':'orange'}" in src,
+        "是否取整字段": "rounded: fct.every(v=>Number.isInteger(v))?'是':'否'" in src,
+        "编辑态不展开详情": "fcLongRowEditing(record)) return; openGenDetail" in src,
+        "Bridge生成函数无圆整拦截": "const bad = fcGenRoundedBad(fcLongData, fcLongKeys);" not in src,
+        "Bridge生成按钮无圆整门禁": ":disabled=\"!fcLongSel.length || !fcLongSelApproved\"" in src,
     }
     bad = [k for k,v in checks.items() if not v]
     ok = not bad
