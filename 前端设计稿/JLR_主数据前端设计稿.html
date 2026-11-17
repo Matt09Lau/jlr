@@ -600,6 +600,13 @@ mark {
   .bt-drill-cause{margin-top:12px;border-top:1px dashed #e6e6e6;padding-top:10px;}
   .bt-drill-cause-t{font-size:13px;font-weight:600;color:#1f1f1f;margin-bottom:6px;}
   .bt-drill-cause-d{font-size:12px;color:#595959;line-height:1.8;}
+  /* 物料替代链 */
+  .chain-wrap{display:flex;flex-wrap:nowrap;align-items:center;gap:0;font-family:monospace;font-size:12px;min-height:26px;}
+  .chain-node{display:inline-block;padding:3px 8px;border-radius:3px;white-space:nowrap;line-height:18px;
+    background:#f6ffed;border:1px solid #b7eb8f;color:#389e0d;}
+  .chain-node.off{background:#fafafa;border:1px dashed #bfbfbf;color:#8c8c8c;}
+  .chain-arrow{display:inline-flex;align-items:center;flex:0 0 auto;margin:0 3px;}
+  .chain-empty{color:#bfbfbf;font-size:12px;}
 </style>
 <link rel="stylesheet" href="inventory-strategy.css?v=20261022-7">
 </head>
@@ -2944,31 +2951,28 @@ mark {
                   <template v-if="column.render==='link'">
                     <a @click.stop="openGenDetail(record)">{{ record[column.dataIndex] }}</a>
                   </template>
-                  <!-- 物料替代链：先收集节点数组与箭头数组，再交错渲染；箭头用 SVG line+polygon 保证水平对齐 -->
+                  <!-- 物料替代链：from → to 逐段渲染；已激活绿实线，未激活灰虚线（样式由 CSS class 控制） -->
                   <template v-else-if="column.render==='chain'">
-                    <!-- 单一节点（无替代链） -->
-                    <span v-if="!record.material_chain_segments || record.material_chain_segments.length===0"
-                      style="color:#8c8c8c;font-family:monospace;">（无替代链）</span>
-                    <template v-else>
-                      <div style="display:flex;flex-wrap:nowrap;align-items:center;gap:0;font-family:monospace;font-size:12px;">
-                        <template v-for="(seg,idx) in record.material_chain_segments" :key="'seg-'+idx">
-                          <!-- 起始节点：仅首段渲染 from，后续段 from 与前一段 to 复用，不再画 -->
-                          <span v-if="idx===0" :title="seg.from + '（起点）'" :style="chainNodeStyle(seg,true)">{{ seg.from }}</span>
-                          <!-- SVG 箭头：水平直线 + 描边空心三角，颜色随本段激活状态 -->
-                          <span :title="seg.condition_label" style="display:inline-flex;align-items:center;margin:0 2px;">
-                            <svg width="26" height="10" viewBox="0 0 26 10" xmlns="http://www.w3.org/2000/svg">
-                              <line x1="0" y1="5" x2="20" y2="5" stroke-width="1.5"
-                                :stroke="seg.condition_type==='ZSSA' ? '#52c41a' : '#bfbfbf'"
-                                :stroke-dasharray="seg.condition_type==='ZSSA' ? 'none' : '3 2'"/>
-                              <polygon points="20,0 26,5 20,10" fill="none" stroke-width="1.5" stroke-linejoin="round"
-                                :stroke="seg.condition_type==='ZSSA' ? '#52c41a' : '#bfbfbf'"/>
-                            </svg>
-                          </span>
-                          <!-- 终点节点 -->
-                          <span :title="seg.to + ' — ' + seg.condition_label" :style="chainNodeStyle(seg,false)">{{ seg.to }}</span>
-                        </template>
-                      </div>
-                    </template>
+                    <span v-if="!record.material_chain_segments || !record.material_chain_segments.length" class="chain-empty">—</span>
+                    <div v-else class="chain-wrap">
+                      <template v-for="(seg,idx) in record.material_chain_segments" :key="'seg-'+idx">
+                        <!-- 起点只画一次，后续段的 from 与前一段的 to 是同一节点 -->
+                        <span v-if="idx===0" class="chain-node" :class="{off: seg.condition_type!=='ZSSA'}"
+                          :title="seg.from + '（' + seg.condition_label + '）'">{{ seg.from }}</span>
+                        <span class="chain-arrow" :title="seg.condition_label">
+                          <svg width="26" height="10" viewBox="0 0 26 10">
+                            <line x1="0" y1="5" x2="19" y2="5" stroke-width="1.5"
+                              :stroke="seg.condition_type==='ZSSA' ? '#52c41a' : '#bfbfbf'"
+                              :stroke-dasharray="seg.condition_type==='ZSSA' ? 'none' : '3 2'"/>
+                            <polyline points="19,1.5 24.5,5 19,8.5" fill="none" stroke-width="1.5"
+                              stroke-linecap="round" stroke-linejoin="round"
+                              :stroke="seg.condition_type==='ZSSA' ? '#52c41a' : '#bfbfbf'"/>
+                          </svg>
+                        </span>
+                        <span class="chain-node" :class="{off: seg.condition_type!=='ZSSA'}"
+                          :title="seg.to + '（' + seg.condition_label + '）'">{{ seg.to }}</span>
+                      </template>
+                    </div>
                   </template>
                   <template v-else-if="column.render==='tag'">
                     <a-tag :color="genTagColor(column, record)" style="margin:0;">{{ record[column.dataIndex] }}</a-tag>
@@ -9084,16 +9088,6 @@ const app = createApp({
     const genEditRow = ref(null);
     const genEditTarget = ref(null);
     const genImportOpen = ref(false);
-    /* 替代链节点样式：ZSSA 已激活=绿实边，ZSSS 未激活=灰虚线；起点/终点统一样式 */
-    function chainNodeStyle(seg, isStart){
-      const active = seg.condition_type === 'ZSSA';
-      return {
-        padding:'3px 8px', borderRadius:'3px', whiteSpace:'nowrap', fontSize:'12px', fontFamily:'monospace',
-        background: active ? '#f6ffed' : '#fafafa',
-        border: active ? '1px solid #b7eb8f' : '1px dashed #bfbfbf',
-        color: active ? '#389e0d' : '#8c8c8c',
-      };
-    }
     function genTagColor(column, record){
       if(column.colorMap){ return column.colorMap[record[column.dataIndex]] || 'default'; }
       return 'blue';
