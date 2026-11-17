@@ -702,7 +702,7 @@ const definitions={
     },
     {
       "key": "transferCycle",
-      "label": "调拨周期（天）",
+      "label": "计划周期（天）",
       "sourceOrder": 34,
       "sourceLabel": "计划周期（天）",
       "logic": "",
@@ -710,7 +710,7 @@ const definitions={
     },
     {
       "key": "transferCycleSource",
-      "label": "调拨周期取值来源",
+      "label": "计划周期取值来源",
       "sourceOrder": 35,
       "sourceLabel": "计划周期取值来源",
       "logic": "1.配置表\n2.全局参数",
