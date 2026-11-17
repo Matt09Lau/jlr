@@ -1474,10 +1474,12 @@
           <!-- ============ 6. 采购计划扩展：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划 ============ -->
           <template v-else-if="poPlanKeys.includes(activeMenu)">
 
-            <!-- 审批状态页签（顶部，与常规采购计划一致） -->
-            <a-tabs v-model:activeKey="poPlanTab" type="card" style="margin-bottom:12px;">
+            <!-- 审批状态页签（顶部，与常规采购计划一致）；预计划仅供查看，无审批页签 -->
+            <a-tabs v-if="!poPlanPage.viewOnly" v-model:activeKey="poPlanTab" type="card" style="margin-bottom:12px;">
               <a-tab-pane v-for="t in poPlanTabs" :key="t.key" :tab="t.label + (t.key==='全部' ? '' : '（'+poPlanTabCount(t.key)+'）')"/>
             </a-tabs>
+            <a-alert v-if="poPlanPage.viewOnly" type="info" show-icon style="margin-bottom:12px;"
+              message="预计划仅供查看：由长周期预测报表审批通过后生成，仅用于供应商数据同步，不进入审批与执行流程。" />
 
             <!-- 筛选卡片 -->
             <div class="card">
@@ -1502,9 +1504,11 @@
             <!-- 表格卡片 -->
             <div class="card" style="margin-bottom:0;">
               <div class="toolbar-row">
-                <a-button type="primary" :disabled="!poPlanCanSubmit" @click="poPlanSubmit">提交</a-button>
-                <a-button :disabled="!poPlanCanApprove" @click="poPlanApproveOpen=true">审批通过</a-button>
-                <a-button danger :disabled="!poPlanCanReject" @click="poPlanRejectOpen=true">驳回</a-button>
+                <template v-if="!poPlanPage.viewOnly">
+                  <a-button type="primary" :disabled="!poPlanCanSubmit" @click="poPlanSubmit">提交</a-button>
+                  <a-button :disabled="!poPlanCanApprove" @click="poPlanApproveOpen=true">审批通过</a-button>
+                  <a-button danger :disabled="!poPlanCanReject" @click="poPlanRejectOpen=true">驳回</a-button>
+                </template>
                 <a-button @click="poPlanExport">导出</a-button>
                 <span style="margin-left:8px;color:#888;font-size:12px;" v-if="poPlanSelKeys.length">已选 {{ poPlanSelKeys.length }} 行</span>
                 <div class="toolbar-icons">
@@ -1518,7 +1522,7 @@
                 :pagination="false"
                 :size="tableSize"
                 row-key="id"
-                :row-selection="poPlanRowSelection"
+                :row-selection="poPlanPage.viewOnly ? undefined : poPlanRowSelection"
                 :scroll="{x: poPlanScrollX}"
                 :custom-row="poPlanCustomRow"
               >
@@ -1534,7 +1538,7 @@
                     <a-tag :color="record[column.dataIndex]==='是' ? 'orange' : 'default'" style="margin:0;">{{ record[column.dataIndex] }}</a-tag>
                   </template>
                   <template v-else-if="column.key==='action'">
-                    <span class="link-btn" v-if="poPlanCanEdit(record)" @click.stop="poPlanOpenEdit(record)">编辑</span>
+                    <span class="link-btn" v-if="!poPlanPage.viewOnly && poPlanCanEdit(record)" @click.stop="poPlanOpenEdit(record)">编辑</span>
                     <span class="link-btn" @click.stop="poPlanOpenDetail(record)">详情</span>
                     <span class="link-btn" v-if="poPlanPage.trend" @click.stop="openTrendModal(record)">趋势图</span>
                   </template>
@@ -2509,12 +2513,18 @@
                 <a-button type="primary" @click="genExportCsv(false)">⬇ 导出</a-button>
                 <a-button :type="activeMenu.startsWith('inv-')?'primary':'link'" :style="activeMenu.startsWith('inv-')?{}:{padding:0}" @click="genExportCsv(true)">全量导出</a-button>
                 <a-button v-if="isFcLongBuyoutDraft" @click="lcOpenCoeffModal">系数调整</a-button>
-                <a-button v-if="isFcLongBuyout && !fcEditMode" @click="fcEditMode=true">编辑</a-button>
-                <a-button v-if="isFcLongBuyout && fcEditMode" type="primary" @click="fcSaveForecast">保存</a-button>
+                <a-button v-if="isFcLongBuyout && activeMenu!=='fc-long' && !fcEditMode" @click="fcEditMode=true">编辑</a-button>
+                <a-button v-if="isFcLongBuyout && activeMenu!=='fc-long' && fcEditMode" type="primary" @click="fcSaveForecast">保存</a-button>
                 <a-button v-if="activeMenu==='fc-wh-regular'" @click="fcSaveForecast">保存</a-button>
                 <a-button v-if="activeMenu==='fc-buyout' || (activeMenu==='fc-buyout-draft' && draftEnabled.value)" @click="fcAllTimeOpen=true">生成All time buy计划</a-button>
-                <a-button v-if="activeMenu==='fc-long' || (activeMenu==='fc-long-draft' && draftEnabled.value)" :disabled="!fcLongSel.length" @click="fcBridgeOpen=true;fcBridgeDone=false">生成bridge buy计划</a-button>
-                <a-button v-if="fcBatchable" :disabled="!fcBatchSelIds.length" @click="fcLongBatchM.open=true">批量圆整（{{ fcBatchSelIds.length }}）</a-button>
+                <a-button v-if="activeMenu==='fc-long'" :disabled="!fcLongSelApproved || !fcBridgeAllRounded" @click="fcBridgeOpen=true;fcBridgeDone=false" title="须所选配件均经 Hugh 审批通过，且长周期预测全部圆整">生成bridge buy计划</a-button>
+                <a-button v-if="activeMenu==='fc-long'" :disabled="!fcLongSelApproved" @click="fcPreOpen=true;fcPreDone=false" title="须所选配件均经 Hugh 审批通过；预计划仅供供应商数据同步，不生成实际计划">生成预计划</a-button>
+                <a-button v-if="activeMenu==='fc-long' || (activeMenu==='fc-long-draft' && draftEnabled.value)" :disabled="!fcBatchSelIds.length" @click="fcLongBatchM.open=true">批量圆整（{{ fcBatchSelIds.length }}）</a-button>
+                <span v-if="activeMenu==='fc-long'" style="display:inline-flex;align-items:center;gap:6px;margin-left:6px;padding-left:10px;border-left:1px solid #eee;">
+                  <a-button :disabled="!fcLongCanApprove" @click="fcLongApproveOpen=true">审批通过(Hugh)</a-button>
+                  <a-button danger :disabled="!fcLongCanApprove" @click="fcLongRejectOpen=true">驳回(Hugh)</a-button>
+                  <a-button @click="fcLongOpenLog(null)">操作日志</a-button>
+                </span>
                 <a-button v-if="activeMenu==='fc-regular' || activeMenu==='fc-wh-regular'" @click="fcGenRegularPo">生成采购计划</a-button>
                 <a-button v-if="activeDef.isExtension" type="default" @click="genImportOpen=true">⬆ 导入</a-button>
                 <a-button v-if="activeMenu==='part-group'" type="primary" @click="openPgModal('add')">＋ 新建分组</a-button>
@@ -2581,13 +2591,25 @@
                   <template v-else-if="column.render==='longtotal'">
                     {{ fcLongTotal(record) }}
                   </template>
+                  <!-- 长周期审批状态标识 -->
+                  <template v-else-if="column.render==='fcapp'">
+                    <a-tag :color="record.app_status==='审批通过'?'green':(record.app_status==='调整待审批'?'orange':'blue')" style="margin:0;">{{ record.app_status }}</a-tag>
+                  </template>
                   <!-- 调整原因：人工调整过预测值的行必填 -->
+                  <template v-else-if="column.render==='edittext' && fcLongRowEditing(record)">
+                    <a-input v-model:value="fcLongEditDraft.adj_reason" size="small" placeholder="调整后必填"
+                      :status="(fcLongEditDraft.adj_reason===undefined||!String(fcLongEditDraft.adj_reason).trim()) ? 'error' : ''"/>
+                  </template>
                   <template v-else-if="column.render==='edittext' && fcRowEditable">
                     <a-input v-model:value="record.adj_reason" size="small" placeholder="调整后必填"
                       :status="fcReasonErr(record) ? 'error' : ''" :title="fcReasonErr(record) ? '该行预测值已调整，调整原因必填' : ''"/>
                   </template>
                   <template v-else-if="column.render==='edittext'">
                     {{ record[column.dataIndex] || '—' }}
+                  </template>
+                  <!-- 长周期行内编辑：仅当前编辑行的年份预测值变输入框（须先于展示态判断） -->
+                  <template v-else-if="column.render==='editnum' && fcLongRowEditing(record)">
+                    <a-input-number v-model:value="fcLongEditDraft[column.dataIndex]" :min="0" :precision="2" size="small" style="width:100%"/>
                   </template>
                   <!-- 长周期展示态：年份列直接按数值策略（圆整规则）展示，无需开关；编辑态仍可录入原值 -->
                   <template v-else-if="column.render==='editnum' && canEditFc && isFcLong && !fcRowEditable">
@@ -2618,9 +2640,21 @@
                   <template v-else-if="column.render==='regmdl'">
                     <a @click.stop="fcOpenRegMdl(record)">查看预测结果</a>
                   </template>
-                  <template v-else-if="column.key==='action'">
+                  <template v-else-if="column.key==='action' || column.key==='op'">
+                    <!-- 长周期预测报表：行内编辑（编辑→保存/取消）+ 详情 + 操作日志 -->
+                    <template v-if="activeMenu==='fc-long'">
+                      <template v-if="fcLongRowEditing(record)">
+                        <span class="link-btn" @click.stop="fcLongSaveEdit">保存</span>
+                        <span class="link-btn" @click.stop="fcLongCancelEdit">取消</span>
+                      </template>
+                      <template v-else>
+                        <span class="link-btn" @click.stop="fcLongStartEdit(record)">编辑</span>
+                      </template>
+                      <span class="link-btn" @click.stop="openGenDetail(record)">详情</span>
+                      <span class="link-btn" @click.stop="fcLongOpenLog(record)">日志</span>
+                    </template>
                     <!-- 配件组管理：详情 / 编辑 / 删除（其余页面维持原逻辑） -->
-                    <template v-if="activeMenu==='part-group'">
+                    <template v-else-if="activeMenu==='part-group'">
                       <span class="link-btn" @click.stop="openGenDetail(record)">详情</span>
                       <span class="link-btn" @click.stop="openPgModal('edit', record)">编辑</span>
                       <span class="link-btn" style="color:#ff4d4f;" @click.stop="pgOpenDelete(record)">删除</span>
@@ -2792,7 +2826,7 @@
 
                 <div class="jlrs-modal-footer">
                   <a-button @click="fcBridgeOpen=false">取 消</a-button>
-                  <a-button type="primary" :disabled="!fcLongSel.length || !fcBridgeAllRounded" @click="fcBridgeGenerate">生成bridge buy 计划</a-button>
+                  <a-button type="primary" :disabled="!fcLongSel.length || !fcBridgeAllRounded || !fcLongSelApproved" @click="fcBridgeGenerate">生成bridge buy 计划</a-button>
                 </div>
               </template>
               <template v-else>
@@ -2804,6 +2838,70 @@
                 <div class="jlrs-modal-footer">
                   <a-button @click="fcBridgeDone=false">重新生成</a-button>
                   <a-button type="primary" @click="fcBridgeOpen=false">完 成</a-button>
+                </div>
+              </template>
+            </a-modal>
+
+            <!-- 长周期预测报表：审批通过弹窗（Hugh） -->
+            <a-modal v-model:open="fcLongApproveOpen" title="审批通过 · 长周期预测报表" :width="560" :footer="null" :mask-closable="false">
+              <a-alert type="info" show-icon style="margin-bottom:14px;"
+                :message="'Hugh 将对已勾选的 '+fcLongSelRows.length+' 个配件（含 Kevin 调整后需再次审批的行）执行审批通过'"/>
+              <a-alert v-if="fcLongApproveErr" type="error" :message="fcLongApproveErr" show-icon style="margin-bottom:12px;"/>
+              <div class="jlrs-form-grid">
+                <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>审批意见</span>
+                  <a-textarea v-model:value="fcLongApproveRemark" :rows="3" placeholder="请输入审批意见，100 字以内" :maxlength="100"/></label>
+              </div>
+              <div class="jlrs-modal-footer">
+                <a-button @click="fcLongApproveOpen=false">取 消</a-button>
+                <a-button type="primary" @click="fcLongApproveConfirm">确 定</a-button>
+              </div>
+            </a-modal>
+
+            <!-- 长周期预测报表：驳回弹窗（Hugh） -->
+            <a-modal v-model:open="fcLongRejectOpen" title="驳回 · 长周期预测报表" :width="560" :footer="null" :mask-closable="false">
+              <a-alert v-if="fcLongRejectErr" type="error" :message="fcLongRejectErr" show-icon style="margin-bottom:12px;"/>
+              <div class="jlrs-form-grid">
+                <label style="grid-column:1 / -1;"><span><b class="jlrs-req">*</b>驳回意见</span>
+                  <a-textarea v-model:value="fcLongRejectRemark" :rows="3" placeholder="请输入驳回意见，100 字以内" :maxlength="100"/></label>
+              </div>
+              <div class="jlrs-modal-footer">
+                <a-button @click="fcLongRejectOpen=false">取 消</a-button>
+                <a-button danger @click="fcLongRejectConfirm">确 定</a-button>
+              </div>
+            </a-modal>
+
+            <!-- 长周期预测报表：操作日志弹窗 -->
+            <a-modal v-model:open="fcLongLogOpen" :title="fcLongLogTitle" :width="860" :footer="null" :mask-closable="false">
+              <a-alert type="info" show-icon style="margin-bottom:12px;"
+                message="记录审批状态变更与 Kevin 人工调整的完整轨迹：审批通过 / 驳回 / 调整后再审批均留痕；调整过的零件须单独再次审批。"/>
+              <a-table :columns="[{title:'时间',dataIndex:'time',width:160},{title:'配件号',dataIndex:'part_code',width:150},{title:'操作人',dataIndex:'user',width:90},{title:'动作',dataIndex:'action',width:130},{title:'说明',dataIndex:'detail',ellipsis:true}]"
+                :data-source="fcLongLogRows" row-key="time" :pagination="{pageSize:8}" size="small" bordered
+                :locale="{emptyText:'暂无操作日志（设计稿示意：保存调整 / 审批后即留痕）'}"/>
+              <div class="jlrs-modal-footer"><a-button type="primary" @click="fcLongLogOpen=false">关 闭</a-button></div>
+            </a-modal>
+
+            <!-- 长周期预测报表：生成预计划（仅同步供应商数据，不生成实际计划） -->
+            <a-modal v-model:open="fcPreOpen" title="生成预计划 · 长周期预测报表" :width="900" :footer="null" :mask-closable="false">
+              <template v-if="!fcPreDone">
+                <a-alert type="info" show-icon style="margin-bottom:12px;"
+                  :message="'已选择 '+fcLongSelRows.length+' 个配件（须均已审批通过）。预计划仅用于供应商数据同步，不实际生成采购 / 调拨计划，不进入审批与执行流程。'"/>
+                <a-table :columns="[{title:'配件号',dataIndex:'part_code',width:150},{title:'配件名称',dataIndex:'part_name',ellipsis:true},{title:'审批状态',dataIndex:'app_status',width:120},{title:'预测合计',dataIndex:'total',width:110}]"
+                  :data-source="fcLongSelRows.map(r=>Object.assign({},r,{total:Math.round((r.y1+r.y2+r.y3+r.y4+r.y5+r.y6+r.y7+r.y8+r.y9+r.y10)||0)}))"
+                  row-key="id" :pagination="false" size="small" bordered
+                  :locale="{emptyText:'请先在长周期预测报表中勾选已审批通过的配件'}"/>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="fcPreOpen=false">取 消</a-button>
+                  <a-button type="primary" @click="fcPreGenerate">生成预计划</a-button>
+                </div>
+              </template>
+              <template v-else>
+                <a-alert type="success" show-icon style="margin-bottom:12px;"
+                  :message="'已生成 '+fcPrePlanData.length+' 条预计划，仅供供应商数据同步，不生成实际计划。可前往「计划管理 → 预计划」查看。'"/>
+                <a-table :columns="[{title:'配件号',dataIndex:'part_code',width:150},{title:'配件名称',dataIndex:'part_name',ellipsis:true},{title:'预计划数量',dataIndex:'plan_qty',width:120},{title:'供应商',dataIndex:'supplier',width:140},{title:'同步状态',dataIndex:'sync_status',width:100}]"
+                  :data-source="fcPrePlanData" row-key="id" :pagination="{pageSize:8}" size="small" bordered/>
+                <div class="jlrs-modal-footer">
+                  <a-button @click="fcPreDone=false">重新生成</a-button>
+                  <a-button type="primary" @click="fcPreOpen=false">完 成</a-button>
                 </div>
               </template>
             </a-modal>
@@ -5048,7 +5146,11 @@ for(let i=0;i<32;i++){
     base:fcb(m.material_code), planner:pick(fcPlanners), deliveryPlanner:pick(fcDelivPlanners),
     vehicle:pick(fcVehicles), stopped:rnd()<0.22?'是':'否', abc:pick(fcABCs), sparse,
     y1:fct[0], y2:fct[1], y3:fct[2], y4:fct[3], y5:fct[4], y6:fct[5], y7:fct[6], y8:fct[7], y9:fct[8], y10:fct[9],
-    hist, fct, trendAxis:fcLongTrendYears, trendSplit:fcLongTrendSplit, trendUnit:'年' });
+    hist, fct, trendAxis:fcLongTrendYears, trendSplit:fcLongTrendSplit, trendUnit:'年',
+    /* 审批状态：待审批 / 审批通过 / 调整待审批（Kevin 调整后须单独再审批）；审批留痕 + 操作日志 */
+    app_status:(i%3===0?'待审批':'审批通过'), app_by:(i%3===0?'':pick(fcPlanners)),
+    app_time:(i%3===0?'':'2026-10-'+String(10+i%18).padStart(2,'0')+' 09:30'), app_remark:(i%3===0?'':'同意，按预测需求执行'),
+    adj_times:0, op_logs:[] });
 }
 
 // 一次买断预测结果（EOP 场景，未来 10 年年度净需求，1年预测~10年预测）
@@ -5180,7 +5282,11 @@ const fcLongDef = {
     ...Array.from({length:10},(_,k)=> Object.assign(fcNumCol((k+1)+'年预测','y'+(k+1)),{render:'editnum'})),
     { title:'汇总值', key:'longtotal', dataIndex:'longtotal', width:110, render:'longtotal', sorter:(a,b)=>fcLongTotal(a)-fcLongTotal(b) },
     { title:'调整有效期', key:'adj_valid', dataIndex:'adj_valid_until', width:120, render:'editval', sorter:(a,b)=>String(a.adj_valid_until||'').localeCompare(String(b.adj_valid_until||'')) },
-    fcReasonCol ],
+    fcReasonCol,
+    { title:'审批状态', key:'app_status', dataIndex:'app_status', width:130, render:'fcapp', sorter:(a,b)=>String(a.app_status||'').localeCompare(String(b.app_status||'')) },
+    { title:'审批人', key:'app_by', dataIndex:'app_by', width:100 },
+    { title:'审批时间', key:'app_time', dataIndex:'app_time', width:140 },
+    { title:'操作', key:'op', width:150, fixed:'right', render:'fclop' } ],
   data: fcLongData,
 };
 const fcBuyoutDef = {
@@ -5824,6 +5930,8 @@ function polTrend(src, buyoutIdx){
   }
   return t;
 }
+// 预计划（供应商数据同步用）：由长周期预测报表审批通过的配件生成，不实际生成计划
+const fcPrePlanData = Vue.reactive([]);
 // All Time Buy 计划：以一次买断预测（十年累计）为需求口径，扣减全国预期库存
 const poAtbData = Vue.reactive([]);
 (function buildPoAtb(){
@@ -6202,7 +6310,7 @@ const app = createApp({
       'fc-new','fc-long','fc-buyout','fc-regular','fc-wh-regular','fc-best','fc-backtest',
       'activity-register','data-sense-task','order-monitor',
       'part-group','po-regular','po-history','po-export','sto-week','sto-export','sto-summary','sto-next',
-      'po-atb','po-bridge','po-ref','po-roll'];
+      'po-atb','po-bridge','po-ref','po-roll','po-preplan'];
     function keyFromHash(){
       const h = (window.location.hash||'').replace(/^#/,'').trim();
       if(h==='strategy-stocking')return 'wh-abc';
@@ -6258,6 +6366,7 @@ const app = createApp({
       { type:'item', key:'sto-summary', parent:'po', title:'调拨计划汇总', icon:'📊' },
       { type:'item', key:'sto-next', parent:'po', title:'给仓库的预计调拨计划', icon:'🗓' },
       { type:'item', key:'po-atb', parent:'po', title:'All Time Buy 计划', icon:'🧾' },
+      { type:'item', key:'po-preplan', parent:'po', title:'预计划', icon:'🗒' },
       { type:'item', key:'po-bridge', parent:'po', title:'Bridge Buy 计划', icon:'🌉' },
       { type:'item', key:'po-ref', parent:'po', title:'参考零件采购计划', icon:'🆕' },
       { type:'group', key:'report', title:'报表' },
@@ -6305,6 +6414,109 @@ const app = createApp({
       fcEditMode.value = false;
     }
     function fcSaveLongBuyout(){ fcSaveForecast(); }
+    /* ===== 长周期预测报表：行内编辑 + 审批流（Hugh 审批 / Kevin 调整再审批）+ 操作日志 ===== */
+    const fcLongEditId = ref(null);          // 当前处于行内编辑态的行 id（仅长周期报表使用）
+    const fcLongEditDraft = reactive({});     // 行内编辑草稿（y1~y10 + adj_reason）
+    function fcLongRowEditing(r){ return activeMenu.value==='fc-long' && fcLongEditId.value===r.id; }
+    function fcLongStartEdit(r){
+      /* 仅「审批通过」的行可由 Kevin 调整；调整后状态回到「调整待审批」，须单独再审批 */
+      if(r.app_status!=='审批通过'){ antd.message.warning('仅「审批通过」的预测可由 Kevin 调整，请先完成审批'); return; }
+      const d = {}; fcLongKeys.forEach(k=>{ d[k] = r[k]; }); d.adj_reason = r.adj_reason || '';
+      Object.keys(fcLongEditDraft).forEach(k=> delete fcLongEditDraft[k]);
+      Object.assign(fcLongEditDraft, d);
+      fcLongEditId.value = r.id;
+    }
+    function fcLongCancelEdit(){ fcLongEditId.value = null; }
+    function fcLongLog(r, action, user, detail){
+      if(!r.op_logs) r.op_logs = [];
+      r.op_logs.push({ time:polNow(), user, action, detail:detail||'' });
+    }
+    function fcLongSaveEdit(){
+      const r = fcLongData.find(x=> x.id===fcLongEditId.value); if(!r) return;
+      let changed = false;
+      fcLongKeys.forEach(k=>{ if(Number(r[k])!==Number(fcLongEditDraft[k])) changed = true; });
+      if(changed && !(fcLongEditDraft.adj_reason && String(fcLongEditDraft.adj_reason).trim())){
+        antd.message.error('预测值已调整，须填写「调整原因」后再保存'); return;
+      }
+      const before = fcLongKeys.map(k=> r[k]).join('/');
+      fcLongKeys.forEach(k=>{ r[k] = fcLongEditDraft[k]; });
+      r.adj_reason = fcLongEditDraft.adj_reason;
+      if(changed){
+        r.app_status = '调整待审批'; r.adj_times = (r.adj_times||0)+1;
+        fcLongLog(r, 'Kevin调整预测', 'Kevin', '审批通过后调整 10 年预测值，须单独再次审批（第 '+r.adj_times+' 次调整）');
+        antd.message.success('已保存调整；该零件状态转为「调整待审批」，须再次审批');
+      } else {
+        antd.message.success('已保存，预测值未发生变化');
+      }
+      fcLongEditId.value = null;
+    }
+    /* 审批：Hugh 对勾选行（待审批 / 调整待审批）审批通过或驳回 */
+    const fcLongApproveOpen = ref(false);
+    const fcLongApproveRemark = ref('审批通过');
+    const fcLongApproveErr = ref('');
+    const fcLongRejectOpen = ref(false);
+    const fcLongRejectRemark = ref('');
+    const fcLongRejectErr = ref('');
+    const fcLongSelRows = computed(()=> fcLongData.filter(r=> fcLongSel.value.indexOf(r.id)>=0));
+    const fcLongSelApproved = computed(()=> fcLongSelRows.value.length>0 && fcLongSelRows.value.every(r=> r.app_status==='审批通过'));
+    const fcLongCanApprove = computed(()=> fcLongSelRows.value.length>0 && fcLongSelRows.value.some(r=> r.app_status==='待审批' || r.app_status==='调整待审批'));
+    function fcLongApproveConfirm(){
+      if(!fcLongApproveRemark.value || !fcLongApproveRemark.value.trim()){ fcLongApproveErr.value='请填写审批意见'; return; }
+      const now = polNow(); let n=0;
+      fcLongSelRows.value.forEach(function(r){
+        if(r.app_status==='审批通过') return;
+        const wasAdjusted = r.app_status==='调整待审批';
+        r.app_status='审批通过'; r.app_by='Hugh'; r.app_time=now; r.app_remark=fcLongApproveRemark.value;
+        fcLongLog(r, wasAdjusted?'Hugh再次审批':'Hugh审批通过', 'Hugh', fcLongApproveRemark.value);
+        n++;
+      });
+      fcLongApproveOpen.value=false; fcLongApproveRemark.value='审批通过'; fcLongApproveErr.value='';
+      antd.message.success('Hugh 已审批通过 '+n+' 个配件'+(n?'':'（所选均已审批通过）'));
+    }
+    function fcLongRejectConfirm(){
+      if(!fcLongRejectRemark.value || !fcLongRejectRemark.value.trim()){ fcLongRejectErr.value='请填写驳回意见'; return; }
+      const now = polNow(); let n=0;
+      fcLongSelRows.value.forEach(function(r){
+        if(r.app_status==='审批通过') return;
+        r.app_status='待审批'; r.app_by='Hugh'; r.app_time=now; r.app_remark=fcLongRejectRemark.value;
+        fcLongLog(r, 'Hugh驳回', 'Hugh', fcLongRejectRemark.value); n++;
+      });
+      fcLongRejectOpen.value=false; fcLongRejectRemark.value=''; fcLongRejectErr.value='';
+      antd.message.success('已驳回 '+n+' 个配件，退回待审批');
+    }
+    /* 操作日志弹窗：查看单个零件或全部变更轨迹 */
+    const fcLongLogOpen = ref(false);
+    const fcLongLogRows = ref([]);
+    const fcLongLogTitle = ref('操作日志');
+    function fcLongOpenLog(r){
+      if(r){ fcLongLogRows.value = (r.op_logs||[]).slice().reverse(); fcLongLogTitle.value = '操作日志 · '+r.part_code; }
+      else {
+        const all=[]; fcLongData.forEach(function(x){ (x.op_logs||[]).forEach(function(l){ all.push(Object.assign({part_code:x.part_code}, l)); }); });
+        fcLongLogRows.value = all.reverse(); fcLongLogTitle.value = '操作日志 · 长周期预测报表（全部）';
+      }
+      fcLongLogOpen.value = true;
+    }
+    /* 预计划：仅同步供应商数据，不实际生成计划，写入 fcPrePlanData */
+    const fcPreOpen = ref(false);
+    const fcPreDone = ref(false);
+    function fcPreGenerate(){
+      const sel = fcLongSelRows.value.filter(r=> r.app_status==='审批通过');
+      if(!sel.length){ antd.message.warning('请先勾选已审批通过的配件生成预计划'); return; }
+      fcPrePlanData.length = 0;
+      let sum = 0;
+      sel.forEach(function(r,idx){
+        const total = Math.round(fcLongKeys.reduce((a,k)=> a+(Number(r[k])||0),0));
+        sum += total;
+        fcPrePlanData.push({
+          id:'PRE'+Date.now()+'_'+idx, data_date:polNow().slice(0,10),
+          part_code:r.part_code, part_name:r.part_name, plan_qty:total,
+          supplier:(supplierData[idx % supplierData.length]||{}).supplier_name || '—',
+          sync_status:'待同步', bill_status:'—', remark:'预计划·仅供应商数据同步，不生成实际计划',
+        });
+      });
+      fcPreDone.value = true;
+      antd.message.success('已生成 '+sel.length+' 条预计划（合计 '+sum+'），仅供供应商数据同步，不生成实际计划');
+    }
     function fcSavePred(){
       const rows = fcPredRows.value;
       if(!fcCheckReason(rows, r=> r.code)) return;
@@ -7274,6 +7486,8 @@ const app = createApp({
     function poRegOpenEdit(r){
       poRegEditTarget.value = r;
       const copy = Object.assign({}, r);
+      // 调整原因：默认预填「人工判断」，可编辑（用户可改写为实际调整原因）
+      if(!copy.adjust_reason) copy.adjust_reason = '人工判断';
       // 多供应商拦截：默认选中当前供应商（无则取首家）
       if(copy.multi_supplier_block==='是' && copy.suppliers && copy.suppliers.length){
         if(!copy.suppliers.find(s=>s.code===copy.cur_supplier_code)) copy.cur_supplier_code = copy.suppliers[0].code;
@@ -8436,7 +8650,7 @@ const app = createApp({
     const planGroupModal = reactive({ open:false, mode:'add', form:{ code:'', name:'', description:'', status:'启用' } });
 
     /* ===== 采购计划扩展页：All Time Buy 计划 / Bridge Buy 计划 / 参考零件采购计划 ===== */
-    const poPlanKeys = ['po-atb','po-bridge','po-ref'];
+    const poPlanKeys = ['po-atb','po-bridge','po-ref','po-preplan'];
     // 审批状态页签（与常规采购计划一致）：全部 / 待提交 / 待审批 / 已驳回 / 审批通过
     const poPlanTabs = [
       { key:'全部', label:'全部' }, { key:'待提交', label:'待提交' }, { key:'待审批', label:'待审批' },
@@ -8500,6 +8714,26 @@ const app = createApp({
           { title:'单据状态', key:'bill_status', dataIndex:'bill_status', width:100 },
           { title:'审批人', key:'approver', dataIndex:'approver', width:100 },
           { title:'操作', key:'action', width:160, fixed:'right' },
+        ],
+      },
+      'po-preplan': {
+        key:'po-preplan', title:'预计划', data:fcPrePlanData,
+        fold:false, trend:false, viewOnly:true,
+        filters:[
+          { key:'part_code', label:'配件号', type:'input', w:140 },
+          { key:'part_name', label:'配件名称', type:'input', w:170 },
+          { key:'supplier', label:'供应商', type:'input', w:140 },
+          { key:'sync_status', label:'同步状态', type:'select', w:120, options:['待同步','已同步'] },
+        ],
+        columns:[
+          { title:'配件号', key:'part_code', dataIndex:'part_code', width:150 },
+          { title:'配件名称', key:'part_name', dataIndex:'part_name', width:210, ellipsis:true },
+          { title:'预计划数量', key:'plan_qty', dataIndex:'plan_qty', width:130, sorter:(a,b)=>a.plan_qty-b.plan_qty },
+          { title:'供应商', key:'supplier', dataIndex:'supplier', width:160 },
+          { title:'同步状态', key:'sync_status', dataIndex:'sync_status', width:110 },
+          { title:'数据日期', key:'data_date', dataIndex:'data_date', width:130 },
+          { title:'备注', key:'remark', dataIndex:'remark', width:260, ellipsis:true },
+          { title:'操作', key:'action', width:100, fixed:'right' },
         ],
       },
       'po-ref': {
@@ -8615,7 +8849,7 @@ const app = createApp({
       poPlanRejectOpen.value=false; poPlanRejectRemark.value=''; poPlanRejectErr.value=''; poPlanSelKeys.value=[];
     }
     const poPlanEditOpen = ref(false); const poPlanEditRow = ref(null); const poPlanEditErr = ref('');
-    function poPlanOpenEdit(r){ poPlanEditRow.value = reactive(Object.assign({}, r)); poPlanEditErr.value=''; poPlanEditOpen.value = true; }
+    function poPlanOpenEdit(r){ const c = Object.assign({}, r); if(!c.adjust_reason) c.adjust_reason='人工判断'; poPlanEditRow.value = reactive(c); poPlanEditErr.value=''; poPlanEditOpen.value = true; }
     function poPlanSaveEdit(){
       const row = poPlanEditRow.value; if(!row) return;
       poPlanEditErr.value = '';
@@ -11324,6 +11558,11 @@ const app = createApp({
       trendUnit, trendHistLabel, trendFctLabel, trendAdjusted, trendAdjDesc,
       fcRegMdl, fcOpenRegMdl, closeRegMdl, refreshRegMdlCharts, fcApplyRegMdl,
       canEditFc, fcEditMode, isFcLongBuyout, fcRowEditable, fcSaveForecast,
+      fcLongEditId, fcLongEditDraft, fcLongRowEditing, fcLongStartEdit, fcLongCancelEdit, fcLongSaveEdit,
+      fcLongApproveOpen, fcLongApproveRemark, fcLongApproveErr, fcLongRejectOpen, fcLongRejectRemark, fcLongRejectErr,
+      fcLongSelRows, fcLongSelApproved, fcLongCanApprove, fcLongApproveConfirm, fcLongRejectConfirm,
+      fcLongLogOpen, fcLongLogRows, fcLongLogTitle, fcLongOpenLog, fcLongLog,
+      fcPreOpen, fcPreDone, fcPreGenerate, fcPrePlanData,
       genEditOpen, genEditRow, genImportOpen, genTagColor,
       psSaveGenEdit,
       genDoSearch, genResetFilters, genToggleFav, genToggleCol, openGenEdit, saveGenEdit, doGenImport, genExportCsv,

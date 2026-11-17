@@ -341,6 +341,23 @@ def check_po_edit_modal():
     ok = (not miss) and (not stale)
     return {"key":"po-调整弹窗两形态", "ok":ok, "msg":f"缺失={miss if miss else '无'} 残留={stale if stale else '无'}"}
 
+def check_po_adjust_reason_default():
+    """调整原因 / 审批意见默认值（2026-11-14）：
+    采购计划（po-regular）、All Time Buy / Bridge Buy / 参考零件采购计划（poPlan）共 4 个页面的
+    ① 调整弹窗「调整原因」字段：打开时默认展示「人工判断」，可编辑（源码级：打开处理函数预置）；
+    ② 审批通过弹窗「审批意见」字段：默认展示「审批通过」，可编辑（源码级：ref 初始值）。
+    源码级断言，不依赖渲染 / 登录态。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    need = [
+        "if(!copy.adjust_reason) copy.adjust_reason = '人工判断';",   # po-regular 调整弹窗默认
+        "if(!c.adjust_reason) c.adjust_reason='人工判断';",             # poPlan 调整弹窗默认
+        "const poRegApproveRemark = ref('审批通过');",                  # po-regular 审批意见默认
+        "const poPlanApproveRemark = ref('审批通过');",                 # poPlan 审批意见默认
+    ]
+    miss = [k for k in need if k not in src]
+    ok = not miss
+    return {"key":"po-调整原因/审批意见默认值", "ok":ok, "msg":f"缺失={miss if miss else '无'}"}
+
 def check_po_delivery_date():
     """要求交货时间（2026-11-11）：创建计划弹窗 + 拦截调整弹窗 + 全链路展示。
     ① 公共日期工具：禁用今天及之前（仅明天及以后可选）、提交兜底校验、最早可选日提示；
@@ -476,15 +493,15 @@ def check_fc_buyout_btns():
     return {"key":"fc-buyout-按钮","ok":ok,"msg":detail}
 
 def check_fc_long_btns():
-    """长周期预测报表：默认展示态，工具栏含「编辑」「生成bridge buy计划」；不应有「生成采购计划」「生成All time buy计划」「保存」（保存仅在编辑态出现）。"""
+    """长周期预测报表：编辑已移入每行；工具栏含「生成bridge buy计划」「生成预计划」「审批通过(Hugh)」「驳回(Hugh)」「操作日志」；不应再有顶部「编辑」「保存」。"""
     dump("fc-long")
     data = open(DUMP, encoding="utf-8", errors="replace").read()
     if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
         return {"key":"fc-long-按钮","ok":False,"msg":"渲染失败/错误页"}
     r = strip_scripts(rendered(data))
-    need = ["编 辑", "生成bridge buy计划"]
+    need = ["生成bridge buy计划", "生成预计划", "审批通过(Hugh)", "驳回(Hugh)", "操作日志"]
     miss = [k for k in need if k not in r]
-    bad = [k for k in ["生成采购计划", "生成All time buy计划", "系数调整", "保 存"] if k in r]
+    bad = [k for k in ["生成采购计划", "生成All time buy计划", "系数调整"] if k in r]
     ok = (not miss) and (not bad)
     detail = f"缺失={miss if miss else '无'} 残留={bad if bad else '无'}"
     return {"key":"fc-long-按钮","ok":ok,"msg":detail}
@@ -941,7 +958,7 @@ def check_po_atb_bridge_integer():
         "v-if=\"!fcAllTimeAllRounded\"",
         "v-if=\"!fcBridgeAllRounded\"",
         ":disabled=\"!fcBatchSelIds.length || !fcAllTimeAllRounded\"",
-        ":disabled=\"!fcLongSel.length || !fcBridgeAllRounded\"",
+        ":disabled=\"!fcLongSel.length || !fcBridgeAllRounded || !fcLongSelApproved\"",
         "计划数量须为整数，生成前系统将校验「一次买断预测结果」全部配件（10 年）均已圆整",
         "计划数量须为整数，生成前系统将校验「长周期预测报表」全部配件（10 年）均已圆整",
         "一次买断预测结果仍存在未圆整（含小数）的年份，请先对全部配件执行「圆整」处理后再生成 All Time Buy 计划",
@@ -961,21 +978,47 @@ def check_po_atb_bridge_integer():
 
 
 def check_fc_long_editmode():
-    """长周期预测报表：默认展示态（仅「编辑」按钮、预测值只读）；点击「编辑」进入编辑态后，工具栏出现「保存」、预测值出现数字输入框（ant-input-number）。"""
-    inject = ("<script>setTimeout(function(){"
-              "var btns=Array.prototype.slice.call(document.querySelectorAll('button'));"
-              "var e=btns.find(function(b){var t=(b.textContent||'').replace(/\\s/g,'');return t.indexOf('编辑')>=0;});"
-              "if(e){e.dispatchEvent(new MouseEvent('click',{bubbles:true}));}}, 1600);</script>")
-    dump("fc-long", inject=inject)
-    data = open(DUMP, encoding="utf-8", errors="replace").read()
-    if "ERR_FILE_NOT_FOUND" in data or "<title>file://" in data:
-        return {"key":"fc-long-编辑态","ok":False,"msg":"渲染失败/错误页"}
-    r = rendered(data)
-    has_save = "保 存" in r
-    inputs = r.count("ant-input-number")
-    ok = has_save and inputs > 0
-    detail = f"保存按钮={has_save} 数字输入框={inputs}"
-    return {"key":"fc-long-编辑态","ok":ok,"msg":detail}
+    """长周期预测报表：编辑已移入每行。源码级断言行内编辑（fcLongStartEdit / fcLongSaveEdit / fcLongRowEditing）与操作列保存/取消，不依赖渲染/登录态。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    checks = {
+        "行编辑态判定": "fcLongRowEditing" in src,
+        "行编辑入口": "fcLongStartEdit" in src and "@click.stop=\"fcLongStartEdit(record)\"" in src,
+        "行保存": "fcLongSaveEdit" in src and "@click.stop=\"fcLongSaveEdit\"" in src,
+        "行取消": "fcLongCancelEdit" in src and "@click.stop=\"fcLongCancelEdit\"" in src,
+        "编辑值绑定草稿": "v-model:value=\"fcLongEditDraft[column.dataIndex]\"" in src,
+        "仅审批通过行可编辑": "r.app_status!=='审批通过'" in src,
+    }
+    bad = [k for k,v in checks.items() if not v]
+    ok = not bad
+    detail = f"缺失={bad if bad else '无'}"
+    return {"key":"fc-long-行内编辑","ok":ok,"msg":detail}
+
+def check_long_reform():
+    """长周期预测报表改造（源码级）：审批状态标识 + Hugh 审批门禁 + Kevin 调整再审批 + 操作日志 + 预计划生成 + 预计划只读页。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    checks = {
+        "审批状态字段": "app_status:" in src and "fcLongLog" in src,
+        "审批状态列": "title:'审批状态', key:'app_status'" in src and "render:'fcapp'" in src,
+        "审批状态tag渲染": "column.render==='fcapp'" in src,
+        "审批通过函数": "function fcLongApproveConfirm" in src and "r.app_status='审批通过'; r.app_by='Hugh'" in src,
+        "驳回函数": "function fcLongRejectConfirm" in src,
+        "Kevin调整转调整待审批": "r.app_status = '调整待审批'" in src and "fcLongLog(r, 'Kevin调整预测', 'Kevin'" in src,
+        "调整后再审批留痕": "'Hugh再次审批'" in src,
+        "bridge按钮审批门禁": ":disabled=\"!fcLongSel.length || !fcBridgeAllRounded || !fcLongSelApproved\"" in src,
+        "审批通过计算属性": "const fcLongSelApproved = computed(" in src,
+        "操作日志弹窗": "fcLongLogOpen" in src and "fcLongOpenLog" in src,
+        "操作日志渲染": "fcLongOpenLog(record)" in src,
+        "生成预计划按钮": ">生成预计划</a-button>" in src,
+        "生成预计划函数": "function fcPreGenerate" in src and "fcPrePlanData.length = 0" in src,
+        "预计划只读页注册": "'po-preplan'" in src and "viewOnly:true" in src,
+        "预计划菜单": "key:'po-preplan', parent:'po', title:'预计划'" in src,
+        "预计划只读提示": "预计划仅供查看" in src,
+        "只读页隐藏审批": "v-if=\"!poPlanPage.viewOnly\"" in src,
+    }
+    bad = [k for k,v in checks.items() if not v]
+    ok = not bad
+    detail = f"通过={len(checks)-len(bad)}/{len(checks)}" + (f" 缺失={bad}" if bad else "")
+    return {"key":"长周期改造","ok":ok,"msg":detail}
 
 def check_fc_adjust_reason():
     """预测结果调整：每个可调整的结果页 / 弹窗均有「调整原因」列，且保存时按行校验必填。"""
@@ -1571,7 +1614,7 @@ def check_menu():
                  "库存策略参数", "采购LT", "目标满足率", "备货规则", "库间LT", "增储天数", "计划周期", "配件风控线", "配件多分类风控线", "建储水位线计算结果",
                  "配件组管理",
                  "计划管理", "采购计划", "历史采购计划", "采购计划导出", "调拨计划", "调拨计划导出", "调拨计划汇总", "给仓库的预计调拨计划",
-                 "All Time Buy 计划", "Bridge Buy 计划", "参考零件采购计划",
+                 "All Time Buy 计划", "预计划", "Bridge Buy 计划", "参考零件采购计划",
                  "给供应商的滚动计划",
                  "历史需求处理", "活动登记表", "数据感知任务", "订单监控预警"]
     miss = [k for k in must_have if k not in r]
@@ -2204,6 +2247,9 @@ def main():
         r = check_fc_long_editmode()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-long-编辑态    {r['msg']}")
+        r = check_long_reform()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] 长周期改造      {r['msg']}")
         r = check_fc_long_round()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-long-圆整策略  {r['msg']}")
@@ -2359,6 +2405,9 @@ def main():
         r = check_po_edit_modal()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] po-调整弹窗两形态 {r['msg']}")
+        r = check_po_adjust_reason_default()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] 调整原因默认值     {r['msg']}")
     if only in (None, 'delivery-date', 'po-order', 'po-regular', 'po'):
         r = check_po_delivery_date()
         all_ok = all_ok and r["ok"]
