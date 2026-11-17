@@ -5033,6 +5033,9 @@ mark {
 
     <!-- ===== 通用主数据导入弹窗 ===== -->
     <a-modal v-model:open="genImportOpen" :title="'导入' + activeDef.detailTitle + '数据'" :footer="null" width="520px">
+      <a-alert v-if="activeMenu==='replace-ext'" style="margin-bottom:12px;" type="info" show-icon
+        message="导入范围：人工调整可采购件"
+        :description="'模板字段：配件号、人工调整可采购件。配件号须已存在于替代链；人工调整可采购件须存在于配件主数据，留空表示清除人工覆盖。不存在于配件主数据的行按失败返回，不写入。'"/>
       <a-upload-dragger :before-upload="()=>false" multiple>
         <p class="ant-upload-drag-icon" style="font-size:40px;margin:10px 0;">⇪</p>
         <p class="ant-upload-text">将文件拖到此处，或点击选择 Excel / CSV 文件</p>
@@ -5634,11 +5637,11 @@ const replaceDef = {
 };
 const replaceExtDef = {
   isExtension:true, editable:true, detailTitle:'替代链扩展属性', idField:'material_code', scrollX:1080,
-  noExport:true, noImport:true,
+  noExport:true,
   columns:[
     {title:'配件号', key:'material_code', dataIndex:'material_code', width:145, fixed:'left', render:'link', editable:true, readonly:true},
     {title:'最新可采购件', key:'latest_purchasable_material_code', dataIndex:'latest_purchasable_material_code', width:160, editable:true, readonly:true},
-    {title:'人工调整可采购件', key:'manual_purchasable_material_code', dataIndex:'manual_purchasable_material_code', width:180, editable:true, placeholder:'留空表示未覆盖'},
+    {title:'人工调整可采购件', key:'manual_purchasable_material_code', dataIndex:'manual_purchasable_material_code', width:180, editable:true, placeholder:'留空表示未覆盖；录入值须存在于配件主数据'},
     {title:'修改人名称', key:'updater_name', dataIndex:'updater_name', width:120},
     {title:'更新时间', key:'update_time', dataIndex:'update_time', width:165, sorter:(a,b)=>a.update_time.localeCompare(b.update_time)},
     {title:'操作', key:'action', width:120, fixed:'right'},
@@ -5648,7 +5651,7 @@ const replaceExtDef = {
     {key:'latest', label:'最新可采购件', type:'input', field:'latest_purchasable_material_code', placeholder:'最新可采购件'},
     {key:'manual', label:'人工调整可采购件', type:'input', field:'manual_purchasable_material_code', placeholder:'人工调整可采购件'},
   ],
-  detailNote:'人工调整可采购件为空表示未做人工覆盖，按最新可采购件口径使用；最新可采购件为空表示替代链末级配件无有效合同，系统不再向上级配件回溯匹配。本页仅人工调整可采购件可维护，更新后自动记录修改人与更新时间。',
+  detailNote:'人工调整可采购件为空表示未做人工覆盖，按最新可采购件口径使用；最新可采购件为空表示替代链末级配件无有效合同，系统不再向上级配件回溯匹配。本页仅人工调整可采购件可维护，支持逐条编辑与批量导入，更新后自动记录修改人与更新时间。',
   data: replaceExtData,
 };
 const dealerExtDef = {
@@ -9178,7 +9181,13 @@ const app = createApp({
         const row = genEditRow.value;
         /* 替代链扩展属性：仅人工调整可采购件可写，去首尾空格、空值表示回退到最新可采购件，并自动记录修改人与时间 */
         if(activeMenu.value==='replace-ext'){
-          row.manual_purchasable_material_code = (row.manual_purchasable_material_code||'').trim();
+          const manual = (row.manual_purchasable_material_code||'').trim();
+          /* 有值时必须存在于配件主数据；留空表示清除人工覆盖 */
+          if(manual && !matCodes.includes(manual)){
+            antd.message.error('人工调整可采购件「' + manual + '」不存在于配件主数据，请重新录入');
+            return;
+          }
+          row.manual_purchasable_material_code = manual;
           row.updater_name = '当前用户';
           row.update_time = new Date().toLocaleString('zh-CN',{hour12:false}).replace(/\//g,'-');
         }
@@ -9198,7 +9207,14 @@ const app = createApp({
       genEditOpen.value = false;
       antd.message.success('保存成功（设计稿示意）');
     }
-    function doGenImport(){ genImportOpen.value = false; antd.message.success('导入成功（设计稿示意），新增/更新记录已写入'); }
+    function doGenImport(){
+      genImportOpen.value = false;
+      if(activeMenu.value==='replace-ext'){
+        antd.message.success('导入完成（设计稿示意）：人工调整可采购件已按配件主数据校验，不存在于配件主数据的行按失败返回，未写入');
+        return;
+      }
+      antd.message.success('导入成功（设计稿示意），新增/更新记录已写入');
+    }
     function genExportCsv(all){
       const def = pageDefs[activeMenu.value];
       const cols = def.columns.filter(c=>c.key!=='action');
