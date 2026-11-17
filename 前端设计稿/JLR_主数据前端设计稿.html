@@ -2875,8 +2875,8 @@ mark {
             <!-- 表格卡片 -->
             <div class="card" style="margin-bottom:0;">
               <div class="toolbar-row">
-                <a-button type="primary" @click="genExportCsv(false)">⬇ 导出</a-button>
-                <a-button :type="activeMenu.startsWith('inv-')?'primary':'link'" :style="activeMenu.startsWith('inv-')?{}:{padding:0}" @click="genExportCsv(true)">全量导出</a-button>
+                <a-button v-if="!activeDef.noExport" type="primary" @click="genExportCsv(false)">⬇ 导出</a-button>
+                <a-button v-if="!activeDef.noExport" :type="activeMenu.startsWith('inv-')?'primary':'link'" :style="activeMenu.startsWith('inv-')?{}:{padding:0}" @click="genExportCsv(true)">全量导出</a-button>
                 <a-button v-if="isFcLongBuyoutDraft" @click="lcOpenCoeffModal">系数调整</a-button>
                 <a-button v-if="isFcLongBuyout && !fcEditMode" @click="fcEditMode=true">编辑</a-button>
                 <a-button v-if="isFcLongBuyout && fcEditMode" type="primary" @click="fcSaveForecast">保存</a-button>
@@ -2885,7 +2885,7 @@ mark {
                 <a-button v-if="activeMenu==='fc-long' || (activeMenu==='fc-long-draft' && draftEnabled.value)" :disabled="!fcLongSel.length" @click="fcBridgeOpen=true;fcBridgeDone=false">生成bridge buy计划</a-button>
                 <a-button v-if="fcBatchable" :disabled="!fcBatchSelIds.length" @click="fcLongBatchM.open=true">批量圆整（{{ fcBatchSelIds.length }}）</a-button>
                 <a-button v-if="activeMenu==='fc-regular' || activeMenu==='fc-wh-regular'" @click="fcGenRegularPo">生成采购计划</a-button>
-                <a-button v-if="activeDef.isExtension" type="default" @click="genImportOpen=true">⬆ 导入</a-button>
+                <a-button v-if="activeDef.isExtension && !activeDef.noImport" type="default" @click="genImportOpen=true">⬆ 导入</a-button>
                 <a-button v-if="activeMenu==='part-group'" type="primary" @click="openPgModal('add')">＋ 新建分组</a-button>
                 <a-button v-if="activeMenu==='part-group'" :disabled="!pgSel.length" @click="pgBatchStatus('启用')">批量启用（{{ pgSel.length }}）</a-button>
                 <a-button v-if="activeMenu==='part-group'" :disabled="!pgSel.length" @click="pgBatchStatus('停用')">批量停用（{{ pgSel.length }}）</a-button>
@@ -2997,6 +2997,9 @@ mark {
                     <template v-else-if="activeMenu==='part-supplier'">
                       <span class="link-btn" @click.stop="openGenDetail(record)">详情</span>
                       <span class="link-btn" @click.stop="openGenEdit(record)">编辑</span>
+                    </template>
+                    <template v-else-if="activeMenu==='replace'">
+                      <span class="link-btn" @click.stop="openGenDetail(record)">详情</span>
                     </template>
                     <template v-else>
                       <span class="link-btn" @click.stop="openGenDetail(record)">详情</span>
@@ -4854,9 +4857,10 @@ mark {
             <span v-else-if="c.render==='partlink'">{{ genDetailRow[c.csvField || c.dataIndex] }}<a v-if="hasTrend(genDetailRow)" style="margin-left:8px;" @click.stop="openTrendModal(genDetailRow)">查看趋势图</a></span>
             <span v-else>{{ genDetailRow[c.csvField || c.dataIndex] }}</span>
           </a-descriptions-item>
+          <a-descriptions-item v-for="c in (activeDef.detailExtra||[])" :key="c.key" :label="c.title">{{ genDetailRow[c.dataIndex] || '—' }}</a-descriptions-item>
         </a-descriptions>
         <a-alert style="margin-top:18px;" type="info" show-icon message="数据来源说明"
-          description="来源系统基于客户基础数据表（JLRS_System_Data.xlsx）经 ETL 生成，对应数据模型见《JLR-数据模型字典.xlsx》；人工维护字段可在「扩展属性」页面导入 / 编辑。"/>
+          :description="activeDef.detailNote || '来源系统基于客户基础数据表（JLRS_System_Data.xlsx）经 ETL 生成，对应数据模型见《JLR-数据模型字典.xlsx》；人工维护字段可在「扩展属性」页面导入 / 编辑。'"/>
         <div style="margin-top:18px;text-align:right;">
           <a-button type="primary" @click="genDetailOpen=false">关闭</a-button>
         </div>
@@ -4865,7 +4869,7 @@ mark {
 
     <!-- ===== 通用主数据编辑弹窗 =====
          配件与供应商关系限域：展示该行全部字段，仅「是否默认供应商」可编辑（是 / 否）；其余页面维持通用表单。 -->
-    <a-modal v-model:open="genEditOpen" :title="'编辑' + activeDef.detailTitle + ' · ' + (genEditRow ? genEditRow[activeDef.idField] : '')" @ok="activeMenu==='part-supplier' ? psSaveGenEdit() : saveGenEdit()" :width="activeMenu==='part-supplier' ? '920px' : '680px'" :footer="activeMenu==='part-supplier' ? null : undefined">
+    <a-modal v-model:open="genEditOpen" :title="'编辑' + activeDef.detailTitle + ' · ' + (genEditRow ? genEditRow[activeDef.idField] : '')" @ok="activeMenu==='part-supplier' ? psSaveGenEdit() : saveGenEdit()" :width="activeMenu==='part-supplier' ? '920px' : '680px'" :footer="activeMenu==='part-supplier' ? null : undefined" :ok-text="activeMenu==='replace-ext' ? '更新' : '确定'" :cancel-text="activeMenu==='replace-ext' ? '返回' : '取消'">
       <template v-if="activeMenu==='part-supplier' && genEditRow">
         <div class="jlrs-form-grid">
           <label v-for="c in activeDef.columns.filter(x=>x.key!=='action' && x.key!=='is_default_supplier')" :key="c.key">
@@ -4890,9 +4894,11 @@ mark {
         <a-row :gutter="16">
           <a-col :span="12" v-for="c in (activeDef.editable ? activeDef.columns.filter(x=>x.editable) : activeDef.columns.filter(x=>x.key!=='action'))" :key="c.key">
             <a-form-item :label="c.title">
-              <a-auto-complete v-if="c.freeInput" v-model:value="genEditRow[c.dataIndex]" :options="(c.options||[]).map(v=>({value:v}))" style="width:100%" placeholder="可选择，也可直接录入"/>
+              <a-input v-if="c.readonly" :value="genEditRow[c.dataIndex]" disabled/>
+              <a-auto-complete v-else-if="c.freeInput" v-model:value="genEditRow[c.dataIndex]" :options="(c.options||[]).map(v=>({value:v}))" style="width:100%" placeholder="可选择，也可直接录入"/>
               <a-select v-else-if="c.options" v-model:value="genEditRow[c.dataIndex]" :options="c.options" style="width:100%"/>
-              <a-input v-else v-model:value="genEditRow[c.dataIndex]" style="width:100%"/>
+              <a-input v-else v-model:value="genEditRow[c.dataIndex]" :placeholder="c.placeholder||''" style="width:100%"/>
+              <div v-if="c.placeholder && !c.readonly" style="color:#8c8c8c;font-size:12px;line-height:1.6;">{{ c.placeholder }}</div>
             </a-form-item>
           </a-col>
         </a-row>
@@ -5271,29 +5277,39 @@ for(let i=0;i<36;i++){
   });
 }
 
-/* ================= 替代链（ods_material_replace_relationship）模拟 ================= */
-const replaceRelMap = { 0:'单向替代', 1:'双向替代', 2:'不替代' };
-const conditionMap = { ZSSS:'未激活', ZSSA:'已激活' };
+/* ================= 替代链（capp_material_chain / capp_material_chain_extension）模拟 ================= */
 const replaceData = Vue.reactive([]);
+const replaceExtData = Vue.reactive([]);
+const chainUsers = ['张伟','李娜','王强','刘洋','陈静'];
 const matCodes = matData.map(m=>m.material_code);
-for(let i=0;i<40;i++){
-  const a = pick(matCodes);
-  let b = pick(matCodes);
-  while(b===a) b = pick(matCodes);
-  const rel = rint(0,2);
-  const cond = rnd()<0.6 ? 'ZSSA' : 'ZSSS';
-  replaceData.push({
-    id: 'R' + (i+1),
-    material_code: a,
-    replace_material_code: b,
-    replace_relationship: rel,
-    replace_relationship_text: replaceRelMap[rel],
-    effective_date: '2026-' + pad2(rint(1,9)) + '-' + pad2(rint(1,28)),
-    condition_type: cond,
-    condition_type_text: conditionMap[cond],
-    latest_purchasable_material_code: rel===1 ? b : (rnd()<0.5 ? a : b),
-    sync_data_time: '2026-09-' + pad2(rint(10,18)) + ' 0' + rint(1,3) + ':' + pad2(rint(10,59)),
-  });
+{
+  const pool = matCodes.slice().sort(()=>rnd()-0.5);
+  for(let i=0;i<40;i++){
+    const a = pool[i];
+    const b = pick(matCodes);
+    const c = pick(matCodes);
+    const upd = '2026-11-' + pad2(rint(1,16)) + ' ' + pad2(rint(8,18)) + ':' + pad2(rint(0,59));
+    replaceData.push({
+      id: 'R' + (i+1),
+      material_code: a,
+      new_material_code: b,
+      material_chain: a + ' → ' + b + (rnd()<0.4 ? ' → ' + c : ''),
+      latest_purchasable_material_code: rnd()<0.8 ? b : c,
+      manual_purchasable_material_code: rnd()<0.3 ? pick(matCodes) : '',
+      creator_name: pick(chainUsers),
+      create_time: '2026-10-' + pad2(rint(1,28)) + ' ' + pad2(rint(8,18)) + ':' + pad2(rint(0,59)),
+      updater_name: pick(chainUsers),
+      update_time: upd,
+    });
+    replaceExtData.push({
+      id: 'E' + (i+1),
+      material_code: a,
+      latest_purchasable_material_code: rnd()<0.8 ? b : c,
+      manual_purchasable_material_code: rnd()<0.35 ? pick(matCodes) : '',
+      updater_name: pick(chainUsers),
+      update_time: upd,
+    });
+  }
 }
 
 /* ================= 通用页面定义（pageDefs，数据驱动） ================= */
@@ -5414,24 +5430,46 @@ const partSupplierDef = {
   data: partSupplierData,
 };
 const replaceDef = {
-  isExtension:false, detailTitle:'替代链', idField:'material_code', scrollX:1250,
+  isExtension:false, detailTitle:'替代链', idField:'material_code', scrollX:1480, noExport:true,
   columns:[
-    {title:'配件编码', key:'material_code', dataIndex:'material_code', width:145, fixed:'left', render:'link'},
-    {title:'替代配件编码', key:'replace_material_code', dataIndex:'replace_material_code', width:145, render:'link'},
-    {title:'替代关系', key:'replace_relationship', dataIndex:'replace_relationship_text', width:110, render:'tag', colorMap:{0:'blue',1:'green',2:'red'}, sorter:(a,b)=>a.replace_relationship-b.replace_relationship},
-    {title:'生效日期', key:'effective_date', dataIndex:'effective_date', width:120, sorter:(a,b)=>a.effective_date.localeCompare(b.effective_date)},
-    {title:'条件类型', key:'condition_type', dataIndex:'condition_type_text', width:110, render:'tag', colorMap:{ZSSS:'default',ZSSA:'green'}, sorter:(a,b)=>a.condition_type.localeCompare(b.condition_type)},
-    {title:'最新可采购配件编码', key:'latest_purchasable_material_code', dataIndex:'latest_purchasable_material_code', width:160},
-    {title:'数据同步时间', key:'sync_data_time', dataIndex:'sync_data_time', width:165},
+    {title:'配件号', key:'material_code', dataIndex:'material_code', width:145, fixed:'left', render:'link', sorter:(a,b)=>a.material_code.localeCompare(b.material_code)},
+    {title:'最新配件号', key:'new_material_code', dataIndex:'new_material_code', width:145, sorter:(a,b)=>a.new_material_code.localeCompare(b.new_material_code)},
+    {title:'物料替代链', key:'material_chain', dataIndex:'material_chain', width:320, ellipsis:true},
+    {title:'最新可采购件', key:'latest_purchasable_material_code', dataIndex:'latest_purchasable_material_code', width:150},
+    {title:'人工调整可采购件', key:'manual_purchasable_material_code', dataIndex:'manual_purchasable_material_code', width:165},
+    {title:'更新时间', key:'update_time', dataIndex:'update_time', width:165, sorter:(a,b)=>a.update_time.localeCompare(b.update_time)},
     {title:'操作', key:'action', width:80, fixed:'right'},
   ],
   filters:[
-    {key:'code', label:'配件编码', type:'input', field:'material_code', placeholder:'配件编码'},
-    {key:'rcode', label:'替代配件编码', type:'input', field:'replace_material_code', placeholder:'替代配件编码'},
-    {key:'rel', label:'替代关系', type:'select', field:'replace_relationship', options:[{value:0,label:'单向替代'},{value:1,label:'双向替代'},{value:2,label:'不替代'}]},
-    {key:'cond', label:'条件类型', type:'select', field:'condition_type', options:[{value:'ZSSS',label:'未激活'},{value:'ZSSA',label:'已激活'}]},
+    {key:'code', label:'配件号', type:'input', field:'material_code', placeholder:'配件号'},
+    {key:'newcode', label:'最新配件号', type:'input', field:'new_material_code', placeholder:'最新配件号'},
   ],
+  detailExtra:[
+    {key:'creator', title:'创建人', dataIndex:'creator_name'},
+    {key:'ctime', title:'创建时间', dataIndex:'create_time'},
+    {key:'updater', title:'修改人', dataIndex:'updater_name'},
+  ],
+  detailNote:'数据来源为数据平台（Hive）同步，页面只读；不提供新增、删除、导入、导出。人工调整请在「替代链扩展属性」页面维护。',
   data: replaceData,
+};
+const replaceExtDef = {
+  isExtension:true, editable:true, detailTitle:'替代链扩展属性', idField:'material_code', scrollX:1080,
+  noExport:true, noImport:true,
+  columns:[
+    {title:'配件号', key:'material_code', dataIndex:'material_code', width:145, fixed:'left', render:'link', editable:true, readonly:true},
+    {title:'最新可采购件', key:'latest_purchasable_material_code', dataIndex:'latest_purchasable_material_code', width:160, editable:true, readonly:true},
+    {title:'人工调整可采购件', key:'manual_purchasable_material_code', dataIndex:'manual_purchasable_material_code', width:180, editable:true, placeholder:'留空表示未覆盖'},
+    {title:'修改人名称', key:'updater_name', dataIndex:'updater_name', width:120},
+    {title:'更新时间', key:'update_time', dataIndex:'update_time', width:165, sorter:(a,b)=>a.update_time.localeCompare(b.update_time)},
+    {title:'操作', key:'action', width:120, fixed:'right'},
+  ],
+  filters:[
+    {key:'code', label:'配件号', type:'input', field:'material_code', placeholder:'配件号'},
+    {key:'latest', label:'最新可采购件', type:'input', field:'latest_purchasable_material_code', placeholder:'最新可采购件'},
+    {key:'manual', label:'人工调整可采购件', type:'input', field:'manual_purchasable_material_code', placeholder:'人工调整可采购件'},
+  ],
+  detailNote:'人工调整可采购件为空表示未做人工覆盖，按最新可采购件口径使用；本页仅该字段可维护，更新后自动记录修改人与更新时间。',
+  data: replaceExtData,
 };
 const dealerExtDef = {
   isExtension:true, detailTitle:'经销商', idField:'asc_code', scrollX:1500,
@@ -6600,6 +6638,7 @@ const pageDefs = {
   'supplier-ext': supplierExtDef,
   'part-supplier': partSupplierDef,
   'replace': replaceDef,
+  'replace-ext': replaceExtDef,
   'part-group': partGroupDef,
   'fc-long': fcLongDef,
   'fc-buyout': fcBuyoutDef,
@@ -6625,7 +6664,7 @@ const app = createApp({
       const arr = [ {key:'home', title:'首页', icon:'🏠'}, {key:'best', title:'最佳模型', icon:'📊'} ];
       const m = menus.find(x=>x.key===activeMenu.value);
       if(m && baseMenuKeys.includes(activeMenu.value)){
-        const ic = {'wh-abc':'📦','dealer':'🏬','mat-master':'📄','mat-ext':'🏷','wh-master':'🏭','dealer-ext':'🗂','supplier':'🏢','supplier-ext':'🏷','part-supplier':'🧾','replace':'🔗'};
+        const ic = {'wh-abc':'📦','dealer':'🏬','mat-master':'📄','mat-ext':'🏷','wh-master':'🏭','dealer-ext':'🗂','supplier':'🏢','supplier-ext':'🏷','part-supplier':'🧾','replace':'🔗','replace-ext':'🏷'};
         arr.push({ key:m.key, title:m.title, icon:ic[m.key]||'📄', closable:true });
       }
       return arr;
@@ -6717,6 +6756,7 @@ const app = createApp({
       { type:'item', key:'part-supplier', parent:'base', title:'配件与供应商关系', icon:'🧾' },
       { type:'item', key:'part-group', parent:'base', title:'配件组管理', icon:'🧩' },
       { type:'item', key:'replace', parent:'base', title:'替代链', icon:'🔗' },
+      { type:'item', key:'replace-ext', parent:'base', title:'替代链扩展属性', icon:'🏷' },
       { type:'item', key:'plan-hier-3', parent:'base', title:'计划层级管理', icon:'🗂' },
       { type:'item', key:'gp-params', parent:'base', title:'全局参数', icon:'⚙' },
       { type:'group', key:'fc', title:'需求预测' },
@@ -6758,7 +6798,7 @@ const app = createApp({
       { type:'item', key:'all-time-buy-report', parent:'report', title:'All time buy跟踪报表', icon:'📊' },
     ];
     /* 注意：genericKeys 每增一个 key，必须同步在 pageDefs 中提供定义，否则 setup 初始化 genFilters 时会抛错导致白屏 */
-    const genericKeys = ['mat-master','mat-ext','wh-master','dealer-ext','supplier','supplier-ext','part-supplier','replace','fc-long','fc-buyout','fc-regular','fc-wh-regular','fc-best',
+    const genericKeys = ['mat-master','mat-ext','wh-master','dealer-ext','supplier','supplier-ext','part-supplier','replace','replace-ext','fc-long','fc-buyout','fc-regular','fc-wh-regular','fc-best',
       'part-group','po-regular'];
     const isFcLongBuyoutDraft = computed(()=> activeMenu.value==='fc-long-draft' && draftEnabled.value || activeMenu.value==='fc-buyout-draft' && draftEnabled.value);
     const isFcNewDraft = computed(()=> activeMenu.value==='fc-new-draft' && draftEnabled.value);
@@ -8832,7 +8872,19 @@ const app = createApp({
       if(activeMenu.value==='part-group'){ openPgModal('edit', r); return; }
       genEditTarget.value = r; genEditRow.value = reactive(Object.assign({}, r)); genEditOpen.value = true;
     }
-    function saveGenEdit(){ if(genEditTarget.value && genEditRow.value) Object.assign(genEditTarget.value, genEditRow.value); genEditOpen.value = false; antd.message.success('保存成功（设计稿示意）'); }
+    function saveGenEdit(){
+      if(genEditTarget.value && genEditRow.value){
+        const row = genEditRow.value;
+        /* 替代链扩展属性：仅人工调整可采购件可写，去首尾空格、空值表示回退到最新可采购件，并自动记录修改人与时间 */
+        if(activeMenu.value==='replace-ext'){
+          row.manual_purchasable_material_code = (row.manual_purchasable_material_code||'').trim();
+          row.updater_name = '当前用户';
+          row.update_time = new Date().toLocaleString('zh-CN',{hour12:false}).replace(/\//g,'-');
+        }
+        Object.assign(genEditTarget.value, row);
+      }
+      genEditOpen.value = false; antd.message.success(activeMenu.value==='replace-ext' ? '更新成功（设计稿示意）' : '保存成功（设计稿示意）');
+    }
     /* 配件与供应商关系：编辑弹窗仅「是否默认供应商」可编辑（是 / 否）；
        选择「是」时同一配件号下其余供应商关系自动置「否」。 */
     function psSaveGenEdit(){
