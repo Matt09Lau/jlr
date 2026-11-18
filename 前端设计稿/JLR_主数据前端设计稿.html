@@ -5394,6 +5394,7 @@ for(let i=0;i<36;i++){
     supplier_contract: 'CT-2026-' + String(rint(1000,9999)),
     is_contract_valid: rnd()<0.85 ? 'Y' : 'N',
     delivery_lead_time: rint(3,45),
+    purchase_lt: rint(15,45),   /* 采购LT：IPOS 同步 */
     data_access_date: '2026-0' + rint(1,9) + '-' + pad2(rint(1,28)),
   });
 }
@@ -5591,7 +5592,7 @@ const supplierExtDef = {
   data: supplierData,
 };
 const partSupplierDef = {
-  isExtension:false, detailTitle:'配件与供应商关系', idField:'part_code', scrollX:1560,
+  isExtension:false, detailTitle:'配件与供应商关系', idField:'part_code', scrollX:1655,
   columns:[
     {title:'配件号', key:'part_code', dataIndex:'part_code', width:145, fixed:'left', render:'link', sorter:(a,b)=>a.part_code.localeCompare(b.part_code)},
     {title:'供应商代码', key:'supplier_code', dataIndex:'supplier_code', width:115, sorter:(a,b)=>a.supplier_code.localeCompare(b.supplier_code)},
@@ -5602,6 +5603,7 @@ const partSupplierDef = {
     {title:'供应商合同', key:'supplier_contract', dataIndex:'supplier_contract', width:130},
     {title:'合同是否有效', key:'is_contract_valid', dataIndex:'is_contract_valid', width:110, render:'tag', colorMap:{Y:'green',N:'red'}, sorter:(a,b)=>a.is_contract_valid.localeCompare(b.is_contract_valid)},
     {title:'交付提前期(天)', key:'delivery_lead_time', dataIndex:'delivery_lead_time', width:125, sorter:(a,b)=>a.delivery_lead_time-b.delivery_lead_time},
+    {title:'采购LT', key:'purchase_lt', dataIndex:'purchase_lt', width:95, sorter:(a,b)=>a.purchase_lt-b.purchase_lt},
     {title:'数据接入日期', key:'data_access_date', dataIndex:'data_access_date', width:120, sorter:(a,b)=>a.data_access_date.localeCompare(b.data_access_date)},
     {title:'操作', key:'action', width:170, fixed:'right'},
   ],
@@ -5614,6 +5616,7 @@ const partSupplierDef = {
     {key:'contract', label:'供应商合同', type:'input', field:'supplier_contract', placeholder:'供应商合同'},
     {key:'valid', label:'合同是否有效', type:'select', field:'is_contract_valid', options:[{value:'Y',label:'有效'},{value:'N',label:'无效'}]},
     {key:'default', label:'是否默认供应商', type:'select', field:'is_default_supplier', options:[{value:'是',label:'是'},{value:'否',label:'否'}]},
+    {key:'lt', label:'采购LT', type:'input', field:'purchase_lt', placeholder:'采购LT'},
   ],
   data: partSupplierData,
 };
