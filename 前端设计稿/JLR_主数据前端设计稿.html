@@ -757,11 +757,10 @@ mark {
               <div class="filter-row">
                 <div class="filter-items">
                   <div class="f-item"><span class="f-label">仓库编码</span>
-                    <a-select v-model:value="filters.wh" placeholder="请选择仓库" style="width:180px" allow-clear show-search
-                      option-filter-prop="label" :options="whOptions"/></div>
+                    <a-textarea v-model:value="filters.wh" :auto-size="{minRows:1,maxRows:3}" placeholder="仓库编码，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">仓库名称</span><a-input v-model:value="filters.whName" placeholder="请输入仓库名称" style="width:170px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-input v-model:value="filters.code" placeholder="配件号" style="width:170px" allow-clear/></div>
+                    <a-textarea v-model:value="filters.code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="filters.name" placeholder="配件名称" style="width:170px" allow-clear/></div>
                   <template v-if="filterExpanded">
@@ -1142,13 +1141,13 @@ mark {
               <div class="filter-row">
                 <div class="filter-items">
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-input v-model:value="poRegFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
+                    <a-textarea v-model:value="poRegFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="poRegFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">当前采购件号</span>
-                    <a-input v-model:value="poRegFilters.cur_purchase_code" placeholder="当前采购件号" style="width:150px" allow-clear/></div>
+                    <a-textarea v-model:value="poRegFilters.cur_purchase_code" :auto-size="{minRows:1,maxRows:3}" placeholder="当前采购件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">建储仓库编码</span>
-                    <a-input v-model:value="poRegFilters.wh_code" placeholder="建储仓库编码" style="width:130px" allow-clear/></div>
+                    <a-textarea v-model:value="poRegFilters.wh_code" :auto-size="{minRows:1,maxRows:3}" placeholder="建储仓库编码，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">建储仓库名称</span>
                     <a-input v-model:value="poRegFilters.wh_name" placeholder="建储仓库名称" style="width:150px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">计划类型</span>
@@ -1558,13 +1557,13 @@ mark {
               <div class="filter-row">
                 <div class="filter-items">
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-input v-model:value="poHistFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
+                    <a-textarea v-model:value="poHistFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="poHistFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">当前采购件号</span>
-                    <a-input v-model:value="poHistFilters.cur_purchase_code" placeholder="当前采购件号" style="width:150px" allow-clear/></div>
+                    <a-textarea v-model:value="poHistFilters.cur_purchase_code" :auto-size="{minRows:1,maxRows:3}" placeholder="当前采购件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">建储仓库编码</span>
-                    <a-input v-model:value="poHistFilters.wh_code" placeholder="建储仓库编码" style="width:130px" allow-clear/></div>
+                    <a-textarea v-model:value="poHistFilters.wh_code" :auto-size="{minRows:1,maxRows:3}" placeholder="建储仓库编码，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">建储仓库名称</span>
                     <a-input v-model:value="poHistFilters.wh_name" placeholder="建储仓库名称" style="width:150px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">计划类型</span>
@@ -2037,7 +2036,7 @@ mark {
               <div class="filter-row">
                 <div class="filter-items">
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-input v-model:value="stoFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
+                    <a-textarea v-model:value="stoFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="stoFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">发货仓</span>
@@ -2224,7 +2223,7 @@ mark {
               <div class="filter-row">
                 <div class="filter-items">
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-input v-model:value="stoExpFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
+                    <a-textarea v-model:value="stoExpFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">发货仓</span>
                     <a-select v-model:value="stoExpFilters.from_wh" placeholder="发货仓" style="width:160px" allow-clear
                       :options="stoFromWhs.map(v=>({value:v,label:v}))"/></div>
@@ -2344,7 +2343,7 @@ mark {
                   <div class="f-item"><span class="f-label">快照日期</span>
                     <a-input v-model:value="stoSumFilters.snapshot_date" placeholder="如 2026-09-21" style="width:130px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-input v-model:value="stoSumFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
+                    <a-textarea v-model:value="stoSumFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="stoSumFilters.part_name" placeholder="配件名称" style="width:170px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">ABC分类</span>
@@ -2476,7 +2475,7 @@ mark {
                   <div class="f-item"><span class="f-label">供应商名称</span>
                     <a-input v-model:value="rollFilters.supplier_name" placeholder="供应商名称" style="width:190px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-input v-model:value="rollFilters.part_code" placeholder="配件号" style="width:140px" allow-clear/></div>
+                    <a-textarea v-model:value="rollFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="rollFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">计划批次</span>
@@ -2642,7 +2641,7 @@ mark {
                   <div class="f-item"><span class="f-label">活动名称</span>
                     <a-input v-model:value="actRegFilters.activity_name" placeholder="活动名称" style="width:180px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-input v-model:value="actRegFilters.part_code" placeholder="配件号" style="width:180px" allow-clear/></div>
+                    <a-textarea v-model:value="actRegFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="actRegFilters.part_name" placeholder="配件名称" style="width:180px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">活动状态</span>
@@ -2872,6 +2871,7 @@ mark {
                   <div class="f-item" v-for="f in activeDef.filters" :key="f.key">
                     <span class="f-label">{{ f.label }}</span>
                     <a-select v-if="f.type==='select'" v-model:value="genFilters[activeMenu][f.key]" :placeholder="f.placeholder||'请选择'" style="width:160px" allow-clear :options="f.options"/>
+                    <a-textarea v-else-if="isBatchField(f)" v-model:value="genFilters[activeMenu][f.key]" :auto-size="{minRows:1,maxRows:3}" :placeholder="(f.placeholder||'请输入')+'，支持批量粘贴（换行/逗号分隔）'" style="width:220px" allow-clear/>
                     <a-input v-else v-model:value="genFilters[activeMenu][f.key]" :placeholder="f.placeholder||'请输入'" style="width:170px" allow-clear/>
                   </div>
                 </div>
@@ -5147,13 +5147,29 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 <script src="stocking-rules.js?v=20261026-create"></script>
 <script src="global-parameters.js?v=20261026-derived-service"></script>
 <script src="inventory-results.js?v=20261104-log-diff"></script>
-<script src="inventory-strategy.js?v=20261106-increase-form"></script>
+<script src="inventory-strategy.js?v=20261118-batch-query"></script>
 <script>
 /* ================= 模拟数据（确定性随机，每次打开一致） ================= */
 let _seed = 20260918;
 function rnd(){ _seed = (_seed*9301+49297)%233280; return _seed/233280; }
 function pick(a){ return a[Math.floor(rnd()*a.length)]; }
 function rint(a,b){ return Math.floor(a+rnd()*(b-a+1)); }
+
+/* ================= 批量查询：配件号 / 仓库编码 =================
+   支持从 Excel 直接复制多行，或用逗号/分号/制表符分隔，粘贴进搜索框 */
+function parseBatchQuery(v){
+  if(v==null) return [];
+  return String(v).split(/[\n\r,，;；\t]+/).map(s=>s.trim()).filter(Boolean);
+}
+/* 单值保持模糊匹配；多值（批量粘贴）按「精确命中任一」匹配 */
+function matchBatchQuery(recordValue, q){
+  const tokens = parseBatchQuery(q);
+  if(!tokens.length) return true;
+  const val = String(recordValue==null?'':recordValue).trim().toUpperCase();
+  if(tokens.length===1) return val.includes(tokens[0].toUpperCase());
+  return tokens.some(t=>t.toUpperCase()===val);
+}
+const BATCH_FILTER_FIELDS = ['part_code','material_code','warehouse_code'];
 
 const warehouses = window.CSPPWarehouseNetwork.warehouses;
 const vehicles = [
@@ -7278,9 +7294,9 @@ const app = createApp({
 
     /* ---- 数据 ---- */
     const filteredRecords = computed(()=> records.filter(r=>{
-      if(applied.code && !r.code.toLowerCase().includes(applied.code.toLowerCase())) return false;
+      if(applied.code && !matchBatchQuery(r.code, applied.code)) return false;
       if(applied.name && !r.name.includes(applied.name)) return false;
-      if(applied.wh && r.whCode!==applied.wh) return false;
+      if(applied.wh && !matchBatchQuery(r.whCode, applied.wh)) return false;
 
       if(applied.stock && r.stock_flag!==applied.stock) return false;
       if(applied.whName && !r.whName.includes(applied.whName)) return false;
@@ -7607,10 +7623,10 @@ const app = createApp({
     function poRegDoSearch(){ Object.assign(poRegApplied, poRegFilters); poRegPage.current=1; poRegSelectedKeys.value=[]; msg('查询完成，共命中 '+poRegFiltered.value.length+' 条记录','success'); }
     function poRegToggleFav(){ poRegFav.value=!poRegFav.value; msg(poRegFav.value?'已收藏本页':'已取消收藏','success'); }
     const poRegQueryFiltered = computed(()=> poRegularData.filter(r=>{
-      if(poRegApplied.part_code && !r.part_code.toLowerCase().includes(poRegApplied.part_code.toLowerCase())) return false;
+      if(poRegApplied.part_code && !matchBatchQuery(r.part_code, poRegApplied.part_code)) return false;
       if(poRegApplied.part_name && !r.part_name.includes(poRegApplied.part_name)) return false;
-      if(poRegApplied.cur_purchase_code && !r.cur_purchase_code.toLowerCase().includes(poRegApplied.cur_purchase_code.toLowerCase())) return false;
-      if(poRegApplied.wh_code && !r.wh_code.toLowerCase().includes(poRegApplied.wh_code.toLowerCase())) return false;
+      if(poRegApplied.cur_purchase_code && !matchBatchQuery(r.cur_purchase_code, poRegApplied.cur_purchase_code)) return false;
+      if(poRegApplied.wh_code && !matchBatchQuery(r.wh_code, poRegApplied.wh_code)) return false;
       if(poRegApplied.wh_name && !r.wh_name.includes(poRegApplied.wh_name)) return false;
       if(poRegApplied.plan_type && r.plan_type!==poRegApplied.plan_type) return false;
       if(poRegApplied.vehicle_code && !r.vehicle_code.toLowerCase().includes(poRegApplied.vehicle_code.toLowerCase())) return false;
@@ -8345,10 +8361,10 @@ const app = createApp({
     function poHistDoSearch(){ Object.assign(poHistApplied, poHistFilters); poHistPage.current=1; poHistSelectedKeys.value=[]; msg('查询完成，共命中 '+poHistFiltered.value.length+' 条记录','success'); }
     function poHistToggleFav(){ poHistFav.value=!poHistFav.value; msg(poHistFav.value?'已收藏本页':'已取消收藏','success'); }
     const poHistQueryFiltered = computed(()=> poHistData.filter(r=>{
-      if(poHistApplied.part_code && !r.part_code.toLowerCase().includes(poHistApplied.part_code.toLowerCase())) return false;
+      if(poHistApplied.part_code && !matchBatchQuery(r.part_code, poHistApplied.part_code)) return false;
       if(poHistApplied.part_name && !r.part_name.includes(poHistApplied.part_name)) return false;
-      if(poHistApplied.cur_purchase_code && !r.cur_purchase_code.toLowerCase().includes(poHistApplied.cur_purchase_code.toLowerCase())) return false;
-      if(poHistApplied.wh_code && !r.wh_code.toLowerCase().includes(poHistApplied.wh_code.toLowerCase())) return false;
+      if(poHistApplied.cur_purchase_code && !matchBatchQuery(r.cur_purchase_code, poHistApplied.cur_purchase_code)) return false;
+      if(poHistApplied.wh_code && !matchBatchQuery(r.wh_code, poHistApplied.wh_code)) return false;
       if(poHistApplied.wh_name && !r.wh_name.includes(poHistApplied.wh_name)) return false;
       if(poHistApplied.plan_type && r.plan_type!==poHistApplied.plan_type) return false;
       if(poHistApplied.is_blocked && r.is_blocked!==poHistApplied.is_blocked) return false;
@@ -8431,7 +8447,7 @@ const app = createApp({
     function poExpDoSearch(){ Object.assign(poExpApplied, poExpFilters); poExpPage.current=1; poExpSelectedKeys.value=[]; msg('查询完成，共命中 '+poExpFiltered.value.length+' 条记录','success'); }
     function poExpToggleFav(){ poExpFav.value=!poExpFav.value; msg(poExpFav.value?'已收藏本页':'已取消收藏','success'); }
     const poExpQueryFiltered = computed(()=> poExpData.filter(r=>{
-      if(poExpApplied.material && !String(r.cur_purchase_code||'').toLowerCase().includes(poExpApplied.material.toLowerCase())) return false;
+      if(poExpApplied.material && !matchBatchQuery(r.cur_purchase_code, poExpApplied.material)) return false;
       if(poExpApplied.supplier_code && !String(r.cur_supplier_code||'').toLowerCase().includes(poExpApplied.supplier_code.toLowerCase())) return false;
       if(poExpApplied.plan_batch && !String(r.plan_batch||'').toLowerCase().includes(poExpApplied.plan_batch.toLowerCase())) return false;
       if(poExpApplied.plan_line && !String(r.plan_line||'').toLowerCase().includes(poExpApplied.plan_line.toLowerCase())) return false;
@@ -8570,7 +8586,7 @@ const app = createApp({
     const stoBaseRows = computed(()=> stoPlanData.filter(r=> r.period === (stoIsWeek.value ? 'week' : 'next')));
     const stoFiltered = computed(()=> stoBaseRows.value.filter(r=>{
       const f = stoApplied;
-      if(f.part_code && !r.part_code.toLowerCase().includes(f.part_code.toLowerCase())) return false;
+      if(f.part_code && !matchBatchQuery(r.part_code, f.part_code)) return false;
       if(f.part_name && !r.part_name.includes(f.part_name)) return false;
       if(f.plan_batch && !r.plan_batch.toLowerCase().includes(f.plan_batch.toLowerCase())) return false;
       if(f.from_wh && r.from_wh!==f.from_wh) return false;
@@ -8631,7 +8647,7 @@ const app = createApp({
 
     const stoExpQueryFiltered = computed(()=> stoExpData.filter(function(r){
       const f = stoExpApplied;
-      if(f.part_code && !r.part_code.toLowerCase().includes(f.part_code.toLowerCase())) return false;
+      if(f.part_code && !matchBatchQuery(r.part_code, f.part_code)) return false;
       if(f.plan_batch && !r.plan_batch.toLowerCase().includes(f.plan_batch.toLowerCase())) return false;
       if(f.plan_line && !r.plan_line.toLowerCase().includes(f.plan_line.toLowerCase())) return false;
       if(f.from_wh && r.from_wh!==f.from_wh) return false;
@@ -8873,7 +8889,7 @@ const app = createApp({
     const stoSumFiltered = computed(()=> stoSumBaseRows.value.filter(function(r){
       const f = stoSumApplied;
       if(f.snapshot_date && !String(r.snapshot_date).includes(f.snapshot_date)) return false;
-      if(f.part_code && !String(r.part_code).toLowerCase().includes(f.part_code.toLowerCase())) return false;
+      if(f.part_code && !matchBatchQuery(r.part_code, f.part_code)) return false;
       if(f.part_name && !String(r.part_name).includes(f.part_name)) return false;
       if(f.abc_class && r.abc_class!==f.abc_class) return false;
       if(f.vehicle_code && !String(r.vehicle_code).toLowerCase().includes(f.vehicle_code.toLowerCase())) return false;
@@ -9044,7 +9060,7 @@ const app = createApp({
       const f = rollApplied;
       if(f.supplier_code && !r.supplier_code.toLowerCase().includes(f.supplier_code.toLowerCase())) return false;
       if(f.supplier_name && !r.supplier_name.includes(f.supplier_name)) return false;
-      if(f.part_code && !String(r.part_code).toLowerCase().includes(f.part_code.toLowerCase())) return false;
+      if(f.part_code && !matchBatchQuery(r.part_code, f.part_code)) return false;
       if(f.part_name && !String(r.part_name).includes(f.part_name)) return false;
       if(f.plan_batch && !r.plan_batch.toLowerCase().includes(f.plan_batch.toLowerCase())) return false;
       if(f.sync_status && r.sync_status !== f.sync_status) return false;
@@ -9131,6 +9147,8 @@ const app = createApp({
     const genHiddenCols = ref([]);
     const genExpanded = ref(false);
     const genFav = ref(false);
+    /* 配件号 / 仓库编码类条件支持批量粘贴查询 */
+    const isBatchField = (f)=> BATCH_FILTER_FIELDS.includes(f.field || f.key);
     const activeDef = computed(()=> pageDefs[activeMenu.value] || { detailTitle:'', idField:'id', columns:[], filters:[], isExtension:false, scrollX:1000 });
     const genFiltered = computed(()=>{
       const def = pageDefs[activeMenu.value];
@@ -9148,6 +9166,7 @@ const app = createApp({
           if(activeMenu.value==='wh-master'&&f.field==='warehouse_type'){if(!r.warehouse_roles.includes(Number(v)))return false;continue;}
           const fv = r[f.field || f.key];
           if(f.type==='select'){ if(String(fv)!==String(v)) return false; }
+          else if(isBatchField(f)){ if(!matchBatchQuery(fv, v)) return false; }
           else { if(!String(fv).toLowerCase().includes(String(v).toLowerCase())) return false; }
         }
         return true;
@@ -12223,6 +12242,7 @@ const app = createApp({
       stoSumTab, stoSumColumns, stoSumHiddenCols, stoSumVisibleColumns, stoSumScrollX, stoSumToggleCol,
       stoSumFmt,
       stoSumFilters, stoSumFilterExpanded, stoSumFav, stoSumPage, stoSumNetCount,
+      isBatchField,
       stoSumFiltered, stoSumPaged, stoSumCustomRow,
       stoSumDoSearch, stoSumResetFilters, stoSumToggleFav,
       stoSumExportOpen, stoSumExportFields, stoSumToggleExportField, stoSumDoExport,
