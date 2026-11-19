@@ -2900,7 +2900,8 @@ mark {
                 <a-button v-if="activeMenu==='fc-long' && fcLongTab==='已审批'" :disabled="!fcLongSelApproved" @click="fcBridgeOpen=true;fcBridgeDone=false" title="须所选配件均审批通过后方可生成">生成bridge buy计划</a-button>
                 <a-button v-if="activeMenu==='fc-long' && fcLongTab==='已审批'" :disabled="!fcLongSelApproved" @click="fcPreOpen=true;fcPreDone=false" title="须所选配件均审批通过；预计划仅供供应商数据同步，不生成实际计划">生成预计划</a-button>
                 <a-button v-if="activeMenu==='fc-long' || (activeMenu==='fc-long-draft' && draftEnabled.value)" :disabled="!fcBatchSelIds.length" @click="fcLongBatchM.open=true">批量圆整（{{ fcBatchSelIds.length }}）</a-button>
-                <a-button v-if="activeMenu==='fc-long' && fcLongTab==='待审批'" @click="fcLongApproveOpen=true">审批</a-button>
+                <a-button v-if="activeMenu==='fc-long' && fcLongTab==='待审批'" :disabled="!fcLongSel.length" @click="fcLongApproveAll=false;fcLongApproveOpen=true" title="须先勾选零件，仅对选中的待审批零件审批">审批</a-button>
+                <a-button v-if="activeMenu==='fc-long' && fcLongTab==='待审批'" @click="fcLongApproveAll=true;fcLongApproveOpen=true" title="无需勾选，直接对全部待审批零件审批">全量审批</a-button>
                 <a-button v-if="activeMenu==='fc-regular' || activeMenu==='fc-wh-regular'" @click="fcGenRegularPo">生成采购计划</a-button>
                 <a-button v-if="activeDef.isExtension && !activeDef.noImport" type="default" @click="genImportOpen=true">⬆ 导入</a-button>
                 <a-button v-if="activeMenu==='part-group'" type="primary" @click="openPgModal('add')">＋ 新建分组</a-button>
@@ -3238,7 +3239,7 @@ mark {
             </a-modal>
 
             <!-- 长周期预测报表：审批弹窗 -->
-            <a-modal v-model:open="fcLongApproveOpen" title="审批 · 长周期预测报表" :width="560" :footer="null" :mask-closable="false">
+            <a-modal v-model:open="fcLongApproveOpen" :title="(fcLongApproveAll?'全量审批':'审批') + ' · 长周期预测报表'" :width="560" :footer="null" :mask-closable="false">
               <a-alert type="info" show-icon style="margin-bottom:14px;"
                 :message="fcLongApproveDesc"/>
               <a-alert v-if="fcLongApproveErr" type="error" :message="fcLongApproveErr" show-icon style="margin-bottom:12px;"/>
@@ -7115,19 +7116,20 @@ const app = createApp({
       }
       fcLongEditId.value = null;
     }
-    /* 审批：按钮始终可点；未勾选则对全部待审批零件审批，勾选则仅对选中零件审批；无驳回 */
+    /* 审批：拆为「审批」（须勾选、仅审选中）与「全量审批」（无需勾选、审全部待审批）；无驳回 */
     const fcLongTab = ref('待审批');
     const fcLongApproveOpen = ref(false);
+    const fcLongApproveAll = ref(false); // true=全量审批（全部待审批）；false=仅审勾选零件
     const fcLongApproveRemark = ref('审批通过');
     const fcLongApproveErr = ref('');
     const fcLongSelRows = computed(()=> fcLongData.filter(r=> fcLongSel.value.indexOf(r.id)>=0));
     const fcLongSelApproved = computed(()=> fcLongSelRows.value.length>0 && fcLongSelRows.value.every(r=> r.app_status==='审批通过'));
-    const fcLongApproveTargets = computed(()=> fcLongSel.value.length
-      ? fcLongSelRows.value
-      : fcLongData.filter(r=> r.app_status!=='审批通过'));
-    const fcLongApproveDesc = computed(()=> fcLongSel.value.length
-      ? ('将对已勾选的 '+fcLongSelRows.value.length+' 个配件执行审批')
-      : ('未勾选配件，将对全部待审批的 '+fcLongApproveTargets.value.length+' 个配件执行审批'));
+    const fcLongApproveTargets = computed(()=> fcLongApproveAll.value
+      ? fcLongData.filter(r=> r.app_status!=='审批通过')
+      : fcLongSelRows.value);
+    const fcLongApproveDesc = computed(()=> fcLongApproveAll.value
+      ? ('无需勾选，将对全部待审批的 '+fcLongApproveTargets.value.length+' 个配件执行审批')
+      : ('将对已勾选的 '+fcLongSelRows.value.length+' 个配件执行审批'));
     function fcLongApproveConfirm(){
       if(!fcLongApproveRemark.value || !fcLongApproveRemark.value.trim()){ fcLongApproveErr.value='请填写审批意见'; return; }
       const now = polNow(); let n=0;
@@ -7138,7 +7140,7 @@ const app = createApp({
         fcLongLog(r, wasAdjusted?'再次审批':'审批通过', '审批人', fcLongApproveRemark.value);
         n++;
       });
-      fcLongApproveOpen.value=false; fcLongApproveRemark.value='审批通过'; fcLongApproveErr.value='';
+      fcLongApproveOpen.value=false; fcLongApproveRemark.value='审批通过'; fcLongApproveErr.value=''; fcLongApproveAll.value=false;
       fcLongSel.value=[];
       antd.message.success('已审批 '+n+' 个配件'+(n?'':'（无待审批配件）'));
     }
@@ -12259,7 +12261,7 @@ const app = createApp({
       fcRegMdl, fcOpenRegMdl, closeRegMdl, refreshRegMdlCharts, fcApplyRegMdl,
       canEditFc, fcEditMode, isFcLongBuyout, fcRowEditable, fcSaveForecast,
       fcLongEditId, fcLongEditDraft, fcLongRowEditing, fcLongStartEdit, fcLongCancelEdit, fcLongSaveEdit,
-      fcLongTab, fcLongApproveOpen, fcLongApproveRemark, fcLongApproveErr,
+      fcLongTab, fcLongApproveOpen, fcLongApproveAll, fcLongApproveRemark, fcLongApproveErr,
       fcLongSelRows, fcLongSelApproved, fcLongApproveTargets, fcLongApproveDesc, fcLongApproveConfirm,
       fcLongLogOpen, fcLongLogRows, fcLongLogTitle, fcLongOpenLog, fcLongLog,
       fcPreOpen, fcPreDone, fcPreGenerate, fcPrePlanData,

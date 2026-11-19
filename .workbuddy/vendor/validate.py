@@ -493,15 +493,15 @@ def check_fc_buyout_btns():
     return {"key":"fc-buyout-按钮","ok":ok,"msg":detail}
 
 def check_fc_long_btns():
-    """长周期预测报表（源码级）：双页签；审批按钮在待审批且常可点；生成预计划 / Bridge buy 仅在已审批；工具栏无驳回、无审核状态。"""
+    """长周期预测报表（源码级）：双页签；审批在待审批须勾选、全量审批无需勾选；生成预计划 / Bridge buy 仅在已审批；工具栏无驳回、无审核状态。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
     a = src.find('@click="genExportCsv(false)"')
     b = src.find('<a-table', a)
     seg = src[a:b] if a >= 0 and b > a else ""
     checks = {
         "双页签": "v-model:activeKey=\"fcLongTab\"" in src and 'a-tab-pane key="待审批"' in src and 'a-tab-pane key="已审批"' in src,
-        "审批在待审批且常可点": "v-if=\"activeMenu==='fc-long' && fcLongTab==='待审批'\" @click=\"fcLongApproveOpen=true\"" in seg
-                          and ":disabled=\"!fcLongCanApprove\"" not in seg,
+        "审批在待审批须勾选": "v-if=\"activeMenu==='fc-long' && fcLongTab==='待审批'\" :disabled=\"!fcLongSel.length\" @click=\"fcLongApproveAll=false;fcLongApproveOpen=true\"" in seg,
+        "全量审批无需勾选": "v-if=\"activeMenu==='fc-long' && fcLongTab==='待审批'\" @click=\"fcLongApproveAll=true;fcLongApproveOpen=true\"" in seg,
         "生成按钮仅在已审批": seg.count("v-if=\"activeMenu==='fc-long' && fcLongTab==='已审批'\"") >= 2,
         "工具栏无驳回": "fcLongRejectOpen" not in src and "长周期预测报表：驳回弹窗" not in src,
         "工具栏无审核状态": "审核状态" not in seg and "title:'审核状态', key:'app_status'" not in src,
@@ -999,18 +999,20 @@ def check_fc_long_editmode():
     return {"key":"fc-long-行内编辑","ok":ok,"msg":detail}
 
 def check_long_reform():
-    """长周期预测报表改造（源码级）：待审批/已审批双页签 + 审批范围（未选全量/选中仅选中）+ 去驳回 + 去审核状态字段 + 调整两页签可操作 + 操作日志 + 预计划。"""
+    """长周期预测报表改造（源码级）：待审批/已审批双页签 + 审批（须勾选）/全量审批（无需勾选）+ 去驳回 + 去审核状态字段 + 调整两页签可操作 + 操作日志 + 预计划。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
     checks = {
         "审批状态字段": "app_status:" in src and "fcLongLog" in src,
         "双页签": "v-model:activeKey=\"fcLongTab\"" in src and 'a-tab-pane key="待审批" tab="待审批"' in src and 'a-tab-pane key="已审批" tab="已审批"' in src,
         "页签过滤": "fcLongTab.value==='待审批' ? r.app_status!=='审批通过' : r.app_status==='审批通过'" in src,
-        "审批按钮仅在待审批": "v-if=\"activeMenu==='fc-long' && fcLongTab==='待审批'\" @click=\"fcLongApproveOpen=true\"" in src,
-        "审批按钮常可点": ":disabled=\"!fcLongCanApprove\"" not in src,
+        "审批按钮在待审批须勾选": "v-if=\"activeMenu==='fc-long' && fcLongTab==='待审批'\" :disabled=\"!fcLongSel.length\" @click=\"fcLongApproveAll=false;fcLongApproveOpen=true\"" in src,
+        "全量审批按钮无需勾选": "v-if=\"activeMenu==='fc-long' && fcLongTab==='待审批'\" @click=\"fcLongApproveAll=true;fcLongApproveOpen=true\"" in src,
+        "审批模式变量": "const fcLongApproveAll = ref(false);" in src and "fcLongTab, fcLongApproveOpen, fcLongApproveAll, fcLongApproveRemark" in src,
+        "弹窗标题随模式": "(fcLongApproveAll?'全量审批':'审批') + ' · 长周期预测报表'" in src,
         "生成按钮仅在已审批": src.count("v-if=\"activeMenu==='fc-long' && fcLongTab==='已审批'\"") >= 2,
-        "审批未选全量": "? fcLongSelRows.value" in src and "fcLongData.filter(r=> r.app_status!=='审批通过')" in src,
+        "审批目标按模式": "fcLongApproveAll.value" in src and "? fcLongData.filter(r=> r.app_status!=='审批通过')" in src and ": fcLongSelRows.value" in src,
         "审批目标计算属性": "const fcLongApproveTargets = computed(" in src and "fcLongApproveTargets.value.forEach" in src,
-        "审批提示区分范围": "fcLongApproveDesc" in src and "未勾选配件，将对全部待审批的" in src,
+        "审批提示区分范围": "fcLongApproveDesc" in src and "无需勾选，将对全部待审批的" in src and "将对已勾选的" in src,
         "无驳回": "fcLongRejectOpen" not in src and "fcLongRejectConfirm" not in src and "长周期预测报表：驳回弹窗" not in src,
         "审核状态字段已移除": "title:'审核状态', key:'app_status'" not in src and "key:'app_status', label:'审核状态'" not in src and "column.render==='fcapp'" not in src,
         "是否取整保留": "title:'是否取整', key:'rounded'" in src and "key:'rounded', label:'是否取整', type:'select'" in src,
