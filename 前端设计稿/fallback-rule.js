@@ -191,6 +191,9 @@ root.JlrFallbackRule = {
     groups.value.forEach(g=>g.rules.forEach(r=>{ r.id=nextId(); r.conditions.forEach(c=>{ /* id assigned on edit */ }); }));
     const selectedGroupId = ref(groups.value[0]?groups.value[0].id:null);
     const editState = ref(null);
+    const detailOpen = ref(false);
+    const detailRule = ref(null);
+    const openRuleDetail = (r)=>{ detailRule.value=r; detailOpen.value=true; };
     const groupModalOpen = ref(false);
     const groupForm = reactive({ id:null, groupCode:'', groupName:'', priority:99, enabled:true, description:'' });
     const registryOpen = ref(false);
@@ -301,10 +304,9 @@ root.JlrFallbackRule = {
 
     return {
       OP, groups, groupsSorted, selectedGroupId, activeGroup, selectGroup,
-      editState, openRuleEditor, saveRule, deleteRule, duplicateRule, duplicateGroup, addCondition, onFieldChange,
+      editState, detailOpen, detailRule, openRuleDetail, openRuleEditor, saveRule, deleteRule, duplicateRule, duplicateGroup, addCondition, onFieldChange,
       groupModalOpen, groupForm, openGroupModal, saveGroup, deleteGroup,
       registryOpen, registryGroups:registryGroups(), regCols, fieldLabel, fieldType, enumOptions, opOptionsFor, condValueText, fieldSelectOptions:fieldSelectOptions(),
-      testValues, testFields, testResult, runGroupTest, ruleColumns,
     };
   },
   template:`
@@ -343,30 +345,66 @@ root.JlrFallbackRule = {
               <a-popconfirm title="确认删除该规则组及其所有分档规则？" @confirm="deleteGroup"><a-button size="small" danger>删除组</a-button></a-popconfirm>
             </div>
           </div>
-          <div class="bt-sec-t">分档规则列表</div>
-          <a-table :columns="ruleColumns" :data-source="activeGroup.rules" row-key="id" size="middle" :pagination="false" :scroll="{x:'max-content'}">
-            <template #bodyCell="{column,record}">
-              <template v-if="column.key==='priority'"><a-tag color="orange">{{ record.priority }}</a-tag></template>
-              <template v-else-if="column.key==='conditions'">
-                <span v-if="!(record.conditions||[]).length" style="color:#bfbfbf">无条件</span>
+          <div class="bt-sec-t">分档规则（{{ activeGroup.rules.length }}条）<span class="strategy-sub" style="margin-left:6px">点击卡片查看详情</span></div>
+
+          <!-- 规则卡片列表：紧凑、不横向溢出 -->
+          <div v-if="!activeGroup.rules.length" class="fallback-empty"><a-empty description="暂无分档规则，点击右上角「+ 新增分档规则」" /></div>
+          <div v-else class="fb-rule-list">
+            <div v-for="r in activeGroup.rules" :key="r.id" class="fb-rule-card" :class="{disabled:!r.enabled}" @click="openRuleDetail(r)">
+              <div class="fbrc-hd">
+                <span class="fb-prio">{{ r.priority }}</span>
+                <span class="fbrc-name">{{ r.ruleName }}</span>
+                <a-tag v-if="r.enabled" color="green">启用</a-tag>
+                <a-tag v-else color="default">停用</a-tag>
+                <a-tag :color="r.matchMode==='AND'?'blue':'purple'">{{ r.matchMode }}</a-tag>
+              </div>
+              <div class="fbrc-body">
+                <template v-if="!(r.conditions||[]).length"><span class="fbrc-none">无条件</span></template>
                 <template v-else>
-                  <template v-for="(c,i) in record.conditions" :key="i">
-                    <span v-if="i>0" class="fb-link">{{ record.matchMode }}</span>
+                  <template v-for="(c,i) in (r.conditions||[]).slice(0,3)" :key="i">
+                    <span v-if="i>0" class="fb-link">{{ r.matchMode }}</span>
                     <span class="fb-chip">{{ c.fieldLabel }}</span><span class="fb-chip fb-op">{{ OP[c.operator] }}</span><span class="fb-chip">{{ condValueText(c) }}</span>
                   </template>
+                  <span v-if="(r.conditions||[]).length>3" class="fbrc-more">+{{ (r.conditions||[]).length-3 }} 更多条件</span>
                 </template>
-              </template>
-              <template v-else-if="column.key==='matchMode'"><a-tag :color="record.matchMode==='AND'?'blue':'purple'">{{ record.matchMode }}</a-tag></template>
-              <template v-else-if="column.key==='fallbackValue'"><b style="color:#1677ff">{{ record.fallbackValue }}</b></template>
-              <template v-else-if="column.key==='enabled'"><a-tag :color="record.enabled?'green':'default'">{{ record.enabled?'启用':'停用' }}</a-tag></template>
-              <template v-else-if="column.key==='action'">
-                <a @click="openRuleEditor(record)">编辑</a>
-                <a style="margin-left:12px" @click="duplicateRule(record)">复制</a>
-                <a-popconfirm title="确认删除该分档规则？" @confirm="deleteRule(record.id)"><a style="margin-left:12px;color:#ff4d4f">删除</a></a-popconfirm>
-              </template>
+              </div>
+              <div class="fbrc-ft">兜底值 <b>{{ r.fallbackValue }}</b></div>
+            </div>
+          </div>
+
+          <!-- 规则详情抽屉 -->
+          <a-drawer v-model:open="detailOpen" title="分档规则详情" width="520" :mask-closable="true" @close="detailOpen=false">
+            <template v-if="detailRule">
+              <a-descriptions :column="1" bordered size="small">
+                <a-descriptions-item label="分档名称">{{ detailRule.ruleName }}</a-descriptions-item>
+                <a-descriptions-item label="优先级">{{ detailRule.priority }}</a-descriptions-item>
+                <a-descriptions-item label="兜底值"><b style="color:#1677ff;font-size:16px">{{ detailRule.fallbackValue }}</b></a-descriptions-item>
+                <a-descriptions-item label="状态">
+                  <a-tag :color="detailRule.enabled?'green':'default'">{{ detailRule.enabled?'启用':'停用' }}</a-tag>
+                </a-descriptions-item>
+                <a-descriptions-item label="条件逻辑">
+                  <a-tag :color="detailRule.matchMode==='AND'?'blue':'purple'">{{ detailRule.matchMode==='AND'?'AND（全部满足）':'OR（任一满足）' }}</a-tag>
+                </a-descriptions-item>
+                <a-descriptions-item label="兜底原因">{{ detailRule.reason || '—' }}</a-descriptions-item>
+              </a-descriptions>
+              <div style="margin-top:16px;font-size:13px;font-weight:600;color:#1f1f1f">条件列表（{{ (detailRule.conditions||[]).length }} 条）</div>
+              <div v-if="!(detailRule.conditions||[]).length" class="strategy-sub" style="margin-top:6px">无条件（该规则兜底所有配件）</div>
+              <div v-else style="margin-top:8px">
+                <div v-for="(c,idx) in detailRule.conditions" :key="idx" class="fallback-cond-box" style="margin-bottom:8px">
+                  <span class="fb-seq" style="margin-right:8px">{{ idx+1 }}</span>
+                  <span class="fb-chip">{{ c.fieldLabel }}</span>
+                  <span class="fb-chip fb-op">{{ OP[c.operator] }}</span>
+                  <span class="fb-chip">{{ condValueText(c) }}</span>
+                </div>
+              </div>
+              <div class="strategy-modal-footer">
+                <a-button @click="detailOpen=false">关闭</a-button>
+                <a-button @click="duplicateRule(detailRule);detailOpen=false">复制</a-button>
+                <a-popconfirm title="确认删除？" @confirm="deleteRule(detailRule.id);detailOpen=false"><a-button danger>删除</a-button></a-popconfirm>
+                <a-button type="primary" @click="detailOpen=false;openRuleEditor(detailRule)">编辑</a-button>
+              </div>
             </template>
-            <template #emptyText><a-empty description="暂无分档规则，点击右上角「+ 新增分档规则」" /></template>
-          </a-table>
+          </a-drawer>
 
           <div v-if="editState" class="fallback-editor">
             <div class="bt-sec-t">{{ editState.id ? '编辑分档规则' : '新增分档规则' }}</div>
