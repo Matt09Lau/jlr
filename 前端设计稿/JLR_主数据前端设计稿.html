@@ -5202,7 +5202,7 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 <script src="warehouse-network.js?v=20261026-real-network"></script>
 <script src="stocking-rules.js?v=20261026-create"></script>
 <script src="global-parameters.js?v=20261026-derived-service"></script>
-<script src="inventory-results.js?v=20261119-plan-v1"></script>
+<script src="inventory-results.js?v=20261119-plan-v2"></script>
 <script src="inventory-strategy.js?v=20261119-purchase-simplify"></script>
 <script src="fallback-rule.js?v=20261119-fallback"></script>
 <script>
@@ -5484,7 +5484,8 @@ partSupplierData.forEach(r=>{
   if(r.is_default_supplier === '是') {
     window.CSPPPartSupplierPurchaseLt[r.part_code] = {
       lt: Number(r.purchase_lt),
-      time: r.data_access_date
+      time: r.data_access_date,
+      name: r.part_name
     };
   }
 });

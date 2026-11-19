@@ -897,30 +897,37 @@ function finalize(input){
 function seed(kind,reference=dateNow()){
  // 浏览器环境：从配件与供应商关系取默认供应商 LT；Node.js 测试：构造 mock 数据
  const partSupplierLtMap=root.CSPPPartSupplierPurchaseLt||{
-  'LR000001':{lt:22,time:'2026-11-10'},
-  'LR000002':{lt:28,time:'2026-11-10'},
-  'LR000003':{lt:31,time:'2026-11-10'},
-  'LR000004':{lt:18,time:'2026-11-10'},
-  'LR000005':{lt:35,time:'2026-11-10'},
-  'LR000006':{lt:26,time:'2026-11-10'},
+  'LR000001':{lt:22,time:'2026-11-10',name:'机油滤清器'},
+  'LR000002':{lt:28,time:'2026-11-10',name:'空气滤清器'},
+  'LR000003':{lt:31,time:'2026-11-10',name:'前制动片'},
+  'LR000004':{lt:18,time:'2026-11-10',name:'燃油泵'},
+  'LR000005':{lt:35,time:'2026-11-10',name:'冷却液管'},
+  'LR000006':{lt:26,time:'2026-11-10',name:'点火线圈'},
  };
+ // 有系统同步LT的配件号集合（浏览器=真实key，Node.js=mock key）
+ const supplierPartCodes=Object.keys(partSupplierLtMap);
+ // 没有默认供应商的 mock 配件号（演示用）
+ const fallbackPartCodes=['LR999991','LR999992'];
  return Array.from({length:(kind==='PO'?network.centers.length:network.routes.length)*8},(_,i)=>{
  const route=network.routes[Math.floor(i/8)%network.routes.length],warehouse=kind==='PO'?network.centers[Math.floor(i/8)]:route.to;
  const po=kind==='PO',fallback=po&&i%4===0,direct=po&&i%7===6,forbidden=!po&&i%7===6;
  const low=100,high=450,target=i%3===0?500:i%3===1?80:300,reorder=i%5===0?500:i%5===4?80:200;
  const riskReorder=Math.max(low,Math.min(high,reorder)),riskTarget=po?Math.min(riskReorder+150,high):Math.max(low,Math.min(high,target));
  const floor=po?(fallback?550:50):null,apply=fallback&&riskTarget<floor;
- const part='LR'+String(i%8+1).padStart(6,'0');
+ // part 生成：前6个从有系统同步LT的配件号里取，后2个是 fallback（无系统同步LT）
+ const hasSupplierLt=i%8<Math.min(6,supplierPartCodes.length);
+ const part=hasSupplierLt
+  ?supplierPartCodes[i%supplierPartCodes.length]
+  :fallbackPartCodes[(i%8-supplierPartCodes.length+fallbackPartCodes.length)%fallbackPartCodes.length];
  // 采购LT取值优先级：配件供应商默认LT（系统同步）→ 采购LT配置（配置表）→ 全局参数
  let purchaseDays=null,purchaseSource=null;
  if(po){
-  const hasSupplierLt = i%8<6; // 模拟前6个配件有默认供应商，后2个没有
-  const sp=hasSupplierLt?partSupplierLtMap[part]:null;
+  const sp=partSupplierLtMap[part];
   if(sp&&Number.isFinite(Number(sp.lt))){purchaseDays=Number(sp.lt);purchaseSource='系统同步';}
   else if(i%5===0){purchaseDays=25+i%10;purchaseSource='配置表';}
   else{purchaseDays=45;purchaseSource='全局参数';}
  }
- const r={id:'result-v5-'+kind+'-'+i,buildType:po?'PO 建储':'STO 建储',...period(kind,i,reference),part,partName:partNames[i%8],wh:warehouse,whName:warehouses[warehouse],shipWh:po?'':route.from,shipName:po?'':warehouses[route.from],target,reorder,min:low,max:high,riskTarget,riskReorder,floor,floorReason:apply?'低频配件兜底规则':'',floorTarget:po?(apply?floor:riskTarget):null,floorReorder:po?(apply?Math.ceil(.75*floor):riskReorder):null,floorMin:po?(apply?Math.ceil(.5*floor):low):null,floorMax:po?(apply?floor:high):null,noStockReason:direct?'直供供应商，无需建储':forbidden?'备货规则禁止备货':'',abc:['A','B','C','D'][i%4],xyz:['X','Y','Z'][i%3],volume:['大','中','小'][i%3],planner:['张计划','李计划'][i%2],monthly:po?80+i*10:null,monthlyDate:po?reference+' 08:00:00':null,monthlySales:po?75+i*5:null,weekly:po?null:35+i,weeklyDate:po?null:reference+' 08:00:00',weeklySales:po?null:30+i,weeklyRiskSales:po?null:28+i,volatility:po?45+i:7+i*.2,purchaseDays,purchaseSource,transferDays:po?null:3,transferSource:po?null:(i%3===0?'全局参数':'配置表'),cycle:po?7:null,cycleSource:po?(i%3===0?'全局参数':'配置表'):null,transferCycle:po?null:7,days:i%3?5:0,start:i%3?'2026-01-01':'',end:i%3?'2030-01-01':'',rate:98,rateSource:'配置表',service:2.05,serviceSource:'配置表',maxCoef:1.2,maxCoefSource:i%2===0?'全局参数':'配置表',maxDays:3,maxDaysSource:i%2===0?'全局参数':'配置表',minCoef:.8,minCoefSource:i%2===0?'全局参数':'配置表',minDays:-2,minDaysSource:i%2===0?'全局参数':'配置表',manualTarget:null,manualReorder:null,manualMin:null,manualMax:null,manualReason:'',updated:stamp(),history:[],calcStatus:'成功',formulaVersion:'待生产定版'};
+ const r={id:'result-v5-'+kind+'-'+i,buildType:po?'PO 建储':'STO 建储',...period(kind,i,reference),part,partName:(partSupplierLtMap[part]&&partSupplierLtMap[part].name)||(partSupplierLtMap[part]?.name)||partNames[i%8],wh:warehouse,whName:warehouses[warehouse],shipWh:po?'':route.from,shipName:po?'':warehouses[route.from],target,reorder,min:low,max:high,riskTarget,riskReorder,floor,floorReason:apply?'低频配件兜底规则':'',floorTarget:po?(apply?floor:riskTarget):null,floorReorder:po?(apply?Math.ceil(.75*floor):riskReorder):null,floorMin:po?(apply?Math.ceil(.5*floor):low):null,floorMax:po?(apply?floor:high):null,noStockReason:direct?'直供供应商，无需建储':forbidden?'备货规则禁止备货':'',abc:['A','B','C','D'][i%4],xyz:['X','Y','Z'][i%3],volume:['大','中','小'][i%3],planner:['张计划','李计划'][i%2],monthly:po?80+i*10:null,monthlyDate:po?reference+' 08:00:00':null,monthlySales:po?75+i*5:null,weekly:po?null:35+i,weeklyDate:po?null:reference+' 08:00:00',weeklySales:po?null:30+i,weeklyRiskSales:po?null:28+i,volatility:po?45+i:7+i*.2,purchaseDays,purchaseSource,transferDays:po?null:3,transferSource:po?null:(i%3===0?'全局参数':'配置表'),cycle:po?7:null,cycleSource:po?(i%3===0?'全局参数':'配置表'):null,transferCycle:po?null:7,days:i%3?5:0,start:i%3?'2026-01-01':'',end:i%3?'2030-01-01':'',rate:98,rateSource:'配置表',service:2.05,serviceSource:'配置表',maxCoef:1.2,maxCoefSource:i%2===0?'全局参数':'配置表',maxDays:3,maxDaysSource:i%2===0?'全局参数':'配置表',minCoef:.8,minCoefSource:i%2===0?'全局参数':'配置表',minDays:-2,minDaysSource:i%2===0?'全局参数':'配置表',manualTarget:null,manualReorder:null,manualMin:null,manualMax:null,manualReason:'',updated:stamp(),history:[],calcStatus:'成功',formulaVersion:'待生产定版'};
  if(i===2){r.manualTarget=po?350:320;r.manualReason='季节活动备货';}
  // 其他指标来源（purchaseSource 已单独赋值，跳过）
  for(const k of Object.keys(sourcePairs)){
