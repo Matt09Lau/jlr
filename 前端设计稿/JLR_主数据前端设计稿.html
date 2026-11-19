@@ -5202,7 +5202,7 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 <script src="warehouse-network.js?v=20261026-real-network"></script>
 <script src="stocking-rules.js?v=20261026-create"></script>
 <script src="global-parameters.js?v=20261026-derived-service"></script>
-<script src="inventory-results.js?v=20261119-plan-v4"></script>
+<script src="inventory-results.js?v=20261119-plan-v5"></script>
 <script src="inventory-strategy.js?v=20261119-purchase-simplify"></script>
 <script src="fallback-rule.js?v=20261119-fallback"></script>
 <script>
@@ -5399,8 +5399,26 @@ const productHierarchies = ['A1 发动机系统','A2 制动系统','A3 悬挂系
 const purchaseCatMap = { Y:'CJLR国产', IH:'CJLR自制', D:'CJLR直供' };
 const purchaseCatOptions = ['CJLR国产','CJLR自制','CJLR直供','JLRC国产','JLR进口'];
 const matData = Vue.reactive([]);
+/* 先为每个配件分配 manufacturer_part_no：50% 概率与前一个配件共享（模拟同一工程件号对应多个配件号） */
+const mfrPool = [];
+for(let i=0;i<partPool.length;i++){
+  if(i>0 && rnd()<0.45){
+    // 共享前一个的 mfr_part_no
+    mfrPool.push(mfrPool[i-1]);
+  } else {
+    mfrPool.push('MFR' + rint(10000,99999));
+  }
+}
 partPool.forEach((p, idx)=>{
   const t = pick(materialTypes);
+  const mfr = mfrPool[idx];
+  // sales_price 用于计算金额分类（分 4 档）
+  const salesPrice = +(3 + rnd()*110).toFixed(2);
+  let priceClass = '';
+  if(salesPrice<=25) priceClass='25';
+  else if(salesPrice<=50) priceClass='50';
+  else if(salesPrice<=75) priceClass='75';
+  else priceClass='100';
   matData.push({
     id: 'M' + (idx+1),
     material_code: p[0],
@@ -5409,16 +5427,36 @@ partPool.forEach((p, idx)=>{
     material_group: pick(materialGroups),
     base_unit: pick(baseUnits),
     old_material_code: rnd()<0.3 ? (p[0].slice(0,6)+'00') : '',
-    mfr_part_no: 'MFR' + rint(10000,99999),
+    manufacturer_part_no: mfr,
+    mfr_part_no: mfr,   /* 兼容旧字段名 */
     manufacturer: pick(manufacturers),
     product_hierarchy: pick(productHierarchies),
     volume: +(0.001 + Math.pow(rnd(),3)*0.3).toFixed(4),
     gross_weight: +(0.05 + rnd()*12).toFixed(2),
     planner: pick(planners),
     purchase_category: purchaseCatMap[pick(['Y','IH','D'])],
+    sales_price: salesPrice,
+    price_class: priceClass,
     sync_data_time: '2026-09-' + pad2(rint(10,18)) + ' 0' + rint(1,3) + ':' + pad2(rint(10,59)),
   });
 });
+/* 通用件 common_part：同一 manufacturer_part_no 下的其他配件号（工程件号相同的互为通用件） */
+{
+  const mfrMap = {};
+  matData.forEach(r=>{
+    (mfrMap[r.manufacturer_part_no] = mfrMap[r.manufacturer_part_no] || []).push(r);
+  });
+  matData.forEach(r=>{
+    const same = mfrMap[r.manufacturer_part_no];
+    if(same && same.length>1){
+      // 任取一个不同的配件号作为通用件
+      const other = same.find(x=>x.material_code!==r.material_code);
+      r.common_part = other ? other.material_code : '';
+    } else {
+      r.common_part = '';
+    }
+  });
+}
 
 /* ================= 仓库主数据（ods_warehouse_info_di）模拟 ================= */
 const whTypeTextMap = { 1:'区域库', 2:'中心库', 3:'收货仓' };
@@ -5453,15 +5491,22 @@ for(let i=1;i<=24;i++){
 
 /* ================= 配件与供应商关系（part_supplier_relation）模拟 ================= */
 const partSupplierData = Vue.reactive([]);
+// EINE Plant 来源，CJPK 统一映射为 CJDC
+const plantOrigins = ['CJPK','CJPV','CJPW','CJPE','CJPD','CJPQ','CJPR','CJPU','CJPS'];
 for(let i=0;i<36;i++){
   const p = partPool[Math.floor(i/3) % partPool.length];
   const s = supplierData[i % supplierData.length];
+  let plantOrigin = plantOrigins[i % plantOrigins.length];
+  let receiptWarehouse = plantOrigin==='CJPK' ? 'CJDC' : plantOrigin;
   partSupplierData.push({
     id: 'PS' + (i+1),
     part_code: p[0],
     part_name: p[1],
     supplier_code: s.supplier_code,
     supplier_name: s.supplier_name,
+    is_default_supplier: '否',
+    receipt_warehouse: receiptWarehouse,
+    moq: rint(1,50),            /* MOQ：Standard PO Quantity */
     last_purchase_time: '2026-0' + rint(1,9) + '-' + pad2(rint(1,28)) + ' 1' + rint(0,4) + ':' + pad2(rint(10,59)),
     purchasing_info_record: '53000' + String(rint(10000,99999)),
     supplier_contract: 'CT-2026-' + String(rint(1000,9999)),
@@ -5487,6 +5532,13 @@ partSupplierData.forEach(r=>{
       time: r.data_access_date,
       name: r.part_name
     };
+  }
+});
+// 暴露「配件号 → 默认供应商收货仓库」映射给建储结果页联动
+window.CSPPPartSupplierReceiptWarehouse = {};
+partSupplierData.forEach(r=>{
+  if(r.is_default_supplier==='是'){
+    window.CSPPPartSupplierReceiptWarehouse[r.part_code] = r.receipt_warehouse;
   }
 });
 
@@ -5581,7 +5633,7 @@ function partHasValidContract(code){
 
 /* ================= 通用页面定义（pageDefs，数据驱动） ================= */
 const matMasterDef = {
-  isExtension:false, detailTitle:'配件', idField:'material_code', scrollX:1750,
+  isExtension:false, detailTitle:'配件', idField:'material_code', scrollX:2000,
   columns:[
     {title:'配件号', key:'material_code', dataIndex:'material_code', width:145, fixed:'left', render:'link', sorter:(a,b)=>a.material_code.localeCompare(b.material_code)},
     {title:'配件名称', key:'material_name', dataIndex:'material_name', width:165, ellipsis:true, sorter:(a,b)=>a.material_name.localeCompare(b.material_name)},
@@ -5589,11 +5641,14 @@ const matMasterDef = {
     {title:'物料组', key:'material_group', dataIndex:'material_group', width:130, sorter:(a,b)=>a.material_group.localeCompare(b.material_group)},
     {title:'基础计量单位', key:'base_unit', dataIndex:'base_unit', width:110},
     {title:'旧配件号', key:'old_material_code', dataIndex:'old_material_code', width:120},
-    {title:'制造商件号', key:'mfr_part_no', dataIndex:'mfr_part_no', width:120},
+    {title:'制造商件号', key:'manufacturer_part_no', dataIndex:'manufacturer_part_no', width:120},
     {title:'制造商', key:'manufacturer', dataIndex:'manufacturer', width:130, sorter:(a,b)=>a.manufacturer.localeCompare(b.manufacturer)},
     {title:'产品层次', key:'product_hierarchy', dataIndex:'product_hierarchy', width:130},
+    {title:'通用件', key:'common_part', dataIndex:'common_part', width:120, render:'link', sorter:(a,b)=>String(a.common_part).localeCompare(String(b.common_part))},
     {title:'体积(m³)', key:'volume', dataIndex:'volume', width:100, sorter:(a,b)=>a.volume-b.volume},
     {title:'毛重(kg)', key:'gross_weight', dataIndex:'gross_weight', width:100, sorter:(a,b)=>a.gross_weight-b.gross_weight},
+    {title:'销售价(元)', key:'sales_price', dataIndex:'sales_price', width:110, sorter:(a,b)=>a.sales_price-b.sales_price},
+    {title:'金额分类', key:'price_class', dataIndex:'price_class', width:100, render:'tag', colorMap:{'25':'default','50':'blue','75':'geekblue','100':'purple'}, sorter:(a,b)=>String(a.price_class).localeCompare(String(b.price_class))},
     {title:'计划员', key:'planner', dataIndex:'planner', width:90, sorter:(a,b)=>a.planner.localeCompare(b.planner)},
     {title:'数据同步时间', key:'sync_data_time', dataIndex:'sync_data_time', width:165, sorter:(a,b)=>a.sync_data_time.localeCompare(b.sync_data_time)},
     {title:'操作', key:'action', width:80, fixed:'right'},
@@ -5605,6 +5660,7 @@ const matMasterDef = {
     {key:'group', label:'物料组', type:'select', field:'material_group', options: materialGroups.map(t=>({value:t,label:t}))},
     {key:'planner', label:'计划员', type:'select', field:'planner', options: planners.map(t=>({value:t,label:t}))},
     {key:'mfr', label:'制造商', type:'select', field:'manufacturer', options: manufacturers.map(t=>({value:t,label:t}))},
+    {key:'priceclass', label:'金额分类', type:'select', field:'price_class', options:[{value:'25',label:'0~25'},{value:'50',label:'25~50'},{value:'75',label:'50~75'},{value:'100',label:'75~100'}]},
   ],
   data: matData,
 };
@@ -5675,12 +5731,14 @@ const supplierExtDef = {
   data: supplierData,
 };
 const partSupplierDef = {
-  isExtension:false, detailTitle:'配件与供应商关系', idField:'part_code', scrollX:1655,
+  isExtension:false, detailTitle:'配件与供应商关系', idField:'part_code', scrollX:1880,
   columns:[
     {title:'配件号', key:'part_code', dataIndex:'part_code', width:145, fixed:'left', render:'link', sorter:(a,b)=>a.part_code.localeCompare(b.part_code)},
     {title:'供应商代码', key:'supplier_code', dataIndex:'supplier_code', width:115, sorter:(a,b)=>a.supplier_code.localeCompare(b.supplier_code)},
-    {title:'供应商名称', key:'supplier_name', dataIndex:'supplier_name', width:250, ellipsis:true, sorter:(a,b)=>a.supplier_name.localeCompare(b.supplier_name)},
+    {title:'供应商名称', key:'supplier_name', dataIndex:'supplier_name', width:200, ellipsis:true, sorter:(a,b)=>a.supplier_name.localeCompare(b.supplier_name)},
     {title:'是否默认供应商', key:'is_default_supplier', dataIndex:'is_default_supplier', width:120, render:'tag', colorMap:{'是':'green','否':'default'}, sorter:(a,b)=>String(a.is_default_supplier).localeCompare(String(b.is_default_supplier))},
+    {title:'收货仓库', key:'receipt_warehouse', dataIndex:'receipt_warehouse', width:110, sorter:(a,b)=>String(a.receipt_warehouse).localeCompare(String(b.receipt_warehouse))},
+    {title:'MOQ', key:'moq', dataIndex:'moq', width:80, sorter:(a,b)=>a.moq-b.moq},
     {title:'最后一次采购时间', key:'last_purchase_time', dataIndex:'last_purchase_time', width:160, sorter:(a,b)=>a.last_purchase_time.localeCompare(b.last_purchase_time)},
     {title:'采购信息记录', key:'purchasing_info_record', dataIndex:'purchasing_info_record', width:130},
     {title:'供应商合同', key:'supplier_contract', dataIndex:'supplier_contract', width:130},
