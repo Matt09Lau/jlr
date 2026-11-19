@@ -884,12 +884,17 @@ function breachDirection(row,key){
 function finalize(input){
  const r={...input};const po=r.buildType==='PO 建储';if(!po){if(!present(r.reorder))r.reorder=200;if(!present(r.riskReorder))r.riskReorder=Math.max(Number(r.min),Math.min(Number(r.max),Number(r.reorder)));}
  r.targetBreak=breachDirection(r,'target');
- r.reorderBreak=breachDirection(r,'reorder');if(po){r.floorApplied=present(r.floor)&&Number(r.riskTarget)<Number(r.floor)?'是':'否';}
- const sysTarget=po?r.floorTarget:r.riskTarget;
- r.adjustTarget=present(r.manualTarget)?Number(r.manualTarget):sysTarget;
- r.adjustMin=present(r.manualMin)?Number(r.manualMin):(po?r.floorMin:r.min);
- r.adjustMax=present(r.manualMax)?Number(r.manualMax):(po?r.floorMax:r.max);
- r.adjustReorder=present(r.manualReorder)?Number(r.manualReorder):(po?r.floorReorder:r.riskReorder);
+ r.reorderBreak=breachDirection(r,'reorder');
+ if(po){r.floorApplied=present(r.floor)&&Number(r.riskTarget)<Number(r.floor)?'是':'否';}
+ // 兜底：floor 相关字段为 null 时回退到风控线
+ const sysTarget = po ? (present(r.floorTarget)?r.floorTarget:r.riskTarget) : r.riskTarget;
+ const sysMin   = po ? (present(r.floorMin)?r.floorMin:r.min) : r.min;
+ const sysMax   = po ? (present(r.floorMax)?r.floorMax:r.max) : r.max;
+ const sysReorder = po ? (present(r.floorReorder)?r.floorReorder:r.riskReorder) : r.riskReorder;
+ r.adjustTarget=present(r.manualTarget)?Number(r.manualTarget):(present(sysTarget)?Number(sysTarget):null);
+ r.adjustMin=present(r.manualMin)?Number(r.manualMin):(present(sysMin)?Number(sysMin):null);
+ r.adjustMax=present(r.manualMax)?Number(r.manualMax):(present(sysMax)?Number(sysMax):null);
+ r.adjustReorder=present(r.manualReorder)?Number(r.manualReorder):(present(sysReorder)?Number(sysReorder):null);
  r.adjustReason=r.manualReason||'';
  if(r.noStockReason){r.adjustTarget=0;r.adjustMin=0;r.adjustMax=0;r.adjustReorder=0;}
  return r;
@@ -912,10 +917,9 @@ function seed(kind,reference=dateNow()){
  const fallbackPartCodes=['LR999991','LR999992'];
  return Array.from({length:(kind==='PO'?network.centers.length:network.routes.length)*8},(_,i)=>{
  const route=network.routes[Math.floor(i/8)%network.routes.length];
- const po=kind==='PO',fallback=po&&i%4===0,direct=po&&i%7===6,forbidden=!po&&i%7===6;
+ const po=kind==='PO',direct=po&&i%7===6,forbidden=!po&&i%7===6;
  const low=100,high=450,target=i%3===0?500:i%3===1?80:300,reorder=i%5===0?500:i%5===4?80:200;
  const riskReorder=Math.max(low,Math.min(high,reorder)),riskTarget=po?Math.min(riskReorder+150,high):Math.max(low,Math.min(high,target));
- const floor=po?(fallback?550:50):null,apply=fallback&&riskTarget<floor;
  // part 生成：前6个从有系统同步LT的配件号里取，后2个是 fallback（无系统同步LT）
  const hasSupplierLt=i%8<Math.min(6,supplierPartCodes.length);
  const part=hasSupplierLt
@@ -932,7 +936,7 @@ function seed(kind,reference=dateNow()){
   else if(i%5===0){purchaseDays=25+i%10;purchaseSource='配置表';}
   else{purchaseDays=45;purchaseSource='全局参数';}
  }
- const r={id:'result-v5-'+kind+'-'+i,buildType:po?'PO 建储':'STO 建储',...period(kind,i,reference),part,partName:(partSupplierLtMap[part]&&partSupplierLtMap[part].name)||partNames[i%8],wh:warehouse,whName,shipWh:po?'':route.from,shipName:po?'':warehouses[route.from],target,reorder,min:low,max:high,riskTarget,riskReorder,floor,floorReason:apply?'低频配件兜底规则':'',floorTarget:po?(apply?floor:riskTarget):null,floorReorder:po?(apply?Math.ceil(.75*floor):riskReorder):null,floorMin:po?(apply?Math.ceil(.5*floor):low):null,floorMax:po?(apply?floor:high):null,noStockReason:direct?'直供供应商，无需建储':forbidden?'备货规则禁止备货':'',abc:['A','B','C','D'][i%4],xyz:['X','Y','Z'][i%3],volume:['大','中','小'][i%3],planner:['张计划','李计划'][i%2],monthly:po?80+i*10:null,monthlyDate:po?reference+' 08:00:00':null,monthlySales:po?75+i*5:null,weekly:po?null:35+i,weeklyDate:po?null:reference+' 08:00:00',weeklySales:po?null:30+i,weeklyRiskSales:po?null:28+i,volatility:po?45+i:7+i*.2,purchaseDays,purchaseSource,transferDays:po?null:3,transferSource:po?null:(i%3===0?'全局参数':'配置表'),cycle:po?7:null,cycleSource:po?(i%3===0?'全局参数':'配置表'):null,transferCycle:po?null:7,days:i%3?5:0,start:i%3?'2026-01-01':'',end:i%3?'2030-01-01':'',rate:98,rateSource:'配置表',service:2.05,serviceSource:'配置表',maxCoef:1.2,maxCoefSource:i%2===0?'全局参数':'配置表',maxDays:3,maxDaysSource:i%2===0?'全局参数':'配置表',minCoef:.8,minCoefSource:i%2===0?'全局参数':'配置表',minDays:-2,minDaysSource:i%2===0?'全局参数':'配置表',manualTarget:null,manualReorder:null,manualMin:null,manualMax:null,manualReason:'',updated:stamp(),history:[],calcStatus:'成功',formulaVersion:'待生产定版'};
+ const r={id:'result-v5-'+kind+'-'+i,buildType:po?'PO 建储':'STO 建储',...period(kind,i,reference),part,partName:(partSupplierLtMap[part]&&partSupplierLtMap[part].name)||partNames[i%8],wh:warehouse,whName,shipWh:po?'':route.from,shipName:po?'':warehouses[route.from],target,reorder,min:low,max:high,riskTarget,riskReorder,floor:null,floorReason:'',floorTarget:null,floorReorder:null,floorMin:null,floorMax:null,noStockReason:direct?'直供供应商，无需建储':forbidden?'备货规则禁止备货':'',abc:['A','B','C','D'][i%4],xyz:['X','Y','Z'][i%3],volume:['大','中','小'][i%3],planner:['张计划','李计划'][i%2],monthly:po?80+i*10:null,monthlyDate:po?reference+' 08:00:00':null,monthlySales:po?75+i*5:null,weekly:po?null:35+i,weeklyDate:po?null:reference+' 08:00:00',weeklySales:po?null:30+i,weeklyRiskSales:po?null:28+i,volatility:po?45+i:7+i*.2,purchaseDays,purchaseSource,transferDays:po?null:3,transferSource:po?null:(i%3===0?'全局参数':'配置表'),cycle:po?7:null,cycleSource:po?(i%3===0?'全局参数':'配置表'):null,transferCycle:po?null:7,days:i%3?5:0,start:i%3?'2026-01-01':'',end:i%3?'2030-01-01':'',rate:98,rateSource:'配置表',service:2.05,serviceSource:'配置表',maxCoef:1.2,maxCoefSource:i%2===0?'全局参数':'配置表',maxDays:3,maxDaysSource:i%2===0?'全局参数':'配置表',minCoef:.8,minCoefSource:i%2===0?'全局参数':'配置表',minDays:-2,minDaysSource:i%2===0?'全局参数':'配置表',manualTarget:null,manualReorder:null,manualMin:null,manualMax:null,manualReason:'',updated:stamp(),history:[],calcStatus:'成功',formulaVersion:'待生产定版'};
  if(i===2){r.manualTarget=po?350:320;r.manualReason='季节活动备货';}
  // 其他指标来源（purchaseSource 已单独赋值，跳过）
  for(const k of Object.keys(sourcePairs)){
