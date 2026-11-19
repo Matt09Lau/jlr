@@ -2520,7 +2520,8 @@
                 <a-button v-if="activeMenu==='fc-wh-regular'" @click="fcSaveForecast">保存</a-button>
                 <a-button v-if="activeMenu==='fc-buyout' || (activeMenu==='fc-buyout-draft' && draftEnabled.value)" @click="fcAllTimeOpen=true">生成All time buy计划</a-button>
                 <a-button v-if="activeMenu==='fc-long' && fcLongTab==='已审批'" :disabled="!fcLongSelApproved" @click="fcBridgeOpen=true;fcBridgeDone=false" title="须所选配件均审批通过后方可生成">生成bridge buy计划</a-button>
-                <a-button v-if="activeMenu==='fc-long' && fcLongTab==='已审批'" :disabled="!fcLongSelApproved" @click="fcPreOpen=true;fcPreDone=false" title="须所选配件均审批通过；预计划仅供供应商数据同步，不生成实际计划">生成预计划</a-button>
+                <a-button v-if="activeMenu==='fc-long' && fcLongTab==='已审批'" :disabled="!fcLongSelApproved" @click="fcLongPreAll=false;fcPreOpen=true;fcPreDone=false" title="须所选配件均审批通过；预计划仅供供应商数据同步，不生成实际计划">生成预计划</a-button>
+                <a-button v-if="activeMenu==='fc-long' && fcLongTab==='已审批'" @click="fcLongPreAll=true;fcPreOpen=true;fcPreDone=false" title="无需勾选，直接对全部已审批零件生成预计划">全量生成预计划</a-button>
                 <a-button v-if="activeMenu==='fc-long' || (activeMenu==='fc-long-draft' && draftEnabled.value)" :disabled="!fcBatchSelIds.length" @click="fcLongBatchM.open=true">批量圆整（{{ fcBatchSelIds.length }}）</a-button>
                 <a-button v-if="activeMenu==='fc-long' && fcLongTab==='待审批'" :disabled="!fcLongSel.length" @click="fcLongApproveAll=false;fcLongApproveOpen=true" title="须先勾选零件，仅对选中的待审批零件审批">审批</a-button>
                 <a-button v-if="activeMenu==='fc-long' && fcLongTab==='待审批'" @click="fcLongApproveAll=true;fcLongApproveOpen=true" title="无需勾选，直接对全部待审批零件审批">全量审批</a-button>
@@ -2860,17 +2861,17 @@
             </a-modal>
 
             <!-- 长周期预测报表：生成预计划（仅同步供应商数据，不生成实际计划） -->
-            <a-modal v-model:open="fcPreOpen" title="生成预计划 · 长周期预测报表" :width="900" :footer="null" :mask-closable="false">
+            <a-modal v-model:open="fcPreOpen" :title="(fcLongPreAll?'全量生成预计划':'生成预计划') + ' · 长周期预测报表'" :width="900" :footer="null" :mask-closable="false">
               <template v-if="!fcPreDone">
                 <a-alert type="info" show-icon style="margin-bottom:12px;"
-                  :message="'已选择 '+fcLongSelRows.length+' 个配件（须均已审批通过）。预计划仅用于供应商数据同步，不实际生成采购 / 调拨计划，不进入审批与执行流程。'"/>
+                  :message="fcPreDesc + '。预计划仅用于供应商数据同步，不实际生成采购 / 调拨计划，不进入审批与执行流程。'"/>
                 <a-table :columns="[{title:'配件号',dataIndex:'part_code',width:150},{title:'配件名称',dataIndex:'part_name',ellipsis:true},{title:'预测合计',dataIndex:'total',width:110}]"
-                  :data-source="fcLongSelRows.map(r=>Object.assign({},r,{total:Math.round((r.y1+r.y2+r.y3+r.y4+r.y5+r.y6+r.y7+r.y8+r.y9+r.y10)||0)}))"
+                  :data-source="fcPreTargets.map(r=>Object.assign({},r,{total:Math.round((r.y1+r.y2+r.y3+r.y4+r.y5+r.y6+r.y7+r.y8+r.y9+r.y10)||0)}))"
                   row-key="id" :pagination="false" size="small" bordered
-                  :locale="{emptyText:'请先在长周期预测报表中勾选已审批通过的配件'}"/>
+                  :locale="{emptyText: fcLongPreAll?'暂无已审批通过的配件可生成预计划':'请先在长周期预测报表中勾选已审批通过的配件'}"/>
                 <div class="jlrs-modal-footer">
-                  <a-button @click="fcPreOpen=false">取 消</a-button>
-                  <a-button type="primary" @click="fcPreGenerate">生成预计划</a-button>
+                  <a-button @click="fcPreOpen=false;fcLongPreAll=false">取 消</a-button>
+                  <a-button type="primary" @click="fcPreGenerate">{{ fcLongPreAll?'全量生成预计划':'生成预计划' }}</a-button>
                 </div>
               </template>
               <template v-else>
@@ -2880,7 +2881,7 @@
                   :data-source="fcPrePlanData" row-key="id" :pagination="{pageSize:8}" size="small" bordered/>
                 <div class="jlrs-modal-footer">
                   <a-button @click="fcPreDone=false">重新生成</a-button>
-                  <a-button type="primary" @click="fcPreOpen=false">完 成</a-button>
+                  <a-button type="primary" @click="fcPreOpen=false;fcLongPreAll=false">完 成</a-button>
                 </div>
               </template>
             </a-modal>
@@ -6550,12 +6551,21 @@ const app = createApp({
       }
       fcLongLogOpen.value = true;
     }
-    /* 预计划：仅同步供应商数据，不实际生成计划，写入 fcPrePlanData */
+    /* 预计划：仅同步供应商数据，不实际生成计划，写入 fcPrePlanData
+       生成范围拆为「生成预计划」（须勾选、仅生成选中）与「全量生成预计划」（无需勾选、生成全部已审批），与全量审批同构 */
     const fcPreOpen = ref(false);
     const fcPreDone = ref(false);
+    const fcLongPreAll = ref(false); // true=全量生成预计划（全部已审批）；false=仅生成勾选零件
+    const fcLongApprovedRows = computed(()=> fcLongData.filter(r=> r.app_status==='审批通过'));
+    const fcPreTargets = computed(()=> fcLongPreAll.value
+      ? fcLongApprovedRows.value
+      : fcLongSelRows.value.filter(r=> r.app_status==='审批通过'));
+    const fcPreDesc = computed(()=> fcLongPreAll.value
+      ? ('无需勾选，将对全部已审批的 '+fcPreTargets.value.length+' 个配件生成预计划')
+      : ('已选择 '+fcPreTargets.value.length+' 个配件（须均已审批通过）'));
     function fcPreGenerate(){
-      const sel = fcLongSelRows.value.filter(r=> r.app_status==='审批通过');
-      if(!sel.length){ antd.message.warning('请先勾选已审批通过的配件生成预计划'); return; }
+      const sel = fcPreTargets.value;
+      if(!sel.length){ antd.message.warning(fcLongPreAll.value?'暂无已审批通过的配件可生成预计划':'请先勾选已审批通过的配件生成预计划'); return; }
       fcPrePlanData.length = 0;
       let sum = 0;
       sel.forEach(function(r,idx){
@@ -11699,7 +11709,7 @@ const app = createApp({
       fcLongTab, fcLongApproveOpen, fcLongApproveAll, fcLongApproveRemark, fcLongApproveErr,
       fcLongSelRows, fcLongSelApproved, fcLongApproveTargets, fcLongApproveDesc, fcLongApproveConfirm,
       fcLongLogOpen, fcLongLogRows, fcLongLogTitle, fcLongOpenLog, fcLongLog,
-      fcPreOpen, fcPreDone, fcPreGenerate, fcPrePlanData,
+      fcPreOpen, fcPreDone, fcPreGenerate, fcPrePlanData, fcLongPreAll, fcLongApprovedRows, fcPreTargets, fcPreDesc,
       genEditOpen, genEditRow, genImportOpen, genTagColor,
       psSaveGenEdit,
       genDoSearch, genResetFilters, genToggleFav, genToggleCol, openGenEdit, saveGenEdit, doGenImport, genExportCsv,

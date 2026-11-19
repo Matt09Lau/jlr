@@ -506,6 +506,8 @@ def check_fc_long_btns():
         "工具栏无驳回": "fcLongRejectOpen" not in src and "长周期预测报表：驳回弹窗" not in src,
         "工具栏无审核状态": "审核状态" not in seg and "title:'审核状态', key:'app_status'" not in src,
         "无顶部操作日志按钮": "@click=\"fcLongOpenLog(null)\"" not in src,
+        "生成预计划须勾选": ":disabled=\"!fcLongSelApproved\" @click=\"fcLongPreAll=false;fcPreOpen=true;fcPreDone=false\"" in seg,
+        "全量生成预计划无需勾选": "v-if=\"activeMenu==='fc-long' && fcLongTab==='已审批'\" @click=\"fcLongPreAll=true;fcPreOpen=true;fcPreDone=false\"" in seg,
     }
     bad = [k for k,v in checks.items() if not v]
     ok = not bad
@@ -1026,6 +1028,11 @@ def check_long_reform():
         "操作日志渲染": "fcLongOpenLog(record)" in src,
         "生成预计划按钮": ">生成预计划</a-button>" in src,
         "生成预计划函数": "function fcPreGenerate" in src and "fcPrePlanData.length = 0" in src,
+        "全量生成预计划按钮": "@click=\"fcLongPreAll=true;fcPreOpen=true;fcPreDone=false\"" in src,
+        "预计划模式变量": "const fcLongPreAll = ref(false);" in src and "fcLongPreAll, fcLongApprovedRows, fcPreTargets, fcPreDesc" in src,
+        "预计划目标按模式": "const fcPreTargets = computed(" in src and "? fcLongApprovedRows.value" in src,
+        "预计划提示区分范围": "无需勾选，将对全部已审批的" in src and "个配件生成预计划" in src,
+        "预计划弹窗标题随模式": "(fcLongPreAll?'全量生成预计划':'生成预计划') + ' · 长周期预测报表'" in src,
         "预计划只读页注册": "'po-preplan'" in src and "viewOnly:true" in src,
         "预计划菜单": "key:'po-preplan', parent:'po', title:'预计划'" in src,
         "预计划无顶部说明文案": "预计划仅供查看：由长周期预测报表审批通过后生成" not in src,
