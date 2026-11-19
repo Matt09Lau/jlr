@@ -1126,6 +1126,7 @@ mark {
           </template>
 
           <template v-else-if="['strategy-result','strategy-result-po','strategy-result-sto'].includes(activeMenu)"><inventory-results :key="activeMenu" :result-type="activeMenu==='strategy-result-sto'?'STO':'PO'"/></template>
+          <template v-else-if="activeMenu==='strategy-fallback'"><fallback-rule :key="'strategy-fallback'"/></template>
           <template v-else-if="activeMenu.startsWith('strategy-')"><inventory-strategy :page-key="activeMenu" :key="activeMenu"/></template>
 
           <!-- 常规采购计划 -->
@@ -5149,6 +5150,7 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 <script src="global-parameters.js?v=20261026-derived-service"></script>
 <script src="inventory-results.js?v=20261104-log-diff"></script>
 <script src="inventory-strategy.js?v=20261119-purchase-lt"></script>
+<script src="fallback-rule.js?v=20261119-fallback"></script>
 <script>
 /* ================= 模拟数据（确定性随机，每次打开一致） ================= */
 let _seed = 20260918;
@@ -6920,7 +6922,7 @@ const app = createApp({
     const collapsed = ref(false);
     const menuKeyword = ref('');
     const openGroups = reactive({ base:true, history:true, strategy:true, report:false });
-    const VALID_KEYS = ['strategy-purchase','strategy-service','strategy-stocking','strategy-transfer','strategy-increase','strategy-cycle','strategy-risk','strategy-riskRule','strategy-result','strategy-result-po','strategy-result-sto','mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier-3','gp-params','svc-dash','all-time-buy-report',
+    const VALID_KEYS = ['strategy-purchase','strategy-service','strategy-stocking','strategy-transfer','strategy-increase','strategy-cycle','strategy-risk','strategy-riskRule','strategy-fallback','strategy-result','strategy-result-po','strategy-result-sto','mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier-3','gp-params','svc-dash','all-time-buy-report',
       'fc-new','fc-long','fc-buyout','fc-regular','fc-wh-regular','fc-best','fc-backtest',
       'activity-register','data-sense-task','order-monitor',
       'part-group','po-regular','po-history','po-export','sto-week','sto-export','sto-summary','sto-next',
@@ -7020,7 +7022,7 @@ const app = createApp({
       {type:'item',key:'strategy-cycle',parent:'strategy',title:'计划周期',icon:'▦'},
       {type:'item',key:'strategy-risk',parent:'strategy',title:'配件风控线',icon:'▦'},
       {type:'item',key:'strategy-riskRule',parent:'strategy',title:'配件多分类风控线',icon:'▦'},
-      {type:'item',key:'strategy-fallback',parent:'strategy',title:'兜底规则',icon:'🛡',arrow:true},
+      {type:'item',key:'strategy-fallback',parent:'strategy',title:'兜底规则',icon:'🛡'},
       {type:'item',key:'strategy-result-po',parent:'strategy',title:'PO 建储结果',icon:'▦'},
       {type:'item',key:'strategy-result-sto',parent:'strategy',title:'STO 建储结果',icon:'▦'},
       { type:'group', key:'po', title:'计划管理' },
@@ -7204,7 +7206,6 @@ const app = createApp({
       return g ? g.title : '';
     });
     function switchMenu(k){
-      if(k === 'strategy-fallback'){ window.open('https://matt09lau.github.io/jlr/兜底规则配置原型.html','_blank'); return; }
       activeMenu.value = k;
       if(k === 'fc-backtest' || (k === 'fc-backtest-draft' && draftEnabled.value)){ btView.value = 'list'; }
       if(('#'+k) !== window.location.hash) window.location.hash = k;
@@ -12333,6 +12334,7 @@ const app = createApp({
 });
 app.component('inventory-results', window.CsppStorageResultsComponent);
 app.component('inventory-strategy', window.JlrInventoryStrategy);
+app.component('fallback-rule', window.JlrFallbackRule);
 app.use(antd);
 app.mount('#app');
 </script>

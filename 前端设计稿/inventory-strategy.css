@@ -6,3 +6,32 @@
 .result-query-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,220px));gap:16px 20px;align-items:start}.result-query-grid label{width:100%;max-width:220px;min-width:0}.result-query-grid .ant-input,.result-query-grid .ant-select{width:100%}@media(max-width:600px){.result-query-grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}.result-query-grid label{max-width:220px}}
 /* Compact fixed-size search controls, wrapping as the available space changes. */
 .result-query-grid{display:flex;flex-wrap:wrap;gap:14px 12px}.result-query-grid label{flex:0 1 180px;width:180px;max-width:200px;min-width:150px}
+
+/* ===== 兜底规则配置页（与库存策略参数页同风格） ===== */
+.fallback-page .fallback-layout{display:grid;grid-template-columns:300px 1fr;gap:16px;align-items:start}
+.fallback-side{padding:0;overflow:hidden}
+.fallback-side-hd{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #f0f0f0;background:#fafafa}
+.fallback-side-title{font-size:13px;font-weight:600;color:#1f1f1f}
+.fallback-group-list{padding:8px;max-height:calc(100vh - 300px);overflow:auto}
+.fallback-group-item{padding:10px 12px;border-radius:6px;border:1px solid transparent;cursor:pointer;margin-bottom:4px}
+.fallback-group-item:hover{background:#f5f7fa}
+.fallback-group-item.active{background:#e6f4ff;border-color:#91caff}
+.fgi-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.fgi-name{font-size:14px;font-weight:500;color:#1f1f1f}
+.fgi-meta{display:flex;gap:12px;font-size:12px;color:#8c8c8c}
+.fgi-prio{color:#fa8c16}
+.fallback-main{padding:16px 18px;min-height:420px}
+.fallback-empty{padding:80px 0;text-align:center}
+.fallback-editor{background:#fafbfc;border:1px solid #e8e8e8;border-radius:8px;padding:16px;margin-top:16px}
+.fallback-cond-box{background:#fff;border:1px dashed #d9d9d9;border-radius:6px;padding:12px}
+.fallback-cond-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fafbfc;border-radius:4px;margin-bottom:8px;flex-wrap:wrap}
+.fb-seq{width:20px;height:20px;background:#1677ff;color:#fff;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0}
+.fb-chip{display:inline-block;padding:1px 8px;border-radius:4px;font-size:12px;background:#f0f5ff;border:1px solid #adc6ff;color:#2f54eb;line-height:18px}
+.fb-chip.fb-op{background:#fff7e6;border-color:#ffd591;color:#fa8c16}
+.fb-link{color:#8c8c8c;font-size:11px;padding:0 4px}
+.fallback-test{background:#fffbe6;border:1px solid #ffe58f;border-radius:6px;padding:14px;margin-top:6px}
+.fallback-test-result{margin-top:12px;padding:10px 12px;border-radius:6px;font-size:13px}
+.fallback-test-result.hit{background:#f6ffed;color:#389e0d;border:1px solid #b7eb8f}
+.fallback-test-result.miss{background:#fff2f0;color:#cf1322;border:1px solid #ffccc7}
+.fallback-reg-code{font-family:monospace;font-size:12px;color:#1677ff}
+@media(max-width:1000px){.fallback-page .fallback-layout{grid-template-columns:1fr}}
