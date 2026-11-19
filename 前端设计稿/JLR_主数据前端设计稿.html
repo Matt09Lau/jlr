@@ -5203,7 +5203,7 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 <script src="stocking-rules.js?v=20261026-create"></script>
 <script src="global-parameters.js?v=20261026-derived-service"></script>
 <script src="inventory-results.js?v=20261104-log-diff"></script>
-<script src="inventory-strategy.js?v=20261119-purchase-lt-v2"></script>
+<script src="inventory-strategy.js?v=20261119-purchase-lt-v3"></script>
 <script src="fallback-rule.js?v=20261119-fallback"></script>
 <script>
 /* ================= 模拟数据（确定性随机，每次打开一致） ================= */
@@ -5466,7 +5466,6 @@ for(let i=0;i<36;i++){
     purchasing_info_record: '53000' + String(rint(10000,99999)),
     supplier_contract: 'CT-2026-' + String(rint(1000,9999)),
     is_contract_valid: rnd()<0.85 ? 'Y' : 'N',
-    delivery_lead_time: rint(3,45),
     purchase_lt: rint(15,45),   /* 采购LT：IPOS 同步 */
     data_access_date: '2026-0' + rint(1,9) + '-' + pad2(rint(1,28)),
   });
@@ -5479,6 +5478,16 @@ for(let i=0;i<36;i++){
     else { r.is_default_supplier = '是'; seen.add(r.part_code); }
   });
 }
+// 暴露「配件号 → 默认供应商采购LT」映射给库存策略采购LT配置页联动
+window.CSPPPartSupplierPurchaseLt = {};
+partSupplierData.forEach(r=>{
+  if(r.is_default_supplier === '是') {
+    window.CSPPPartSupplierPurchaseLt[r.part_code] = {
+      lt: Number(r.purchase_lt),
+      time: r.data_access_date
+    };
+  }
+});
 
 /* ================= 替代链（capp_material_chain / capp_material_chain_extension）模拟 ================= */
 const replaceData = Vue.reactive([]);
@@ -5675,7 +5684,6 @@ const partSupplierDef = {
     {title:'采购信息记录', key:'purchasing_info_record', dataIndex:'purchasing_info_record', width:130},
     {title:'供应商合同', key:'supplier_contract', dataIndex:'supplier_contract', width:130},
     {title:'合同是否有效', key:'is_contract_valid', dataIndex:'is_contract_valid', width:110, render:'tag', colorMap:{Y:'green',N:'red'}, sorter:(a,b)=>a.is_contract_valid.localeCompare(b.is_contract_valid)},
-    {title:'交付提前期(天)', key:'delivery_lead_time', dataIndex:'delivery_lead_time', width:125, sorter:(a,b)=>a.delivery_lead_time-b.delivery_lead_time},
     {title:'采购LT', key:'purchase_lt', dataIndex:'purchase_lt', width:95, sorter:(a,b)=>a.purchase_lt-b.purchase_lt},
     {title:'数据接入日期', key:'data_access_date', dataIndex:'data_access_date', width:120, sorter:(a,b)=>a.data_access_date.localeCompare(b.data_access_date)},
     {title:'操作', key:'action', width:170, fixed:'right'},
@@ -7856,7 +7864,7 @@ const app = createApp({
         if(x.part_code!==code || seen[x.supplier_code]) return;
         seen[x.supplier_code] = 1;
         out.push({ value:x.supplier_code, label:x.supplier_code+'  '+x.supplier_name,
-          supplier_name:x.supplier_name, delivery_lead_time:x.delivery_lead_time });
+          supplier_name:x.supplier_name, purchase_lt:x.purchase_lt });
       });
       return out;
     }
@@ -7872,15 +7880,15 @@ const app = createApp({
       r.supplier_options = opts;
       r.supplier_code = opts.length ? opts[0].value : (plan ? plan.cur_supplier_code : '');
       r.supplier_name = opts.length ? opts[0].supplier_name : (plan ? plan.cur_supplier_name : '');
-      r.lead_days = opts.length ? opts[0].delivery_lead_time : (plan ? plan.purchase_lt : 15);
+      r.lead_days = opts.length ? opts[0].purchase_lt : (plan ? plan.purchase_lt : 15);
       r.qty = plan ? (plan.adjust_qty || plan.suggest_mpq_qty || plan.suggest_qty || 10) : 10;
     }
-    // 改选供应商：供应商名称与交付提前期同步切换（提前期影响自动计算的计划到货日期）
+    // 改选供应商：供应商名称与采购LT同步切换（采购LT影响自动计算的计划到货日期）
     function poOrderOnSupplier(r, code){
       const opt = (r.supplier_options||[]).find(x=>x.value===code);
       r.supplier_code = code || '';
       r.supplier_name = opt ? opt.supplier_name : '';
-      r.lead_days = opt ? opt.delivery_lead_time : 15;
+      r.lead_days = opt ? opt.purchase_lt : 15;
     }
     function poOrderOpenModal(){ poOrderErr.value=''; poOrderRows.value=[poOrderBlank()]; poOrderOpen.value=true; }
     /* ===== 要求交货时间（公共字段，2026-11-11）=====
@@ -7896,7 +7904,7 @@ const app = createApp({
       const d = dayjs(v);
       return d.isValid() && d.isAfter(dayjs(), 'day');
     }
-    // 计划到货日期 = 下单日期 + 交付提前期（天）；提前期由配件主数据后台带出，不在订单明细表展示
+    // 计划到货日期 = 下单日期 + 采购LT（天）；采购LT由配件主数据后台带出，不在订单明细表展示
     function poOrderEta(issueDate, leadDays){
       const d = new Date(issueDate + 'T00:00:00');
       d.setDate(d.getDate() + Number(leadDays || 15));
