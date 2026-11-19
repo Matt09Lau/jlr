@@ -413,24 +413,6 @@ root.JlrFallbackRule = {
               <a-button type="primary" @click="saveRule">保存</a-button>
             </div>
           </div>
-
-          <div class="bt-sec-t" style="margin-top:24px">规则模拟测试（{{ activeGroup.groupName }}）</div>
-          <div class="fallback-test">
-            <div class="strategy-grid" style="grid-template-columns:repeat(3,minmax(0,1fr))">
-              <label v-for="fn in testFields" :key="fn"><span>{{ fieldLabel(fn) }}</span>
-                <a-select v-if="fieldType(fn)==='ENUM'" v-model:value="testValues[fn]" allow-clear :options="enumOptions(fn)"/>
-                <a-input v-else v-model:value="testValues[fn]" :type="fieldType(fn)==='NUMBER'?'number':'text'" :placeholder="fieldType(fn)==='NUMBER'?'数字':'文本'"/>
-              </label>
-            </div>
-            <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
-              <a-button type="primary" size="small" @click="runGroupTest">运行测试</a-button>
-              <a-button size="small" @click="registryOpen=true">字段注册表</a-button>
-            </div>
-            <div v-if="testResult" :class="['fallback-test-result', testResult.hit?'hit':'miss']">
-              <template v-if="testResult.hit">命中规则 <b>{{ testResult.ruleName }}</b> → 兜底值 = <b>{{ testResult.fallbackValue }}</b>（原因：{{ testResult.reason }}）</template>
-              <template v-else>未命中该组任何规则，不应用兜底</template>
-            </div>
-          </div>
         </template>
       </div>
     </div>
