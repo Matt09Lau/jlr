@@ -2481,6 +2481,10 @@
             <a-alert v-if="activeMenu==='fc-best'" type="info" show-icon style="margin-bottom:12px;"
               message="模型池按实际算法配置：回归模型 XGBoost（协变量：保有量/气温/降水量）；周期性模型（单变量）ES（指数平滑）、holt-winters、WMA、STL（时序分解）、Prophet；非周期性模型 ARIMA、Transformer、RNN。"/>
 
+            <!-- 历史预测结果（历史长周期 / 历史常规 / 历史仓库级）：只读归档页，不参与审批与生成 -->
+            <a-alert v-if="['fc-long-history','fc-regular-history','fc-wh-regular-history'].includes(activeMenu)" type="info" show-icon style="margin-bottom:12px;"
+              message="历史预测结果：按预测批次归档、只读，仅供查询、版本对比与导出；如需重新预测或人工调整，请回到对应的当期预测页面操作。"/>
+
             <!-- 长周期预测报表：待审批 / 已审批 双页签；审批在待审批，生成预计划 / Bridge buy 在已审批，调整两页签均可操作 -->
             <a-tabs v-if="activeMenu==='fc-long'" v-model:activeKey="fcLongTab" type="card" style="margin-bottom:12px;">
               <a-tab-pane key="待审批" tab="待审批"/>
@@ -4579,6 +4583,7 @@
             <a-tag v-if="c.render==='tag'" :color="genTagColor(c, genDetailRow)" style="margin:0;">{{ genDetailRow[c.dataIndex] }}</a-tag>
             <span v-else-if="c.render==='block'">{{ genDetailRow[c.dataIndex]==='X' ? '已冻结' : '正常' }}</span>
             <span v-else-if="c.render==='partlink'">{{ genDetailRow[c.csvField || c.dataIndex] }}<a v-if="hasTrend(genDetailRow)" style="margin-left:8px;" @click.stop="openTrendModal(genDetailRow)">查看趋势图</a></span>
+            <span v-else-if="c.render==='longtotal'">{{ fcLongTotal(genDetailRow) }}</span>
             <span v-else>{{ genDetailRow[c.csvField || c.dataIndex] }}</span>
           </a-descriptions-item>
           <!-- 配件组管理：联合 MOQ 分组在详情补充展示阈值数量（只读，取 moq_qty） -->
@@ -4617,6 +4622,7 @@
             <a-tag v-if="c.render==='tag'" :color="genTagColor(c, genDetailRow)" style="margin:0;">{{ genDetailRow[c.dataIndex] }}</a-tag>
             <span v-else-if="c.render==='block'">{{ genDetailRow[c.dataIndex]==='X' ? '已冻结' : '正常' }}</span>
             <span v-else-if="c.render==='partlink'">{{ genDetailRow[c.csvField || c.dataIndex] }}<a v-if="hasTrend(genDetailRow)" style="margin-left:8px;" @click.stop="openTrendModal(genDetailRow)">查看趋势图</a></span>
+            <span v-else-if="c.render==='longtotal'">{{ fcLongTotal(genDetailRow) }}</span>
             <span v-else>{{ genDetailRow[c.csvField || c.dataIndex] }}</span>
           </a-descriptions-item>
         </a-descriptions>
@@ -5160,7 +5166,7 @@ const fcVehicles = ['L460','L461','L551','L550','L663','X761','X760','X260'];
 const fcAbcColorMap = { A:'red', B:'orange', C:'gold', D:'blue', E:'default' };
 const fcDelivPlanners = ['孙磊','钱峰','吴敏','郑华','冯磊','许静'];
 // base：对应 SBOM 的 Engineering Number，由配件号确定性派生，保证每次打开一致
-function fcb(code){ let h=2166136261; for(let i=0;i<code.length;i++){ h^=code.charCodeAt(i); h=(h*16777619)>>>0; } const pre=['L2C2','R2H2','J9C3','T2H1','C2Z2','GX73','L8B2','F2C2','L2C4','B2C3','D2C2','E2C2'][h%12]; const num=String(10000+(h%89999)); const sfx=['AC','AE','BB','DC','AB','AF','AG','BA'][(h>>5)%8]; return pre+num+sfx; }
+function fcb(code){ let h=2166136261; for(let i=0;i<code.length;i++){ h^=code.charCodeAt(i); h=(h*16777619)>>>0; } const pre=['L2C2','R2H2','J9C3','T2H1','C2Z2','GX73','L8B2','F2C2','L2C4','B2C3','D2C2','E2C2'][h%12]; const num=String(10000+(h%89999)); const sfx=['AC','AE','BB','DC','AB','AF','AG','BA'][(h>>>5)%8]; return pre+num+sfx; }
 
 // 长周期预测报表（未来 10 年年度预测，1年预测~10年预测）
 // 趋势图时间轴：过去 10 年实际销量（2017—2026）+ 未来 10 年预测值（2027—2036），共 20 点，分界为 2026 / 2027
@@ -5269,6 +5275,55 @@ fcSnapshot(fcLongData, fcLongKeys);
 fcSnapshot(fcBuyoutData, fcLongKeys);
 fcSnapshot(fcRegularData, fcRegKeys);
 fcSnapshot(fcWhRegularData, fcRegKeys);
+
+/* ================= 需求预测历史版本（历史长周期 / 历史常规 / 历史仓库级） =================
+   历史页为只读归档：每次算法跑批生成一份预测结果，按「预测批次 + 数据日期」留档，
+   供查询、版本对比与导出。数值按确定性系数（0.92 ~ 1.08）围绕当期预测值浮动，
+   不使用随机数，避免影响其他模块既有模拟数据的取值。 */
+const fcLongHistBatches = [
+  { batch:'FCL-202608', data_date:'2026-08-31', gen_time:'2026-09-01 02:40' },
+  { batch:'FCL-202607', data_date:'2026-07-31', gen_time:'2026-08-01 02:38' },
+  { batch:'FCL-202606', data_date:'2026-06-30', gen_time:'2026-07-01 02:42' },
+];
+const fcRegularHistBatches = [
+  { batch:'FCR-202608', data_date:'2026-08-31', gen_time:'2026-09-01 02:40' },
+  { batch:'FCR-202607', data_date:'2026-07-31', gen_time:'2026-08-01 02:36' },
+  { batch:'FCR-202606', data_date:'2026-06-30', gen_time:'2026-07-01 02:41' },
+];
+const fcWhHistBatches = [
+  { batch:'FCW-20260928', data_date:'2026-09-28', gen_time:'2026-09-28 01:20' },
+  { batch:'FCW-20260921', data_date:'2026-09-21', gen_time:'2026-09-21 01:18' },
+  { batch:'FCW-20260914', data_date:'2026-09-14', gen_time:'2026-09-14 01:22' },
+];
+function fcBuildHistData(src, keys, batches, extra){
+  const out = [];
+  const dims = ['part_code','part_name','base','planner','deliveryPlanner','vehicle','stopped','abc'];
+  batches.forEach(function(b, bi){
+    src.forEach(function(r, ri){
+      const rec = { id:'H' + b.batch + '-' + (ri+1), batch:b.batch, data_date:b.data_date, gen_time:b.gen_time };
+      dims.forEach(function(k){ rec[k] = r[k]; });
+      if(extra) extra(rec, r);
+      const fct = [];
+      keys.forEach(function(k, ki){
+        const factor = 0.92 + ((ri*7 + bi*11 + ki*3) % 17) / 100;
+        const v = Math.max(0, Math.round(Number(r[k] || 0) * factor * 100) / 100);
+        rec[k] = v; fct.push(v);
+      });
+      rec.fct = fct;
+      rec.hist = (r.hist || []).slice();
+      rec.trendAxis = r.trendAxis; rec.trendSplit = r.trendSplit; rec.trendUnit = r.trendUnit;
+      rec.rounded = keys.every(function(k){ return Number.isInteger(Number(rec[k])); }) ? '是' : '否';
+      rec.app_by = fcPlanners[(ri + bi) % fcPlanners.length];
+      rec.app_time = b.data_date + ' 09:40';
+      out.push(rec);
+    });
+  });
+  return out;
+}
+const fcLongHistData = fcBuildHistData(fcLongData, fcLongKeys, fcLongHistBatches, null);
+const fcRegularHistData = fcBuildHistData(fcRegularData, fcRegKeys, fcRegularHistBatches, null);
+const fcWhHistData = fcBuildHistData(fcWhRegularData, fcRegKeys, fcWhHistBatches,
+  function(rec, r){ rec.wh_code = r.wh_code; rec.wh_name = r.wh_name; });
 
 // 最佳模型（预测回测：周期性 / 非周期性 / 回归 / 集成，评分=准确率；模型池按实际算法配置）
 const fcCycleModels = ['ES（指数平滑）','holt-winters','WMA','STL（时序分解）','Prophet']; // 周期性模型（单变量）
@@ -5394,6 +5449,56 @@ const fcWhRegularDef = {
     { title:'仓库名称', key:'wh_name', dataIndex:'wh_name', width:190, ellipsis:true, sorter:(a,b)=>String(a.wh_name).localeCompare(String(b.wh_name)) },
     ...fcWhRegWeeks.map((d,i)=> Object.assign(fcNumCol(d, 'w'+(i+1), 100), { render:'editnum' })), fcReasonCol ],
   data: fcWhRegularData,
+};
+/* ================= 历史预测结果（只读归档页）：历史长周期 / 历史常规 / 历史仓库级 ================= */
+const fcHistBaseCols = [
+  { title:'预测批次', key:'batch', dataIndex:'batch', width:130, sorter:(a,b)=>a.batch.localeCompare(b.batch) },
+  { title:'数据日期', key:'dd', dataIndex:'data_date', width:110, sorter:(a,b)=>a.data_date.localeCompare(b.data_date) },
+  { title:'生成时间', key:'gt', dataIndex:'gen_time', width:150, sorter:(a,b)=>a.gen_time.localeCompare(b.gen_time) },
+  { title:'配件号', key:'code', dataIndex:'part_code', width:130, render:'partlink', sorter:(a,b)=>a.part_code.localeCompare(b.part_code) },
+  { title:'配件名称', key:'name', dataIndex:'part_name', width:180, ellipsis:true, sorter:(a,b)=>a.part_name.localeCompare(b.part_name) },
+  { title:'base', key:'base', dataIndex:'base', width:140, sorter:(a,b)=>a.base.localeCompare(b.base) },
+  { title:'计划员', key:'planner', dataIndex:'planner', width:90 },
+  { title:'交付计划员', key:'dplanner', dataIndex:'deliveryPlanner', width:105 },
+  { title:'车型代码', key:'veh', dataIndex:'vehicle', width:100 },
+  { title:'是否停产', key:'stop', dataIndex:'stopped', width:95, render:'tag', colorMap:{ '是':'red', '否':'blue' } },
+  { title:'ABC分类', key:'abc', dataIndex:'abc', width:90, render:'tag', colorMap:fcAbcColorMap },
+];
+/* 历史页筛选：预测批次 + 数据日期 + 配件/计划员/ABC 通用条件（仓库级再叠加仓库） */
+function fcHistFiltersOf(batches, extra){
+  return [
+    { key:'batch', label:'预测批次', type:'select', field:'batch', options:batches.map(function(b){ return { value:b.batch, label:b.batch }; }) },
+    { key:'dd', label:'数据日期', type:'input', field:'data_date', placeholder:'如 2026-08-31' },
+  ].concat(fcFcFilters, extra || []);
+}
+function fcHistLongSum(rec){ return fcLongKeys.reduce(function(s,k){ return s + Number(rec[k] || 0); }, 0); }
+const fcLongHistDef = {
+  detailTitle:'历史长周期预测记录', idField:'id', scrollX:2820, isExtension:false,
+  filters: fcHistFiltersOf(fcLongHistBatches),
+  columns:[ ...fcHistBaseCols,
+    ...Array.from({length:10},(_,k)=> fcNumCol('第'+(k+1)+'年预测','y'+(k+1))),
+    { title:'汇总值', key:'longtotal', dataIndex:'longtotal', width:110, render:'longtotal', sorter:(a,b)=>fcHistLongSum(a)-fcHistLongSum(b) },
+    { title:'是否取整', key:'rounded', dataIndex:'rounded', width:100, render:'tag', colorMap:{'是':'green','否':'orange'} },
+    { title:'审批人', key:'app_by', dataIndex:'app_by', width:100 },
+    { title:'审批时间', key:'app_time', dataIndex:'app_time', width:140 } ],
+  data: fcLongHistData,
+};
+const fcRegularHistDef = {
+  detailTitle:'历史常规预测记录', idField:'id', scrollX:2660, isExtension:false,
+  filters: fcHistFiltersOf(fcRegularHistBatches),
+  columns:[ ...fcHistBaseCols,
+    ...fcRegMonths.map(function(d,i){ return fcNumCol('第'+(i+1)+'月预测', 'w'+(i+1), 110); }) ],
+  data: fcRegularHistData,
+};
+const fcWhRegularHistDef = {
+  detailTitle:'历史仓库级常规预测记录', idField:'id', scrollX:2960, isExtension:false,
+  filters: fcHistFiltersOf(fcWhHistBatches, [ { key:'wh', label:'仓库', type:'select', field:'wh_code',
+    options: whData.map(function(w){ return { value:w.warehouse_code, label:w.warehouse_code + ' ' + w.warehouse_name }; }) } ]),
+  columns:[ ...fcHistBaseCols,
+    { title:'仓库编码', key:'wh_code', dataIndex:'wh_code', width:130, sorter:(a,b)=>String(a.wh_code).localeCompare(String(b.wh_code)) },
+    { title:'仓库名称', key:'wh_name', dataIndex:'wh_name', width:190, ellipsis:true },
+    ...fcWhRegWeeks.map(function(d,i){ return fcNumCol('第'+(i+1)+'周预测', 'w'+(i+1), 100); }) ],
+  data: fcWhHistData,
 };
 const fcBestDef = {
   detailTitle:'最佳模型记录', idField:'id', scrollX:1820, isExtension:false,
@@ -6330,6 +6435,9 @@ const pageDefs = {
   'fc-buyout': fcBuyoutDef,
   'fc-regular': fcRegularDef,
   'fc-wh-regular': fcWhRegularDef,
+  'fc-long-history': fcLongHistDef,
+  'fc-regular-history': fcRegularHistDef,
+  'fc-wh-regular-history': fcWhRegularHistDef,
   'fc-best': fcBestDef,
   'po-regular': poRegularDef,
 };
@@ -6366,7 +6474,7 @@ const app = createApp({
     const menuKeyword = ref('');
     const openGroups = reactive({ base:true, history:true, strategy:true, report:false });
     const VALID_KEYS = ['strategy-purchase','strategy-service','strategy-stocking','strategy-transfer','strategy-increase','strategy-cycle','strategy-risk','strategy-riskRule','strategy-result','strategy-result-po','strategy-result-sto','mat-master','mat-ext','wh-abc','wh-master','dealer','dms-dealer','dealer-ext','supplier','supplier-ext','part-supplier','replace','plan-hier-3','gp-params','svc-dash','all-time-buy-report',
-      'fc-new','fc-long','fc-buyout','fc-regular','fc-wh-regular','fc-best','fc-backtest',
+      'fc-new','fc-long','fc-long-history','fc-buyout','fc-regular','fc-regular-history','fc-wh-regular','fc-wh-regular-history','fc-best','fc-backtest',
       'activity-register','data-sense-task','order-monitor',
       'part-group','po-regular','po-history','po-export','sto-week','sto-export','sto-summary','sto-next',
       'po-atb','po-bridge','po-ref','po-roll','po-preplan','mail-template'];
@@ -6397,9 +6505,12 @@ const app = createApp({
       { type:'group', key:'fc', title:'需求预测' },
       { type:'item', key:'fc-new', parent:'fc', title:'参考零件需求预测', icon:'🚗' },
       { type:'item', key:'fc-long', parent:'fc', title:'长周期预测报表', icon:'📈' },
+      { type:'item', key:'fc-long-history', parent:'fc', title:'历史长周期预测', icon:'🗄' },
       { type:'item', key:'fc-buyout', parent:'fc', title:'一次买断预测结果', icon:'🛒' },
       { type:'item', key:'fc-regular', parent:'fc', title:'常规预测', icon:'📊' },
+      { type:'item', key:'fc-regular-history', parent:'fc', title:'历史常规预测', icon:'🗄' },
       { type:'item', key:'fc-wh-regular', parent:'fc', title:'仓库级常规预测', icon:'🏬' },
+      { type:'item', key:'fc-wh-regular-history', parent:'fc', title:'历史仓库级常规预测', icon:'🗄' },
       { type:'item', key:'fc-best', parent:'fc', title:'最佳模型', icon:'🏆' },
       { type:'item', key:'fc-backtest', parent:'fc', title:'预测模拟', icon:'🧪' },
       { type:'group', key:'history', title:'历史需求处理' },
@@ -6434,7 +6545,7 @@ const app = createApp({
       { type:'item', key:'all-time-buy-report', parent:'report', title:'All time buy跟踪报表', icon:'📊' },
     ];
     /* 注意：genericKeys 每增一个 key，必须同步在 pageDefs 中提供定义，否则 setup 初始化 genFilters 时会抛错导致白屏 */
-    const genericKeys = ['mat-master','mat-ext','wh-master','dealer-ext','supplier','supplier-ext','part-supplier','replace','fc-long','fc-buyout','fc-regular','fc-wh-regular','fc-best',
+    const genericKeys = ['mat-master','mat-ext','wh-master','dealer-ext','supplier','supplier-ext','part-supplier','replace','fc-long','fc-long-history','fc-buyout','fc-regular','fc-regular-history','fc-wh-regular','fc-wh-regular-history','fc-best',
       'part-group','po-regular'];
     const isFcLongBuyoutDraft = computed(()=> activeMenu.value==='fc-long-draft' && draftEnabled.value || activeMenu.value==='fc-buyout-draft' && draftEnabled.value);
     const isFcNewDraft = computed(()=> activeMenu.value==='fc-new-draft' && draftEnabled.value);
@@ -8654,7 +8765,7 @@ const app = createApp({
     function genCustomRow(record){ return { onClick:()=>{ if(typeof fcLongRowEditing==='function' && fcLongRowEditing(record)) return; openGenDetail(record); }, style:{cursor:'pointer'} }; }
     const genDetailOpen = ref(false);
     // 详情统一用居中弹窗的页面（采购计划 + 配件组管理）；其余模块暂沿用抽屉，避免影响未要求的模块
-    const modalDetailKeys = ['part-group','po-regular','po-eop','po-approval','po-issue'];
+    const modalDetailKeys = ['part-group','po-regular','po-eop','po-approval','po-issue','fc-long-history','fc-regular-history','fc-wh-regular-history'];
     const genDetailRow = ref(null);
     function openGenDetail(r){ genDetailRow.value = r; genDetailOpen.value = true; }
     const genEditOpen = ref(false);

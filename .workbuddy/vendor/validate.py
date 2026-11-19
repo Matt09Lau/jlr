@@ -1052,6 +1052,60 @@ def check_long_reform():
 
 
 
+def check_fc_hist_pages():
+    """三个预测页面的历史归档页（源码级，不依赖渲染/登录态）：
+    长周期预测报表 / 常规预测 / 仓库级常规预测 各新增「历史XXX」页，按预测批次归档往期预测结果，整页只读。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    a = src.find('/* ================= 历史预测结果（只读归档页）')
+    b = src.find('const fcBestDef = {', a + 10)
+    seg = src[a:b] if a >= 0 and b > a else ""
+    gk = ""
+    gi = src.find('const genericKeys = [')
+    if gi >= 0:
+        gk = src[gi:src.find('\n', gi)]
+    vk = ""
+    vi = src.find('const VALID_KEYS = [')
+    if vi >= 0:
+        vk = src[vi:src.find('];', vi)]
+    checks = {
+        "路由白名单3项": all(k in vk for k in ["'fc-long-history'", "'fc-regular-history'", "'fc-wh-regular-history'"]),
+        "菜单3项": ("key:'fc-long-history', parent:'fc', title:'历史长周期预测'" in src
+                   and "key:'fc-regular-history', parent:'fc', title:'历史常规预测'" in src
+                   and "key:'fc-wh-regular-history', parent:'fc', title:'历史仓库级常规预测'" in src),
+        "菜单紧随对应页": (src.find("key:'fc-long-history'") > src.find("key:'fc-long', parent:'fc'")
+                        and src.find("key:'fc-regular-history'") > src.find("key:'fc-regular', parent:'fc'")
+                        and src.find("key:'fc-wh-regular-history'") > src.find("key:'fc-wh-regular', parent:'fc'")),
+        "pageDefs注册3项": ("'fc-long-history': fcLongHistDef," in src
+                         and "'fc-regular-history': fcRegularHistDef," in src
+                         and "'fc-wh-regular-history': fcWhRegularHistDef," in src),
+        "通用引擎注册3项": all(k in gk for k in ["'fc-long-history'", "'fc-regular-history'", "'fc-wh-regular-history'"]),
+        "历史数据构造函数": "function fcBuildHistData(src, keys, batches, extra){" in src,
+        "三份历史数据": ("const fcLongHistData = fcBuildHistData(" in src
+                     and "const fcRegularHistData = fcBuildHistData(" in src
+                     and "const fcWhHistData = fcBuildHistData(" in src),
+        "批次3档_长周期": all(x in src for x in ["FCL-202608", "FCL-202607", "FCL-202606"]),
+        "批次3档_常规": all(x in src for x in ["FCR-202608", "FCR-202607", "FCR-202606"]),
+        "批次3档_仓库级": all(x in src for x in ["FCW-20260928", "FCW-20260921", "FCW-20260914"]),
+        "归档字段_批次/数据日期/生成时间": ("title:'预测批次', key:'batch'" in seg
+                                and "title:'数据日期', key:'dd'" in seg
+                                and "title:'生成时间', key:'gt'" in seg),
+        "相对期次表头": ("'第'+(k+1)+'年预测'" in seg and "'第'+(i+1)+'月预测'" in seg and "'第'+(i+1)+'周预测'" in seg),
+        "筛选_批次与数据日期": "'预测批次', type:'select', field:'batch'" in seg and "'数据日期', type:'input', field:'data_date'" in seg,
+        "筛选_仓库级叠加仓库": "'仓库', type:'select', field:'wh_code'" in seg,
+        "长周期历史_汇总值与审批留痕": ("render:'longtotal'" in seg and "title:'审批人', key:'app_by'" in seg
+                              and "title:'审批时间', key:'app_time'" in seg),
+        "只读_无行内编辑": ("editnum" not in seg and "edittext" not in seg and "render:'fclop'" not in seg),
+        "只读_未列入可编辑页": "const fcEditableKeys = ['fc-long','fc-buyout','fc-regular','fc-wh-regular'];" in src,
+        "详情用居中弹窗": "const modalDetailKeys = [" in src and "'fc-wh-regular-history'" in src[src.find('const modalDetailKeys = ['):src.find('\n', src.find('const modalDetailKeys = ['))],
+        "只读说明条": "'fc-long-history','fc-regular-history','fc-wh-regular-history'].includes(activeMenu)" in src,
+        "不影响当期页双页签": 'a-tab-pane key="待审批" tab="待审批"' in src,
+    }
+    bad = [k for k, v in checks.items() if not v]
+    ok = not bad
+    detail = f"通过={len(checks)-len(bad)}/{len(checks)}" + (f" 缺失={bad}" if bad else "")
+    return {"key": "历史预测页", "ok": ok, "msg": detail}
+
+
 def check_dms_dealer_mail():
     """DMS经销商主数据页（源码级）：去数据来源提示条与同步按钮；邮件发送仅二次确认，模板在专门页面指定。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
@@ -2549,6 +2603,10 @@ def main():
         r = check_tpl_fields_20261112()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] tpl-fields    {r['msg']}")
+    if only in (None, 'fc-hist', 'fc-long-history', 'fc-regular-history', 'fc-wh-regular-history', 'fc-long', 'fc-regular', 'fc-wh-regular'):
+        r = check_fc_hist_pages()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] fc-hist-3pages {r['msg']}")
     if only in (None, 'dms-dealer-mail', 'dms-dealer'):
         r = check_dms_dealer_mail()
         all_ok = all_ok and r["ok"]
