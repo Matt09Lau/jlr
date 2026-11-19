@@ -20,7 +20,7 @@ function normalQuantile(p){
  let q,r,z;if(p<.02425){q=Math.sqrt(-2*Math.log(p));z=(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}else if(p>1-.02425){q=Math.sqrt(-2*Math.log(1-p));z=-(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1);}else{q=p-.5;r=q*q;z=((((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q)/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);}return Number(z.toFixed(6));
 }
 const schemas={
- purchase:{title:'采购LT',cols:[...partCols,F('planner','计划员'),n('effectiveLt','生效采购LT'),sel('effectiveSource','取值来源',['IPOS同步','人工配置','分位数','缺失']),n('iposLt','采购LT（默认供应商）'),F('iposTime','数据接入日期'),sel('method','配置方式',['不配置','人工配置','25分位数','50分位数','75分位数','95分位数']),n('manualLt','人工配置LT'),n('samples','样本数'),n('q25','25分位数'),n('q50','50分位数'),n('q75','75分位数'),n('q95','95分位数'),F('calcDate','分位数最新计算日期'),F('conflict','提示'),...meta],edit:['part','method','manualLt','planner'],filters:['part','partName','effectiveSource','effectiveLt','conflict','method','planner'],unique:['part'],note:'IPOS同步值取自「配件与供应商关系」中该配件默认供应商的采购LT；页面本身不维护 IPOS 数据。取值优先级：IPOS同步 ＞ 人工配置 / 分位数（按配置方式二选一） ＞ 缺失。IPOS 有值时，人工配置与分位数一律不生效，仅作为 IPOS 无值时的备用配置；分位数需样本数不少于12。生效采购LT 为唯一对外口径，建储与补货均取该值；全局参数作为系统级兜底在独立页面维护。'},
+ purchase:{title:'采购LT',cols:[...partCols,F('planner','计划员'),n('effectiveLt','生效采购LT'),sel('effectiveSource','取值来源',['人工配置','分位数','缺失']),sel('method','配置方式',['不配置','人工配置','25分位数','50分位数','75分位数','95分位数']),n('manualLt','人工配置LT'),n('samples','样本数'),n('q25','25分位数'),n('q50','50分位数'),n('q75','75分位数'),n('q95','95分位数'),F('calcDate','分位数最新计算日期'),F('conflict','提示'),...meta],edit:['part','method','manualLt','planner'],filters:['part','partName','effectiveSource','effectiveLt','conflict','method','planner'],unique:['part'],note:'页面仅维护人工可配置项（人工配置 / 分位数）。生效采购LT 取值逻辑由建储计算引擎按优先级决定：① 配件与供应商关系中默认供应商的采购LT（系统同步）→ ② 本页配置（人工配置 / 分位数）→ ③ 全局参数。分位数需样本数不少于12；全局参数作为系统级兜底在独立页面维护。'},
  service:{title:'目标满足率',cols:[sel('type','类型',types),...partCols,F('partAbc','配件ABC分类'),...whCols,abc,n('rate','目标满足率(%)'),F('service','服务水平'),...meta],edit:['type','wh','part','abc','rate','service'],filters:['type','part','partName','wh','abc'],unique:['type','wh','part','abc'],note:'配件类型必填配件；ABC类型必填ABC分类；仓库、目标满足率始终必填。服务水平按标准正态分布反函数Φ⁻¹(目标满足率/100)自动计算，保留6位小数，只读。'},
  stocking:{title:'备货规则',cols:[F('ruleNo','规则编号'),...partCols,...whCols,sel('allowed','是否允许备货',['允许','禁止']),F('start','生效日期','date'),sel('enabled','启停状态',['启用','停用']),F('remark','备注'),...meta],edit:['part','wh','allowed','start','enabled','remark'],filters:['part','partName','wh','allowed','enabled'],unique:['part','wh'],note:'以配件＋仓库为最小单元；支持多个配件与多个仓库组合配置，不包含收发货仓对应关系。'},
  transfer:{title:'库间LT',cols:[sel('shipWh','发货仓库编码',wh.options),F('shipName','发货仓库名称'),sel('receiveWh','收货仓库编码',wh.options),F('receiveName','收货仓库名称'),n('lt','库间LT'),...meta],edit:['shipWh','receiveWh','lt'],filters:['shipWh','receiveWh'],unique:['shipWh','receiveWh'],note:'按发货仓库到收货仓库的方向维护，不同方向分别配置。'},
@@ -31,20 +31,11 @@ const schemas={
  result:{title:'建储水位线计算结果',cols:resultLabels.map((label,i)=>resultKeys[i]==='buildType'?sel('buildType',label,['PO 建储','STO 建储']):resultKeys[i]==='useDate'?F('useDate',label,'date'):resultKeys[i]==='part'?part:resultKeys[i]==='wh'?{...wh,label}:resultKeys[i]==='shipWh'?sel('shipWh',label,wh.options):resultKeys[i]==='abc'?abc:F(resultKeys[i],label)),edit:['adjustTarget','adjustReorder','adjustReason'],filters:['buildType','buildVersion','useDate','part','partName','wh','shipWh','abc','planner'],unique:['buildType','buildVersion','useDate','part','wh','shipWh'],note:'固定演示结果，不代表已实现生产计算引擎。先展示水位线及风控、兜底、调整结果，再展示周月预测及其他参数；不适用字段留空。'}
 };
 const cycleOptions=[7,15,30,60,90,180];
-/* ===== 采购LT 取值优先级（本页展示）：IPOS同步 > 人工配置/分位数（二选一）> 缺失 =====
-   IPOS同步值 = 配件与供应商关系表中默认供应商的采购LT（window.CSPPPartSupplierPurchaseLt）
-   系统级全局参数兜底在独立页面维护，建储计算时自动兜底，不在本页展示 */
+/* ===== 采购LT 取值（本页展示）：人工配置 / 分位数 / 缺失 =====
+   建储计算引擎的完整优先级：配件供应商默认LT → 本页配置 → 全局参数 */
 const PURCHASE_MIN_SAMPLES=12;
 const purchaseHas=v=>v!==''&&v!=null&&Number.isFinite(Number(v));
-/* 从配件与供应商关系表取默认供应商的采购LT（动态联动，不存本行） */
-function partSupplierPurchaseLt(part){
- const map=(typeof root!=='undefined'&&root.CSPPPartSupplierPurchaseLt)||(typeof window!=='undefined'&&window.CSPPPartSupplierPurchaseLt)||{};
- const info=map&&part?map[part]:null;
- return info||null; /* {lt:Number,time:String} or null */
-}
 function purchaseEffective(r){
- const ipos=partSupplierPurchaseLt(r.part);
- if(ipos&&purchaseHas(ipos.lt))return{lt:Number(ipos.lt),source:'IPOS同步'};
  const m=String(r.method||'');
  if(m.endsWith('分位数')){
   const v=r['q'+m.slice(0,2)];
@@ -54,13 +45,11 @@ function purchaseEffective(r){
  return{lt:'',source:'缺失'};
 }
 function purchaseConflict(r){
- const m=String(r.method||''),configured=m==='人工配置'||m.endsWith('分位数');
- const ipos=partSupplierPurchaseLt(r.part);
- if(ipos&&purchaseHas(ipos.lt)&&configured)return'IPOS有值，本次配置不生效（仅IPOS无值时备用）';
- if(!(ipos&&purchaseHas(ipos.lt))&&m.endsWith('分位数')&&Number(r.samples)<PURCHASE_MIN_SAMPLES)return'样本不足'+PURCHASE_MIN_SAMPLES+'，请改人工配置';
- if(purchaseEffective(r).source==='缺失')return'缺失：无IPOS值且未配置，建储将取全局参数';
- if(purchaseEffective(r).source==='人工配置')return'IPOS无值，按人工配置';
- if(purchaseEffective(r).source==='分位数')return'IPOS无值，按分位数';
+ const m=String(r.method||'');
+ if(m.endsWith('分位数')&&Number(r.samples)<PURCHASE_MIN_SAMPLES)return'样本不足'+PURCHASE_MIN_SAMPLES+'，请改人工配置';
+ if(purchaseEffective(r).source==='缺失')return'缺失：未配置人工值或分位数，建储将按优先级取配件供应商/全局参数';
+ if(purchaseEffective(r).source==='人工配置')return'按人工配置生效';
+ if(purchaseEffective(r).source==='分位数')return'按分位数生效';
  return'';
 }
 function purchaseFields(r){const e=purchaseEffective(r);return{effectiveLt:e.lt,effectiveSource:e.source,conflict:purchaseConflict(r)};}
@@ -208,16 +197,6 @@ root.JlrInventoryStrategy={props:{pageKey:String},setup(props){
  function makePreview(){preview.value=parts.value.flatMap(p=>warehouses.value.map(w=>normalize('stocking',{...form,part:p,wh:w})));previewed.value=true;if(!preview.value.length)errors.value=['请至少选择一个配件和一个仓库'];else errors.value=[];}
  function save(){let payload=batch.value?preview.value.map(r=>normalize(key.value,{...r,...form,part:r.part,wh:r.wh})):[normalize(key.value,form)];if(batch.value&&!previewed.value){errors.value=['请先预览配件与仓库组合'];return;}if(!payload.length){errors.value=['没有可保存的配置'];return;}
  let issues=[];const existing=store[key.value];payload.forEach((r,i)=>{issues.push(...validate(key.value,r,[...existing,...payload.slice(0,i)],mode.value==='edit'?form.id:undefined).map(x=>`第${i+1}条：${x}`));});if(issues.length){errors.value=issues;return;}
- /* 采购LT：IPOS 有值时会覆盖本次配置，保存前二次确认 */
- if(key.value==='purchase'){
-  const conflicts=payload.filter(r=>{const ip=partSupplierPurchaseLt(r.part);return ip&&purchaseHas(ip.lt)&&(r.method==='人工配置'||String(r.method||'').endsWith('分位数'));});
-  if(conflicts.length){
-   const c=conflicts[0],ip=partSupplierPurchaseLt(c.part);const tip=c.part+'（IPOS同步值 '+(ip?ip.lt:'—')+'，本次配置方式 '+(c.method||'不配置')+'）';
-   notify('共 '+conflicts.length+' 条配件的 IPOS 已有同步值，如 '+tip+'；按优先级 IPOS 同步优先，保存后配置在 IPOS 有值期间不生效','error');
-   const Modal=root.antd&&root.antd.Modal;
-   if(Modal){Modal.confirm({title:'取值冲突确认',content:'共 '+conflicts.length+' 条配件的 IPOS 已有同步值（如 '+tip+'）。按优先级「IPOS同步 ＞ 人工配置/分位数」，保存后这些配置仅作为 IPOS 无值时的备用，不会改变当前生效值。是否继续保存？',okText:'仍然保存',cancelText:'返回修改',onOk(){doSave(payload);}});return;}
-  }
- }
  doSave(payload);}
  function doSave(payload){for(let r of payload){const existing=store[key.value];const old=existing.find(x=>x.id===r.id);if(key.value==='increase'){if(old&&!canEdit(old)){errors.value=['审批中不允许修改'];return;}if(old)r.applicant=old.applicant;r.applicant=old?.applicant||'超级管理员';if(old?.status==='审批通过')r.approved={days:old.days,start:old.start,end:old.end};r.status='待审批';r.history=r.history||[];r.history.push({at:stamp(),action:old?'修改申请':'新增申请',role:'操作人',actor:'超级管理员',fromStatus:old?.status||'—',toStatus:'待审批',before:old?{days:old.days,start:old.start,end:old.end}:null,after:{days:r.days,start:r.start,end:r.end,reason:r.reason||''}});}
  r.modifier='演示用户';r.updated=stamp();if(mode.value==='edit')existing.splice(existing.findIndex(x=>x.id===r.id),1,r);else{r.id=key.value+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,8);if(key.value==='stocking')r.ruleNo='STK'+Date.now().toString().slice(-8)+payload.indexOf(r);existing.unshift(r);}}
@@ -236,16 +215,8 @@ root.JlrInventoryStrategy={props:{pageKey:String},setup(props){
  watch(importText,()=>{importChecked.value=false;importRows.value=[];importErrors.value=[];});
  function checkImport(){try{let table=csvParse(importText.value);if(table.length<2)throw Error('请提供表头及至少一行数据');let header=table.shift();let defs=editDefs.value;let unknown=header.filter(h=>!defs.some(f=>f.label===h));if(unknown.length)throw Error('不支持的导入字段：'+unknown.join('、'));if(new Set(header).size!==header.length)throw Error('导入表头不能重复');let out=[],issues=[];table.forEach((cells,i)=>{let r={};header.forEach((h,j)=>{let f=defs.find(f=>f.label===h);r[f.key]=cells[j]??'';});r=normalize(key.value,r);const err=validate(key.value,r,[...store[key.value],...out]);err.forEach(s=>issues.push(`第${i+2}行：${s}`));out.push(r);});importRows.value=out;importErrors.value=issues;importChecked.value=true;}catch(e){importErrors.value=[e.message];importChecked.value=false;}}
  function commitImport(){if(!importChecked.value||importErrors.value.length||!importRows.value.length)return;let errs=[];importRows.value.forEach((r,i)=>errs.push(...validate(key.value,r,[...store[key.value],...importRows.value.slice(0,i)])));if(errs.length){importErrors.value=errs;return;}importRows.value.forEach((r,i)=>{r.id=key.value+'-import-'+Date.now()+'-'+i;r.updated=stamp();r.modifier='演示用户';if(key.value==='increase'){r.applicant='超级管理员';r.status='待审批';r.history=[{at:stamp(),action:'导入申请',role:'操作人',actor:'超级管理员',toStatus:'待审批',after:{days:r.days,start:r.start,end:r.end,reason:r.reason||''}}];}if(key.value==='stocking')r.ruleNo='IMP'+Date.now()+'-'+i;store[key.value].unshift(r);});persist();importOpen.value=false;notify('已导入'+importRows.value.length+'条，全部校验通过');}
- const format=(r,k)=>{
-  if(k==='iposLt'||k==='iposTime'){
-   const ip=partSupplierPurchaseLt(r.part);
-   if(!ip)return'—';
-   const v=k==='iposLt'?ip.lt:ip.time;
-   return v===''||v==null?'—':v;
-  }
-  return r[k]===null||r[k]===undefined||r[k]===''?'—':r[k];
- };
- return{applicationLogs,key,schema,rows,query,expanded,selected,filterDefs,editDefs,cols,filtered,search,reset,open,canEdit,modal,mode,form,errors,typeChange,buildTypeChange,disabled:(f)=>isDisabled(key.value,f,form),required:(f)=>required(key.value,f,form),save,batch,parts,warehouses,preview,previewed,makePreview,partOptions:part.options,whOptions:wh.options,whNames,askAction,actions,canAction,actionOpen,actionName,actionReason,performAction,exportData,hidden,importOpen,importText,importRows,importErrors,importChecked,template,upload,checkImport,commitImport,notice,noticeType,format,deleteOpen,deleted,remove,undoDelete,purchaseEff:(r)=>purchaseEffective(r),partSupplierLt:p=>partSupplierPurchaseLt(p),MIN_SAMPLES:PURCHASE_MIN_SAMPLES};
+ const format=(r,k)=>r[k]===null||r[k]===undefined||r[k]===''?'—':r[k];
+ return{applicationLogs,key,schema,rows,query,expanded,selected,filterDefs,editDefs,cols,filtered,search,reset,open,canEdit,modal,mode,form,errors,typeChange,buildTypeChange,disabled:(f)=>isDisabled(key.value,f,form),required:(f)=>required(key.value,f,form),save,batch,parts,warehouses,preview,previewed,makePreview,partOptions:part.options,whOptions:wh.options,whNames,askAction,actions,canAction,actionOpen,actionName,actionReason,performAction,exportData,hidden,importOpen,importText,importRows,importErrors,importChecked,template,upload,checkImport,commitImport,notice,noticeType,format,deleteOpen,deleted,remove,undoDelete,purchaseEff:(r)=>purchaseEffective(r),MIN_SAMPLES:PURCHASE_MIN_SAMPLES};
  },template:`
  <section class="strategy-page">
   <div class="strategy-heading"><div><h2>{{schema.title}}</h2></div></div>
@@ -258,7 +229,7 @@ root.JlrInventoryStrategy={props:{pageKey:String},setup(props){
   <a-modal v-model:open="modal" :title="(mode==='logs'?'审批日志':mode==='detail'?'详情':mode==='new'?'新增':'修改')+' · '+schema.title" :width="920" :footer="null" :mask-closable="false"><a-alert v-if="errors.length" type="error" :message="errors.join('；')" show-icon style="margin-bottom:16px"/>
    <template v-if="mode==='logs'"><p>{{form.buildType}} · {{form.part}} · {{form.wh}} · 申请人：{{form.applicant}}</p><a-empty v-if="!form.history?.length" description="暂无申请及审批记录"/><div v-for="g in applicationLogs(form)" :key="g.number" class="strategy-history" style="margin-bottom:20px"><h4>第 {{g.number}} 次申请</h4><a-descriptions bordered :column="2" size="small"><a-descriptions-item v-for="(f,i) in g.fields" :key="i" :label="f[0]">{{f[1]}}</a-descriptions-item></a-descriptions></div></template><template v-else-if="mode==='detail'"><a-descriptions bordered :column="2" size="small"><a-descriptions-item v-for="f in schema.cols" :key="f.key" :label="f.label">{{format(form,f.key)}}</a-descriptions-item></a-descriptions><h4 v-if="form.history?.length" style="margin-top:20px">操作记录</h4><div v-for="(h,i) in form.history" :key="i" class="strategy-history">{{h.at}} · {{h.role}} · {{h.action}} {{h.reason}}</div></template>
    <template v-else><a-checkbox v-if="key==='stocking'&&mode==='new'" v-model:checked="batch" @change="previewed=false;preview=[]" style="margin-bottom:20px">批量配置配件与仓库</a-checkbox>
-    <template v-if="key==='purchase'"><h4>取值依据与冲突提示</h4><a-descriptions bordered :column="2" size="small" style="margin-bottom:16px"><a-descriptions-item label="采购LT（默认供应商）">{{partSupplierLt(form.part)?partSupplierLt(form.part).lt:'—（无默认供应商或未配置）'}}</a-descriptions-item><a-descriptions-item label="数据接入日期">{{partSupplierLt(form.part)?partSupplierLt(form.part).time:'—'}}</a-descriptions-item><a-descriptions-item label="样本数">{{form.samples??0}}（分位数需 ≥ {{MIN_SAMPLES}}）</a-descriptions-item><a-descriptions-item label="保存后生效值" :span="2"><b>{{purchaseEff(form).lt===''?'—':purchaseEff(form).lt}}</b>　来源：{{purchaseEff(form).source}}<span v-if="purchaseEff(form).source==='缺失'&&form.method==='不配置'" style="color:#fa8c16;margin-left:8px">（系统建储时将取全局参数兜底）</span></a-descriptions-item></a-descriptions><a-alert v-if="purchaseEff(form).source==='IPOS同步'&&['人工配置','25分位数','50分位数','75分位数','95分位数'].includes(form.method)" type="warning" show-icon style="margin-bottom:16px" message="采购LT已由默认供应商带出：按优先级 IPOS 同步优先，本次保存的人工配置/分位数不会改变生效值，仅作为 IPOS 无值时的备用"/></template>
+    <template v-if="key==='purchase'"><h4>本页生效值与冲突提示</h4><a-descriptions bordered :column="2" size="small" style="margin-bottom:16px"><a-descriptions-item label="配置方式">{{form.method||'—'}}</a-descriptions-item><a-descriptions-item label="样本数">{{form.samples??0}}（分位数需 ≥ {{MIN_SAMPLES}}）</a-descriptions-item><a-descriptions-item label="生效采购LT">{{purchaseEff(form).lt===''?'—':purchaseEff(form).lt}}</a-descriptions-item><a-descriptions-item label="本页来源">{{purchaseEff(form).source}}</a-descriptions-item></a-descriptions><a-alert type="info" show-icon style="margin-bottom:16px" message="本页仅维护人工配置与分位数。建储计算按优先级取采购LT：① 配件与供应商关系（默认供应商）→ ② 本页配置 → ③ 全局参数。"/></template>
     <template v-if="key==='increase'"><h4>当前生效配置</h4><a-descriptions bordered :column="1" size="small" style="margin-bottom:20px"><a-descriptions-item label="当前生效增储天数">{{format(form,'effectiveDays')}}</a-descriptions-item><a-descriptions-item label="当前生效日期">{{format(form,'effectiveStart')}}</a-descriptions-item><a-descriptions-item label="当前失效日期">{{format(form,'effectiveEnd')}}</a-descriptions-item></a-descriptions><h4>本次申请配置</h4></template>
     <div v-if="batch" class="strategy-grid"><label><span>配件（多选） *</span><a-select v-model:value="parts" mode="multiple" show-search option-filter-prop="label" :options="partOptions.map(x=>({value:x,label:x}))" @change="previewed=false;preview=[]"/></label><label><span>仓库（多选） *</span><a-select v-model:value="warehouses" mode="multiple" show-search option-filter-prop="label" :options="whOptions.map(x=>({value:x,label:x+' '+whNames[x]}))" @change="previewed=false;preview=[]"/></label></div>
     <div class="strategy-grid"><label v-for="f in editDefs.filter(x=>!batch||!['part','wh'].includes(x.key))" :key="f.key" :style="key==='increase'&&f.key==='reason'?{gridColumn:'1 / -1'}:{}"><span><b v-if="required(f.key)" style="color:#ff4d4f">* </b>{{f.label}}</span><a-textarea v-if="key==='increase'&&f.key==='reason'" v-model:value="form[f.key]" :rows="4" :maxlength="200" show-count placeholder="请输入申请原因，最多200字"/><a-select v-else-if="f.type==='select'" v-model:value="form[f.key]" :disabled="disabled(f.key)" allow-clear show-search :options="f.options.map(x=>({value:x,label:x+(whNames[x]?' '+whNames[x]:'' )}))" @change="f.key==='buildType'?buildTypeChange():['type','method'].includes(f.key)?typeChange():null" :placeholder="'请选择'+f.label"/><a-input-number v-else-if="f.type==='number'" v-model:value="form[f.key]" :disabled="disabled(f.key)" style="width:100%" :placeholder="'请输入'+f.label"/><a-input v-else v-model:value="form[f.key]" :type="f.type==='date'?'date':'text'" :disabled="disabled(f.key)" :placeholder="'请输入'+f.label"/></label></div>
