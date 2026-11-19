@@ -7020,6 +7020,7 @@ const app = createApp({
       {type:'item',key:'strategy-cycle',parent:'strategy',title:'计划周期',icon:'▦'},
       {type:'item',key:'strategy-risk',parent:'strategy',title:'配件风控线',icon:'▦'},
       {type:'item',key:'strategy-riskRule',parent:'strategy',title:'配件多分类风控线',icon:'▦'},
+      {type:'item',key:'strategy-fallback',parent:'strategy',title:'兜底规则',icon:'🛡',arrow:true},
       {type:'item',key:'strategy-result-po',parent:'strategy',title:'PO 建储结果',icon:'▦'},
       {type:'item',key:'strategy-result-sto',parent:'strategy',title:'STO 建储结果',icon:'▦'},
       { type:'group', key:'po', title:'计划管理' },
@@ -7203,6 +7204,7 @@ const app = createApp({
       return g ? g.title : '';
     });
     function switchMenu(k){
+      if(k === 'strategy-fallback'){ window.open('https://matt09lau.github.io/jlr/兜底规则配置原型.html','_blank'); return; }
       activeMenu.value = k;
       if(k === 'fc-backtest' || (k === 'fc-backtest-draft' && draftEnabled.value)){ btView.value = 'list'; }
       if(('#'+k) !== window.location.hash) window.location.hash = k;
