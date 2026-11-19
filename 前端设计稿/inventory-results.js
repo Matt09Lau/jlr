@@ -971,9 +971,9 @@ const {ref,reactive,computed,watch}=root.Vue;
 root.CsppStorageResultsComponent={props:{resultType:{type:String,default:'PO'}},setup(props){
  const columnFilters=ref({});
  const kind=ref(props.resultType),expanded=ref(false),q=reactive({}),applied=ref({}),page=ref(1),message=ref(''),error=ref(''),modal=ref(false),mode=ref('detail'),current=ref(null),manual=reactive({}),saveErrors=ref([]);
- let initial;try{initial=JSON.parse(localStorage.getItem('cspp-storage-results-network-v1'));}catch{}
+ let initial;try{initial=JSON.parse(localStorage.getItem('cspp-storage-results-network-v2'));}catch{}
  const records=ref(Array.isArray(initial)&&initial.length?initial.map(r=>finalize(r)):[...seed('PO'),...seed('STO')]);
- const persist=()=>localStorage.setItem('cspp-storage-results-network-v1',JSON.stringify(records.value));persist();
+ const persist=()=>localStorage.setItem('cspp-storage-results-network-v2',JSON.stringify(records.value));persist();
  const fields=computed(()=>definitions[kind.value]);const allRows=computed(()=>sortResults(records.value.filter(r=>r.buildType===kind.value+' 建储'),kind.value));
  const rows=computed(()=>filterRows(allRows.value,{...applied.value,columnFilters:columnFilters.value}));
  const sourceFields=computed(()=>fields.value.filter(f=>f.type==='source'));
