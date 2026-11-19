@@ -235,6 +235,32 @@ root.JlrFallbackRule = {
       antd.message.success('已保存（本地演示）');
     }
     function deleteRule(id){ const g=activeGroup.value; g.rules=g.rules.filter(r=>r.id!==id); antd.message.success('已删除（本地演示）'); }
+    /* 复制单条分档规则：新增 id、后缀标识，自动置顶 */
+    function duplicateRule(rule){
+      const g=activeGroup.value; if(!g||!rule) return;
+      const copy=JSON.parse(JSON.stringify(rule));
+      copy.id=nextId();
+      copy.ruleCode=(rule.ruleCode||'')+'_COPY';
+      copy.ruleName=(rule.ruleName||'')+'（副本）';
+      copy.reason=(rule.reason||'')+'（副本）';
+      copy.priority = (g.rules||[]).reduce((m,r)=>Math.max(m,r.priority),0)+1;
+      g.rules.unshift(copy);
+      antd.message.success('已复制分档规则');
+    }
+    /* 复制整个规则组 */
+    function duplicateGroup(g){
+      if(!g) return;
+      const copy=JSON.parse(JSON.stringify(g));
+      copy.id=nextId();
+      copy.groupCode=(g.groupCode||'')+'_COPY';
+      copy.groupName=(g.groupName||'')+'（副本）';
+      copy.priority = (groups.value||[]).reduce((m,x)=>Math.max(m,x.priority),0)+1;
+      copy.rules.forEach(r=>{ r.id=nextId(); r.ruleCode=(r.ruleCode||'')+'_COPY'; });
+      groups.value.push(copy);
+      groups.value.sort((a,b)=>a.priority-b.priority);
+      selectedGroupId.value=copy.id;
+      antd.message.success('已复制规则组');
+    }
     function addCondition(){
       const e=editState.value; const f=FIELD_REGISTRY[0];
       e.conditions.push({ seqNo:e.conditions.length+1, fieldName:f.fieldName, fieldLabel:f.fieldLabel, operator:f.supportedOps[0], valueType:f.valueType, value1:'', value2:'' });
@@ -275,7 +301,7 @@ root.JlrFallbackRule = {
 
     return {
       OP, groups, groupsSorted, selectedGroupId, activeGroup, selectGroup,
-      editState, openRuleEditor, saveRule, deleteRule, addCondition, onFieldChange,
+      editState, openRuleEditor, saveRule, deleteRule, duplicateRule, duplicateGroup, addCondition, onFieldChange,
       groupModalOpen, groupForm, openGroupModal, saveGroup, deleteGroup,
       registryOpen, registryGroups:registryGroups(), regCols, fieldLabel, fieldType, enumOptions, opOptionsFor, condValueText, fieldSelectOptions:fieldSelectOptions(),
       testValues, testFields, testResult, runGroupTest, ruleColumns,
@@ -292,7 +318,10 @@ root.JlrFallbackRule = {
       <div class="card fallback-side">
         <div class="fallback-side-hd">
           <span class="fallback-side-title">规则组（{{ groups.length }}）</span>
-          <a-button type="primary" size="small" @click="openGroupModal(null)">+ 新增</a-button>
+          <div style="display:flex;gap:6px">
+            <a-button size="small" @click="duplicateGroup(activeGroup)" :disabled="!activeGroup">复制组</a-button>
+            <a-button type="primary" size="small" @click="openGroupModal(null)">+ 新增</a-button>
+          </div>
         </div>
         <div class="fallback-group-list">
           <div v-for="g in groupsSorted" :key="g.id" class="fallback-group-item" :class="{active:g.id===selectedGroupId}" @click="selectGroup(g.id)">
@@ -332,6 +361,7 @@ root.JlrFallbackRule = {
               <template v-else-if="column.key==='enabled'"><a-tag :color="record.enabled?'green':'default'">{{ record.enabled?'启用':'停用' }}</a-tag></template>
               <template v-else-if="column.key==='action'">
                 <a @click="openRuleEditor(record)">编辑</a>
+                <a style="margin-left:12px" @click="duplicateRule(record)">复制</a>
                 <a-popconfirm title="确认删除该分档规则？" @confirm="deleteRule(record.id)"><a style="margin-left:12px;color:#ff4d4f">删除</a></a-popconfirm>
               </template>
             </template>
