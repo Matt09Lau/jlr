@@ -375,6 +375,24 @@ mark {
   }
   .batch-expand-btn:hover{background:#e6f4ff;}
   .filter-items .f-item:has(.batch-textarea){align-items:flex-start;}
+  /* 批量搜索大弹窗 textarea */
+  .batch-modal-textarea{
+    width:100%;min-height:240px;max-height:400px;padding:10px 12px;
+    border:1px solid #d9d9d9;border-radius:6px;font-size:13px;line-height:1.6;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,monospace;
+    overflow-y:auto;outline:none;transition:border-color .2s;resize:vertical;
+  }
+  .batch-modal-textarea:focus{border-color:#1677ff;box-shadow:0 0 0 2px rgba(22,119,255,.1);}
+  .batch-modal-preview{
+    margin-top:10px;padding:10px 12px;background:#fafafa;border-radius:6px;
+    min-height:40px;max-height:100px;overflow-y:auto;border:1px solid #f0f0f0;
+    display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;
+  }
+  .batch-token-chip{
+    display:inline-block;padding:2px 8px;background:#e6f4ff;border:1px solid #91caff;
+    border-radius:4px;font-size:12px;color:#1677ff;line-height:18px;font-family:monospace;
+  }
+  .batch-token-more{color:#8c8c8c;font-size:12px;align-self:center;}
   .filter-actions{display:flex;align-items:center;gap:14px;}
   .filter-actions .act{cursor:pointer;color:rgba(0,0,0,.6);font-size:16px;display:flex;align-items:center;gap:3px;}
   .filter-actions .act:hover{color:#1677ff;}
@@ -697,6 +715,35 @@ mark {
             <li>本系统不收集与业务无关的个人信息，不向第三方提供上述信息。</li>
           </ul>
           <p>继续登录即表示您已阅读并同意本政策。如需查询、更正或删除个人信息，请联系 IT 服务台。</p>
+        </div>
+      </a-modal>
+
+      <!-- 批量搜索大弹窗：方案二，配件扩展属性专用 -->
+      <a-modal v-model:open="batchModalOpen" :title="batchModalField ? '批量录入 · '+batchModalField.label : '批量录入'" width="640" :footer="null" :mask-closable="false">
+        <div v-if="batchModalField">
+          <div style="font-size:12px;color:#8c8c8c;margin-bottom:6px">
+            支持换行、逗号、分号、Tab、CSV 双引号分隔符粘贴，共识别 <b style="color:#1677ff">{{ batchModalTokens }}</b> 个
+          </div>
+          <textarea
+            v-model="genFilters[activeMenu][batchModalField.key]"
+            class="batch-modal-textarea"
+            :placeholder="'每行一个或用逗号/分号/Tab分隔，支持批量粘贴 100+ 个'"
+            allow-clear
+          ></textarea>
+          <div class="batch-modal-preview">
+            <div v-if="!batchModalTokens" style="color:#bfbfbf;font-size:12px">暂无内容，请在上方粘贴配件号</div>
+            <template v-else>
+              <template v-for="(t,i) in batchModalTokens.slice(0,50)" :key="i">
+                <span class="batch-token-chip">{{ t }}</span>
+              </template>
+              <span v-if="batchModalTokens.length>50" class="batch-token-more">+{{ batchModalTokens.length-50 }} 个</span>
+            </template>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid #f0f0f0">
+            <a-button @click="genFilters[activeMenu][batchModalField.key]='';batchModalOpen=false">清空</a-button>
+            <a-button @click="batchModalOpen=false">取消</a-button>
+            <a-button type="primary" @click="batchModalOpen=false">确定（已录入 {{ batchModalTokens }} 个）</a-button>
+          </div>
         </div>
       </a-modal>
     </div>
@@ -2890,11 +2937,21 @@ mark {
                     <span class="f-label">{{ f.label }}</span>
                     <a-select v-if="f.type==='select'" v-model:value="genFilters[activeMenu][f.key]" :placeholder="f.placeholder||'请选择'" style="width:160px" allow-clear :options="f.options"/>
                     <div v-else-if="isBatchField(f)" style="display:flex;flex-direction:column">
-                      <div class="batch-textarea-wrap">
-                        <textarea v-model="genFilters[activeMenu][f.key]" :placeholder="(f.placeholder||'请输入')+'，支持批量粘贴'" allow-clear class="batch-textarea" :style="{height: batchExpandKey(f) ? '192px' : '44px'}"></textarea>
-                        <span class="batch-expand-btn" @click="toggleBatchExpand(f)">{{ batchExpandKey(f) ? '收起' : '展开' }}</span>
-                      </div>
-                      <span v-if="batchStats(f)>0" style="font-size:11px;color:#1677ff;margin-top:2px;line-height:1.4">已识别 {{ batchStats(f) }} 个</span>
+                      <!-- 方案二：配件扩展属性用弹窗式批量搜索 -->
+                      <template v-if="activeMenu==='mat-ext'">
+                        <a-button @click="openBatchModal(f)" style="width:220px;text-align:left">
+                          <span style="color:#8c8c8c">{{ f.placeholder||'点击录入批量条件' }}</span>
+                          <span v-if="batchStats(f)>0" style="margin-left:auto;color:#1677ff">{{ batchStats(f) }} 个</span>
+                        </a-button>
+                      </template>
+                      <!-- 其他页面：方案一 textarea + 展开/收起 -->
+                      <template v-else>
+                        <div class="batch-textarea-wrap">
+                          <textarea v-model="genFilters[activeMenu][f.key]" :placeholder="(f.placeholder||'请输入')+'，支持批量粘贴'" allow-clear class="batch-textarea" :style="{height: batchExpandKey(f) ? '192px' : '44px'}"></textarea>
+                          <span class="batch-expand-btn" @click="toggleBatchExpand(f)">{{ batchExpandKey(f) ? '收起' : '展开' }}</span>
+                        </div>
+                        <span v-if="batchStats(f)>0" style="font-size:11px;color:#1677ff;margin-top:2px;line-height:1.4">已识别 {{ batchStats(f) }} 个</span>
+                      </template>
                     </div>
                     <a-input v-else v-model:value="genFilters[activeMenu][f.key]" :placeholder="f.placeholder||'请输入'" style="width:170px" allow-clear/>
                   </div>
@@ -9388,6 +9445,15 @@ const app = createApp({
     const batchExpandMap = reactive({}); // key = `${menu}-${fieldKey}`, val = true/false
     const batchExpandKey = (f)=> !!batchExpandMap[activeMenu.value+'-'+f.key];
     const toggleBatchExpand = (f)=>{ batchExpandMap[activeMenu.value+'-'+f.key] = !batchExpandMap[activeMenu.value+'-'+f.key]; };
+    /* 批量搜索大弹窗状态 */
+    const batchModalOpen = ref(false);
+    const batchModalField = ref(null);
+    const batchModalTokens = computed(()=>{
+      if(!batchModalField.value) return 0;
+      const v = genFilters[activeMenu.value]?.[batchModalField.value.key];
+      return v ? parseBatchQuery(v).length : 0;
+    });
+    const openBatchModal = (f)=>{ batchModalField.value = f; batchModalOpen.value = true; };
     const activeDef = computed(()=> pageDefs[activeMenu.value] || { detailTitle:'', idField:'id', columns:[], filters:[], isExtension:false, scrollX:1000 });
     const genFiltered = computed(()=>{
       const def = pageDefs[activeMenu.value];
@@ -12495,7 +12561,7 @@ const app = createApp({
       rollDetailOpen, rollDetailRow, rollOpenDetail, rollDetailMetricCols, rollDetailMetricRows,
       rollExportOpen, rollExportFields, rollToggleExportField, rollDoExport, rollDoSearch, rollResetFilters, poRegVehicleCodes,
       isBaseMenu, baseMenuKeys, genericKeys, activeDef,
-      genFilters, genApplied, genPage, genHiddenCols, genExpanded, genFav, genVisibleColumns, genPaged, genFiltered, genCustomRow, batchStats, batchExpandKey, toggleBatchExpand,
+      genFilters, genApplied, genPage, genHiddenCols, genExpanded, genFav, genVisibleColumns, genPaged, genFiltered, genCustomRow, batchStats, batchExpandKey, toggleBatchExpand, batchModalOpen, batchModalField, batchModalTokens, openBatchModal,
       genDetailOpen, genDetailRow, openGenDetail, modalDetailKeys,
       fcTrendSplit, trendModal, openTrendModal, closeTrendModal, hasTrend, fcReasonErr,
       trendUnit, trendHistLabel, trendFctLabel, trendAdjusted, trendAdjDesc,
