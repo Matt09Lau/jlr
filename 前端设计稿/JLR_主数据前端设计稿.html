@@ -2871,14 +2871,8 @@ mark {
                     <span class="f-label">{{ f.label }}</span>
                     <a-select v-if="f.type==='select'" v-model:value="genFilters[activeMenu][f.key]" :placeholder="f.placeholder||'请选择'" style="width:160px" allow-clear :options="f.options"/>
                     <div v-else-if="isBatchField(f)" style="display:flex;flex-direction:column">
-                      <a-textarea v-model:value="genFilters[activeMenu][f.key]" :auto-size="{minRows:1,maxRows:3}" :placeholder="(f.placeholder||'请输入')+'，支持批量粘贴（换行/逗号分隔）'" style="width:220px" allow-clear/>
-                      <span v-if="batchStats(f).total>0" style="font-size:11px;color:#8290a4;margin-top:2px;line-height:1.4">
-                        <span style="color:#1677ff">已识别 {{ batchStats(f).total }} 个</span>
-                        ·
-                        <span style="color:#52c41a">命中 {{ batchStats(f).hit }}</span>
-                        <span v-if="batchStats(f).miss>0" style="color:#ff4d4f"> · 未命中 {{ batchStats(f).miss }}</span>
-                        <span style="margin-left:4px;color:#bfbfbf">({{ batchStats(f).hitRatio }}%)</span>
-                      </span>
+                      <a-textarea v-model:value="genFilters[activeMenu][f.key]" :auto-size="{minRows:1,maxRows:3}" :placeholder="(f.placeholder||'请输入')+'，支持批量粘贴'" style="width:220px" allow-clear/>
+                      <span v-if="batchStats(f)>0" style="font-size:11px;color:#1677ff;margin-top:2px;line-height:1.4">已识别 {{ batchStats(f) }} 个</span>
                     </div>
                     <a-input v-else v-model:value="genFilters[activeMenu][f.key]" :placeholder="f.placeholder||'请输入'" style="width:170px" allow-clear/>
                   </div>
@@ -5226,7 +5220,7 @@ function rint(a,b){ return Math.floor(a+rnd()*(b-a+1)); }
    支持从 Excel 直接复制多行，或用逗号/分号/制表符分隔，粘贴进搜索框 */
 function parseBatchQuery(v){
   if(v==null) return [];
-  return String(v).split(/[\n\r,，;；\t]+/).map(s=>s.trim()).filter(Boolean);
+  return String(v).split(/[\n\r,，;；\t"]+/).map(s=>s.trim()).filter(Boolean);
 }
 /* 单值保持模糊匹配；多值（批量粘贴）按「精确命中任一」匹配 */
 function matchBatchQuery(recordValue, q){
@@ -9363,30 +9357,11 @@ const app = createApp({
     const genFav = ref(false);
     /* 配件号 / 仓库编码类条件支持批量粘贴查询 */
     const isBatchField = (f)=> BATCH_FILTER_FIELDS.includes(f.field || f.key);
-    /* 批量输入统计：已识别总数 / 命中数据数 / 未命中数 */
+    /* 批量输入统计：已识别总数（简化版，只显示数量） */
     const batchStats = (f)=>{
-      const def = pageDefs[activeMenu.value];
-      if(!def || !f) return {total:0, hit:0, miss:0, hitRatio:0};
       const v = genFilters[activeMenu.value]?.[f.key];
-      if(!v) return {total:0, hit:0, miss:0, hitRatio:0};
-      const tokens = parseBatchQuery(v);
-      if(!tokens.length) return {total:0, hit:0, miss:0, hitRatio:0};
-      const fieldName = f.field || f.key;
-      const data = def.data || [];
-      const hitTokens = new Set();
-      data.forEach(r=>{
-        const fv = String(r[fieldName]==null?'':r[fieldName]).trim().toUpperCase();
-        tokens.forEach(t=>{ if(fv===t.toUpperCase()) hitTokens.add(t); });
-      });
-      // 单值模糊匹配也算命中
-      if(tokens.length===1){
-        const t0 = tokens[0].toUpperCase();
-        const anyMatch = data.some(r=>String(r[fieldName]==null?'':r[fieldName]).trim().toUpperCase().includes(t0));
-        if(anyMatch) hitTokens.add(tokens[0]);
-      }
-      const hit = hitTokens.size;
-      const total = tokens.length;
-      return {total, hit, miss: total-hit, hitRatio: Math.round(hit/total*100)};
+      if(!v) return 0;
+      return parseBatchQuery(v).length;
     };
     const activeDef = computed(()=> pageDefs[activeMenu.value] || { detailTitle:'', idField:'id', columns:[], filters:[], isExtension:false, scrollX:1000 });
     const genFiltered = computed(()=>{

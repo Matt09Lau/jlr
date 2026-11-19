@@ -56,7 +56,7 @@ function purchaseEffective(r,supplierLt=null,globalLt=null){
 function purchaseFields(r){return {};} /* 配置页不再系统写入字段 */
 /* 配件号 / 仓库编码类条件支持批量查询：Excel 多行或逗号/分号/制表符分隔 */
 const BATCH_KEYS=['part','wh','shipWh','receiveWh'];
-function parseBatch(v){if(v==null)return [];return String(v).split(/[\n\r,，;；\t]+/).map(s=>s.trim()).filter(Boolean);}
+function parseBatch(v){if(v==null)return [];return String(v).split(/[\n\r,，;；\t"]+/).map(s=>s.trim()).filter(Boolean);}
 function matchBatch(recordValue,q){const t=parseBatch(q);if(!t.length)return true;const v=String(recordValue==null?'':recordValue).trim().toUpperCase();if(t.length===1)return v.includes(t[0].toUpperCase());return t.some(x=>x.toUpperCase()===v);}
 const buildTypes=['PO 建储','STO 建储'];
 const buildTypePages=['service','increase','risk','riskRule','cycle'];
