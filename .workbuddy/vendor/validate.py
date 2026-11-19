@@ -1054,7 +1054,8 @@ def check_long_reform():
 
 def check_fc_hist_pages():
     """三个预测页面的历史归档页（源码级，不依赖渲染/登录态）：
-    长周期预测报表 / 常规预测 / 仓库级常规预测 各新增「历史XXX」页，按预测批次归档往期预测结果，整页只读。"""
+    长周期预测报表 / 常规预测 / 仓库级常规预测 各新增「历史XXX」页，按数据日期归档往期预测结果，
+    整页只读；无「预测批次」字段，数据日期为下拉 + 输入联想，选项仅含保留期次（6 / 12 / 12）。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
     a = src.find('/* ================= 历史预测结果（只读归档页）')
     b = src.find('const fcBestDef = {', a + 10)
@@ -1079,18 +1080,21 @@ def check_fc_hist_pages():
                          and "'fc-regular-history': fcRegularHistDef," in src
                          and "'fc-wh-regular-history': fcWhRegularHistDef," in src),
         "通用引擎注册3项": all(k in gk for k in ["'fc-long-history'", "'fc-regular-history'", "'fc-wh-regular-history'"]),
-        "历史数据构造函数": "function fcBuildHistData(src, keys, batches, extra){" in src,
+        "历史数据构造函数": "function fcBuildHistData(src, keys, dates, isWeek, extra){" in src,
         "三份历史数据": ("const fcLongHistData = fcBuildHistData(" in src
                      and "const fcRegularHistData = fcBuildHistData(" in src
                      and "const fcWhHistData = fcBuildHistData(" in src),
-        "批次3档_长周期": all(x in src for x in ["FCL-202608", "FCL-202607", "FCL-202606"]),
-        "批次3档_常规": all(x in src for x in ["FCR-202608", "FCR-202607", "FCR-202606"]),
-        "批次3档_仓库级": all(x in src for x in ["FCW-20260928", "FCW-20260921", "FCW-20260914"]),
-        "归档字段_批次/数据日期/生成时间": ("title:'预测批次', key:'batch'" in seg
-                                and "title:'数据日期', key:'dd'" in seg
-                                and "title:'生成时间', key:'gt'" in seg),
+        "保留期数_6/12/12": ("const fcLongHistDates = fcHistMonthDates(6);" in src
+                          and "const fcRegularHistDates = fcHistMonthDates(12);" in src
+                          and "const fcWhHistDates = fcHistWeekDates(12);" in src),
+        "期次按月/周推算": ("const fcHistMonthDates = function(n){" in src and "const fcHistWeekDates = function(n){" in src),
+        "无预测批次字段": ("预测批次" not in seg and "key:'batch'" not in seg and "batch:" not in seg and "预测批次" not in src),
+        "归档字段_数据日期/生成时间": ("title:'数据日期', key:'dd'" in seg
+                              and "title:'生成时间', key:'gt'" in seg),
         "相对期次表头": ("'第'+(k+1)+'年预测'" in seg and "'第'+(i+1)+'月预测'" in seg and "'第'+(i+1)+'周预测'" in seg),
-        "筛选_批次与数据日期": "'预测批次', type:'select', field:'batch'" in seg and "'数据日期', type:'input', field:'data_date'" in seg,
+        "筛选_数据日期下拉+联想": ("'数据日期', type:'select', field:'data_date', search:true" in seg
+                            and "options: dates.map(function(d){ return { value:d, label:d }; })" in seg),
+        "通用筛选支持输入联想": (':show-search="!!f.search"' in src and ":option-filter-prop=\"f.search?'label':'value'\"" in src),
         "筛选_仓库级叠加仓库": "'仓库', type:'select', field:'wh_code'" in seg,
         "长周期历史_汇总值与审批留痕": ("render:'longtotal'" in seg and "title:'审批人', key:'app_by'" in seg
                               and "title:'审批时间', key:'app_time'" in seg),
