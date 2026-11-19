@@ -1062,6 +1062,7 @@ def check_dms_dealer_mail():
         "有二次确认弹窗": 'v-model:open="dmsMailOpen"' in src and 'title="邮件发送 · DMS经销商主数据"' in src,
         "弹窗带出真实模板名": "@click=\"dmsGoMailTemplate\"" in modal_seg and "{{ dmsMailTemplateName }}" in modal_seg,
         "弹窗无碎片描述表": "a-descriptions" not in modal_seg,
+        "弹窗无发送范围": "发送范围" not in modal_seg,
         "模板名可跳转": "@click=\"dmsGoMailTemplate\"" in modal_seg,
         "弹窗内无模板选择": "a-select" not in modal_seg and "a-input" not in modal_seg,
         "确认按钮": '@click="dmsDoSendMail">确认发送' in src,
@@ -1077,21 +1078,31 @@ def check_dms_dealer_mail():
 
 
 def check_mail_template_page():
-    """邮件模板页（源码级）：菜单/路由注册；只读表格 5 个模板；经销商主数据模板名与 PRD 一致；DMS 弹窗模板名可跳转定位。"""
+    """邮件模板页（源码级）：菜单/路由注册；可 CRUD（查询/新建/编辑/删除）；无所属场景；DMS 弹窗模板名可跳转定位。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
     a = src.find("<template v-else-if=\"activeMenu===\'mail-template\'\">")
     b = src.find("其他菜单：占位页", a)
     seg = src[a:b] if a >= 0 and b > a else ""
+    ma = src.find('v-model:open="dmsMailOpen"')
+    mb = src.find('</a-modal>', ma)
+    modal_seg = src[ma:mb] if ma >= 0 and mb > ma else ""
     checks = {
         "页面存在": bool(seg),
         "菜单项": "{ type:'item', key:'mail-template', parent:'base', title:'邮件模板', icon:'✉' }" in src,
         "路由注册": "'po-preplan','mail-template']" in src,
-        "只读表格": "mailTplColumns" in seg and ":data-source=\"mailTemplates\"" in seg,
-        "五模板数据": "const mailTemplates = [" in src and "key:'dealer-update'" in src and "key:'fc-adjust'" in src and "key:'sync-error'" in src and "key:'fc-result'" in src and "key:'no-default-supplier'" in src,
+        "表格用筛选数据": ":data-source=\"mailTplFiltered\"" in seg,
+        "五模板数据": "const mailTemplates = ref([" in src and "key:'dealer-update'" in src and "key:'fc-adjust'" in src and "key:'sync-error'" in src and "key:'fc-result'" in src and "key:'no-default-supplier'" in src,
         "经销商模板主题对齐PRD": "【经销商主数据更新】请同步最新主数据" in src,
+        "无所属场景列": "所属场景" not in seg and "scene:" not in src and "key:'scene'" not in src,
+        "顶部查询条件": "v-model:value=\"mailTplQ.name\"" in seg and "v-model:value=\"mailTplQ.subject\"" in seg and "@click=\"mailTplDoSearch\"" in seg and "@click=\"mailTplReset\"" in seg,
+        "新建模板按钮": "@click=\"mailTplOpenAdd\">＋ 新建模板" in seg,
+        "编辑删除操作列": "@click.stop=\"mailTplOpenEdit(record)\"" in seg and "@confirm=\"mailTplDel(record)\"" in seg and "确认删除该邮件模板？" in seg,
+        "新建编辑弹窗": 'v-model:open="mailTplFormOpen"' in src and ':title="(mailTplFormMode' in src and "'·邮件模板'" in src and "@ok=\"mailTplSave\"" in src,
+        "CRUD函数": all(("function "+f+"(") in src for f in ["mailTplDoSearch", "mailTplReset", "mailTplOpenAdd", "mailTplOpenEdit", "mailTplSave", "mailTplDel"]),
         "焦点高亮": "mailTemplateFocus" in seg and ".mail-tpl-focus td" in src,
         "跳转函数": "function dmsGoMailTemplate(){" in src and "switchMenu('mail-template')" in src and "mailTemplateFocus.value = 'dealer-update'" in src,
-        "暴露": "mailTemplates, mailTplColumns, mailTemplateFocus," in src and "dmsMailTemplateName, dmsGoMailTemplate," in src,
+        "DMS弹窗无发送范围": "发送范围" not in modal_seg,
+        "暴露": "mailTplFormOpen, mailTplFormMode, mailTplForm, mailTplOpenAdd, mailTplOpenEdit, mailTplSave, mailTplDel," in src and "dmsMailTemplateName, dmsGoMailTemplate," in src,
     }
     bad = [k for k, v in checks.items() if not v]
     ok = not bad
