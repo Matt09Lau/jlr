@@ -626,9 +626,6 @@
           <!-- ============ DMS 经销商主数据（ods_dms_dealer） ============ -->
           <template v-else-if="activeMenu==='dms-dealer'">
 
-            <a-alert type="info" show-icon style="margin-bottom:12px;"
-              message="数据来源：DMS 经销商公司主数据 / 经销商集团主数据同步接口（每日增量同步，主键 dealerId）；「Dealer类别」及之后为手工维护字段，全表字段均支持手工维护，纯手工新增由系统分配 dealerId（不与接口数据重复）。"/>
-
             <!-- 筛选卡片 -->
             <div class="card">
               <div class="filter-row">
@@ -674,11 +671,11 @@
             <!-- 表格卡片 -->
             <div class="card" style="margin-bottom:0;">
               <div class="toolbar-row">
-                <a-button @click="dmsSync">⟳ 同步 DMS 数据</a-button>
                 <a-button type="primary" @click="openDmsAdd">＋ 新增</a-button>
                 <a-button @click="dmsImportOpen=true">⬆ 导入</a-button>
                 <a-button @click="dmsExportCsv(false)">⬇ 导出</a-button>
                 <a-button type="link" style="padding:0;" @click="dmsExportCsv(true)">全量导出</a-button>
+                <a-button @click="dmsOpenSendMail">✉ 邮件发送</a-button>
                 <div class="toolbar-icons">
                   <a-dropdown>
                     <span title="密度" @click.stop="() => {}">↕</span>
@@ -4442,6 +4439,19 @@
       </div>
     </a-modal>
 
+    <!-- ===== DMS 经销商主数据：邮件发送（模板已在专门页面指定，本页仅二次确认） ===== -->
+    <a-modal v-model:open="dmsMailOpen" title="邮件发送 · DMS经销商主数据" :width="520" :footer="null" :mask-closable="false">
+      <a-descriptions bordered size="small" :column="2" style="margin-bottom:12px;">
+        <a-descriptions-item label="邮件模板">已在「邮件模板」页面指定，本页直接使用</a-descriptions-item>
+        <a-descriptions-item label="发送规则">按模板配置的收件人与内容发送</a-descriptions-item>
+      </a-descriptions>
+      <p style="margin:0;">确认按上述邮件模板发送邮件？</p>
+      <div class="jlrs-modal-footer">
+        <a-button @click="dmsMailOpen=false">取消</a-button>
+        <a-button type="primary" @click="dmsDoSendMail">确认发送</a-button>
+      </div>
+    </a-modal>
+
     <!-- ===== DMS 经销商主数据：详情 ===== -->
     <a-drawer v-model:open="dmsDetailOpen" :width="620" :title="dmsDetailRow ? ('DMS 经销商主数据 · ' + dmsDetailRow.dealerCode) : ''">
       <template v-if="dmsDetailRow">
@@ -6756,6 +6766,7 @@ const app = createApp({
     const dmsFav = ref(false);
     const dmsPage = reactive({ current:1, size:15 });
     const dmsImportOpen = ref(false);
+    const dmsMailOpen = ref(false);
     function dmsDoSearch(){ Object.assign(dmsApplied, dmsFilters); dmsPage.current=1; msg('查询完成，共命中 '+dmsFiltered.value.length+' 条记录','success'); }
     function dmsToggleFav(){ dmsFav.value=!dmsFav.value; msg(dmsFav.value?'已收藏本页':'已取消收藏','success'); }
     function dmsResetFilters(){
@@ -6830,7 +6841,8 @@ const app = createApp({
       a.click(); URL.revokeObjectURL(a.href);
       msg((all?'全量导出':'导出')+'成功，共 '+src.length+' 条（CSV 已下载）','success');
     }
-    function dmsSync(){ msg('已触发 DMS 经销商主数据同步（每日增量，主键 dealerId）（设计稿示意）','success'); }
+    function dmsOpenSendMail(){ dmsMailOpen.value = true; }
+    function dmsDoSendMail(){ dmsMailOpen.value = false; msg('邮件已按指定模板发送（设计稿示意）','success'); }
     function dmsDoImport(){ dmsImportOpen.value = false; msg('导入任务已提交，纯手工数据由系统分配 dealerId（设计稿示意）','success'); }
     function blankDmsRow(){
       const maxId = dmsDealerData.reduce((m,r)=> Math.max(m, parseInt((r.dealerId||'D0').slice(1))||0), 0);
@@ -11488,7 +11500,8 @@ const app = createApp({
       dmsTypeOptions, dmsDealTypeOptions, dmsYnOptions,
       dmsFilters, dmsApplied, dmsFilterExpanded, dmsFav, dmsPage, dmsImportOpen,
       dmsFiltered, dmsColumns, dmsHiddenCols, dmsVisibleColumns, dmsPaged, dmsCustomRow, dmsToggleCol,
-      dmsDoSearch, dmsResetFilters, dmsToggleFav, dmsExportCsv, dmsSync, dmsDoImport,
+      dmsDoSearch, dmsResetFilters, dmsToggleFav, dmsExportCsv, dmsDoImport,
+      dmsMailOpen, dmsOpenSendMail, dmsDoSendMail,
       dmsFormOpen, dmsFormRow, dmsFormMode, openDmsAdd, openDmsEdit, saveDmsForm,
       dmsDetailOpen, dmsDetailRow, openDmsDetail,
       detailOpen, detailRow, openDetail, whTypeText, whTypeColor, abcTip,

@@ -1044,6 +1044,35 @@ def check_long_reform():
     return {"key":"长周期改造","ok":ok,"msg":detail}
 
 
+
+def check_dms_dealer_mail():
+    """DMS经销商主数据页（源码级）：去数据来源提示条与同步按钮；邮件发送仅二次确认，模板在专门页面指定。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    a = src.find('<template v-else-if="activeMenu===\'dms-dealer\'">')
+    b = src.find('<template v-else-if=', a + 10)
+    seg = src[a:b] if a >= 0 and b > a else ""
+    ma = src.find('v-model:open="dmsMailOpen"')
+    mb = src.find('</a-modal>', ma)
+    modal_seg = src[ma:mb] if ma >= 0 and mb > ma else ""
+    checks = {
+        "页面定位": bool(seg),
+        "页面无数据来源提示条": "数据来源：DMS 经销商公司主数据" not in seg,
+        "页面无同步DMS按钮": "同步 DMS 数据" not in seg and "dmsSync" not in seg,
+        "有邮件发送按钮": "@click=\"dmsOpenSendMail\">✉ 邮件发送" in seg,
+        "有二次确认弹窗": 'v-model:open="dmsMailOpen"' in src and 'title="邮件发送 · DMS经销商主数据"' in src,
+        "模板来自专门页面": "已在「邮件模板」页面指定" in src,
+        "弹窗内无模板选择": "a-select" not in modal_seg and "a-input" not in modal_seg,
+        "确认按钮": '@click="dmsDoSendMail">确认发送' in src,
+        "取消按钮": '@click="dmsMailOpen=false">取消' in src,
+        "打开函数": "function dmsOpenSendMail(){ dmsMailOpen.value = true; }" in src,
+        "确认函数": "function dmsDoSendMail(){ dmsMailOpen.value = false;" in src,
+        "模板暴露": "dmsMailOpen, dmsOpenSendMail, dmsDoSendMail," in src,
+    }
+    bad = [k for k, v in checks.items() if not v]
+    ok = not bad
+    detail = f"通过={len(checks)-len(bad)}/{len(checks)}" + (f" 缺失={bad}" if bad else "")
+    return {"key": "DMS邮件发送", "ok": ok, "msg": detail}
+
 def check_preplan_page():
     """预计划页（源码级）：无页面说明文案；查询含数据日期且无同步状态；列表含十年预测/预期库存/计划数量且无同步状态；有样例数据。"""
     src = open(HTML, encoding="utf-8", errors="replace").read()
@@ -2477,6 +2506,10 @@ def main():
         r = check_tpl_fields_20261112()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] tpl-fields    {r['msg']}")
+    if only in (None, 'dms-dealer-mail', 'dms-dealer'):
+        r = check_dms_dealer_mail()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] dms-dealer-mail {r['msg']}")
     print("==== 汇总:", "全部通过" if all_ok else "存在失败", "====")
 
 if __name__ == "__main__":
