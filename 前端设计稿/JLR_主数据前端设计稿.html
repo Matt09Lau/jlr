@@ -607,6 +607,7 @@ mark {
   .chain-node.off{background:#fafafa;border:1px dashed #bfbfbf;color:#8c8c8c;}
   .chain-arrow{display:inline-flex;align-items:center;flex:0 0 auto;margin:0 3px;}
   .chain-empty{color:#bfbfbf;font-size:12px;}
+.mail-tpl-focus td { background:#e6f4ff !important; }
 </style>
 <link rel="stylesheet" href="inventory-strategy.css?v=20261022-7">
 </head>
@@ -4647,6 +4648,26 @@ mark {
             </div>
           </template>
 
+          <!-- ============ 邮件模板（只读，模板名可由 DMS 邮件发送弹窗跳转定位） ============ -->
+          <template v-else-if="activeMenu==='mail-template'">
+            <div class="card" style="margin-bottom:12px;">
+              <div class="toolbar-row">
+                <span style="color:rgba(0,0,0,.45);font-size:13px;">邮件模板由固定文案与参数组成，发送时以实际值替换参数；本页供查看，模板内容在各业务场景的邮件发送处引用。</span>
+              </div>
+            </div>
+            <div class="card">
+              <a-table :columns="mailTplColumns" :data-source="mailTemplates" :pagination="false" size="small" :scroll="{x:1100}" :row-class-name="r=> r.key===mailTemplateFocus?'mail-tpl-focus':''">
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key==='name'"><b>{{ record.name }}</b></template>
+                  <template v-else-if="column.key==='subject'">{{ record.subject }}</template>
+                  <template v-else-if="column.key==='body'"><span style="white-space:pre-wrap;">{{ record.body }}</span></template>
+                  <template v-else-if="column.key==='params'"><span style="color:rgba(0,0,0,.65);">{{ record.params }}</span></template>
+                  <template v-else-if="column.key==='scene'">{{ record.scene }}</template>
+                </template>
+              </a-table>
+            </div>
+          </template>
+
           <!-- ============ 其他菜单：占位页（保持同版式） ============ -->
           <template v-else>
             <div class="card">
@@ -4844,11 +4865,16 @@ mark {
 
     <!-- ===== DMS 经销商主数据：邮件发送（模板已在专门页面指定，本页仅二次确认） ===== -->
     <a-modal v-model:open="dmsMailOpen" title="邮件发送 · DMS经销商主数据" :width="520" :footer="null" :mask-closable="false">
-      <a-descriptions bordered size="small" :column="2" style="margin-bottom:12px;">
-        <a-descriptions-item label="邮件模板">已在「邮件模板」页面指定，本页直接使用</a-descriptions-item>
-        <a-descriptions-item label="发送规则">按模板配置的收件人与内容发送</a-descriptions-item>
-      </a-descriptions>
-      <p style="margin:0;">确认按上述邮件模板发送邮件？</p>
+      <div style="display:flex;align-items:flex-start;gap:8px;margin:4px 0 10px;">
+        <span style="color:rgba(0,0,0,.45);min-width:64px;line-height:24px;">邮件模板</span>
+        <span><a @click="dmsGoMailTemplate" style="font-weight:600;">{{ dmsMailTemplateName }}</a>
+          <span style="color:rgba(0,0,0,.45);font-size:12px;margin-left:6px;">（点击可查看模板详情）</span></span>
+      </div>
+      <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:10px;">
+        <span style="color:rgba(0,0,0,.45);min-width:64px;line-height:24px;">发送范围</span>
+        <span>当前全部经销商；收件人与正文按模板配置自动填充，无需在本页编辑。</span>
+      </div>
+      <p style="margin:0;">确认使用该模板发送邮件？</p>
       <div class="jlrs-modal-footer">
         <a-button @click="dmsMailOpen=false">取消</a-button>
         <a-button type="primary" @click="dmsDoSendMail">确认发送</a-button>
@@ -6936,7 +6962,7 @@ const app = createApp({
       'fc-new','fc-long','fc-buyout','fc-regular','fc-wh-regular','fc-best','fc-backtest',
       'activity-register','data-sense-task','order-monitor',
       'part-group','po-regular','po-history','po-export','sto-week','sto-export','sto-summary','sto-next',
-      'po-atb','po-bridge','po-ref','po-roll','po-preplan'];
+      'po-atb','po-bridge','po-ref','po-roll','po-preplan','mail-template'];
     function keyFromHash(){
       const h = (window.location.hash||'').replace(/^#/,'').trim();
       if(h==='strategy-stocking')return 'wh-abc';
@@ -7012,6 +7038,7 @@ const app = createApp({
       { type:'item', key:'replace-ext', parent:'base', title:'替代链扩展属性', icon:'🏷' },
       { type:'item', key:'plan-hier-3', parent:'base', title:'计划层级管理', icon:'🗂' },
       { type:'item', key:'gp-params', parent:'base', title:'全局参数', icon:'⚙' },
+      { type:'item', key:'mail-template', parent:'base', title:'邮件模板', icon:'✉' },
       { type:'group', key:'fc', title:'需求预测' },
       { type:'item', key:'fc-new', parent:'fc', title:'参考零件需求预测', icon:'🚗' },
       { type:'item', key:'fc-long', parent:'fc', title:'长周期预测报表', icon:'📈' },
@@ -7505,6 +7532,39 @@ const app = createApp({
       a.href = URL.createObjectURL(blob); a.download = 'JLRS_DMS经销商主数据_' + new Date().toISOString().slice(0,10) + '.csv';
       a.click(); URL.revokeObjectURL(a.href);
       msg((all?'全量导出':'导出')+'成功，共 '+src.length+' 条（CSV 已下载）','success');
+    }
+    /* ---- 邮件模板（供 DMS 邮件发送引用，主题与 PRD 迭代6 邮件预警一致） ---- */
+    const mailTemplates = [
+      { key:'dealer-update', name:'经销商主数据更新', subject:'【经销商主数据更新】请同步最新主数据',
+        body:'{收件人姓名} 您好：\n经销商主数据已更新，请以附件中的最新主数据为准同步至关联系统。\n本邮件由系统自动发送，请勿直接回复。',
+        params:'{收件人姓名}', scene:'DMS经销商主数据' },
+      { key:'fc-adjust', name:'预测调整通知', subject:'【预测调整通知】预测结果已调整',
+        body:'{收件人姓名} 您好：\n配件预测结果已发生人工调整，调整明细见附件，请登录系统查看。\n本邮件由系统自动发送，请勿直接回复。',
+        params:'{收件人姓名}', scene:'需求预测' },
+      { key:'sync-error', name:'数据同步异常', subject:'【数据同步异常】同步任务执行异常',
+        body:'{收件人姓名} 您好：\noss-hive 数据链路同步出现异常，异常明细见附件，请及时排查处理。\n本邮件由系统自动发送，请勿直接回复。',
+        params:'{收件人姓名}', scene:'历史需求处理' },
+      { key:'fc-result', name:'预测结果通知', subject:'【结果通知】预测结果已生成',
+        body:'{收件人姓名} 您好：\n预测结果已生成，结果明细见附件，请登录系统查看。\n本邮件由系统自动发送，请勿直接回复。',
+        params:'{收件人姓名}', scene:'需求预测' },
+      { key:'no-default-supplier', name:'未维护默认供应商', subject:'【待办提醒】未维护默认供应商',
+        body:'{收件人姓名} 您好：\n配件尚未维护默认供应商，待维护明细见附件，请及时处理。\n本邮件由系统自动发送，请勿直接回复。',
+        params:'{收件人姓名}', scene:'基础数据管理' },
+    ];
+    const mailTplColumns = [
+      { title:'模板名称', key:'name', dataIndex:'name', width:180 },
+      { title:'邮件主题', key:'subject', dataIndex:'subject', width:300 },
+      { title:'正文固定文案', key:'body', dataIndex:'body', width:400 },
+      { title:'参数', key:'params', dataIndex:'params', width:140 },
+      { title:'所属场景', key:'scene', dataIndex:'scene', width:150 },
+    ];
+    const mailTemplateFocus = ref('');
+    const dmsMailTemplateName = computed(()=> mailTemplates[0].subject);
+    function dmsGoMailTemplate(){
+      dmsMailOpen.value = false;
+      mailTemplateFocus.value = 'dealer-update';
+      switchMenu('mail-template');
+      msg('已跳转至邮件模板，定位到「经销商主数据更新」模板','success');
     }
     function dmsOpenSendMail(){ dmsMailOpen.value = true; }
     function dmsDoSendMail(){ dmsMailOpen.value = false; msg('邮件已按指定模板发送（设计稿示意）','success'); }
@@ -12195,7 +12255,8 @@ const app = createApp({
       dmsFilters, dmsApplied, dmsFilterExpanded, dmsFav, dmsPage, dmsImportOpen,
       dmsFiltered, dmsColumns, dmsHiddenCols, dmsVisibleColumns, dmsPaged, dmsCustomRow, dmsToggleCol,
       dmsDoSearch, dmsResetFilters, dmsToggleFav, dmsExportCsv, dmsDoImport,
-      dmsMailOpen, dmsOpenSendMail, dmsDoSendMail,
+      dmsMailOpen, dmsOpenSendMail, dmsDoSendMail, dmsMailTemplateName, dmsGoMailTemplate,
+      mailTemplates, mailTplColumns, mailTemplateFocus,
       dmsFormOpen, dmsFormRow, dmsFormMode, openDmsAdd, openDmsEdit, saveDmsForm,
       dmsDetailOpen, dmsDetailRow, openDmsDetail,
       detailOpen, detailRow, openDetail, whTypeText, whTypeColor, abcTip,

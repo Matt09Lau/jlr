@@ -1060,18 +1060,43 @@ def check_dms_dealer_mail():
         "页面无同步DMS按钮": "同步 DMS 数据" not in seg and "dmsSync" not in seg,
         "有邮件发送按钮": "@click=\"dmsOpenSendMail\">✉ 邮件发送" in seg,
         "有二次确认弹窗": 'v-model:open="dmsMailOpen"' in src and 'title="邮件发送 · DMS经销商主数据"' in src,
-        "模板来自专门页面": "已在「邮件模板」页面指定" in src,
+        "弹窗带出真实模板名": "@click=\"dmsGoMailTemplate\"" in modal_seg and "{{ dmsMailTemplateName }}" in modal_seg,
+        "弹窗无碎片描述表": "a-descriptions" not in modal_seg,
+        "模板名可跳转": "@click=\"dmsGoMailTemplate\"" in modal_seg,
         "弹窗内无模板选择": "a-select" not in modal_seg and "a-input" not in modal_seg,
         "确认按钮": '@click="dmsDoSendMail">确认发送' in src,
         "取消按钮": '@click="dmsMailOpen=false">取消' in src,
         "打开函数": "function dmsOpenSendMail(){ dmsMailOpen.value = true; }" in src,
         "确认函数": "function dmsDoSendMail(){ dmsMailOpen.value = false;" in src,
-        "模板暴露": "dmsMailOpen, dmsOpenSendMail, dmsDoSendMail," in src,
+        "模板暴露": "dmsMailOpen, dmsOpenSendMail, dmsDoSendMail, dmsMailTemplateName, dmsGoMailTemplate," in src,
     }
     bad = [k for k, v in checks.items() if not v]
     ok = not bad
     detail = f"通过={len(checks)-len(bad)}/{len(checks)}" + (f" 缺失={bad}" if bad else "")
     return {"key": "DMS邮件发送", "ok": ok, "msg": detail}
+
+
+def check_mail_template_page():
+    """邮件模板页（源码级）：菜单/路由注册；只读表格 5 个模板；经销商主数据模板名与 PRD 一致；DMS 弹窗模板名可跳转定位。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    a = src.find("<template v-else-if=\"activeMenu===\'mail-template\'\">")
+    b = src.find("其他菜单：占位页", a)
+    seg = src[a:b] if a >= 0 and b > a else ""
+    checks = {
+        "页面存在": bool(seg),
+        "菜单项": "{ type:'item', key:'mail-template', parent:'base', title:'邮件模板', icon:'✉' }" in src,
+        "路由注册": "'po-preplan','mail-template']" in src,
+        "只读表格": "mailTplColumns" in seg and ":data-source=\"mailTemplates\"" in seg,
+        "五模板数据": "const mailTemplates = [" in src and "key:'dealer-update'" in src and "key:'fc-adjust'" in src and "key:'sync-error'" in src and "key:'fc-result'" in src and "key:'no-default-supplier'" in src,
+        "经销商模板主题对齐PRD": "【经销商主数据更新】请同步最新主数据" in src,
+        "焦点高亮": "mailTemplateFocus" in seg and ".mail-tpl-focus td" in src,
+        "跳转函数": "function dmsGoMailTemplate(){" in src and "switchMenu('mail-template')" in src and "mailTemplateFocus.value = 'dealer-update'" in src,
+        "暴露": "mailTemplates, mailTplColumns, mailTemplateFocus," in src and "dmsMailTemplateName, dmsGoMailTemplate," in src,
+    }
+    bad = [k for k, v in checks.items() if not v]
+    ok = not bad
+    detail = f"通过={len(checks)-len(bad)}/{len(checks)}" + (f" 缺失={bad}" if bad else "")
+    return {"key": "邮件模板页", "ok": ok, "msg": detail}
 
 def check_preplan_page():
     """预计划页（源码级）：无页面说明文案；查询含数据日期且无同步状态；列表含十年预测/预期库存/计划数量且无同步状态；有样例数据。"""
@@ -2510,6 +2535,10 @@ def main():
         r = check_dms_dealer_mail()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] dms-dealer-mail {r['msg']}")
+    if only in (None, 'mail-template-page', 'dms-dealer-mail', 'dms-dealer'):
+        r = check_mail_template_page()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] mail-template-page {r['msg']}")
     print("==== 汇总:", "全部通过" if all_ok else "存在失败", "====")
 
 if __name__ == "__main__":
