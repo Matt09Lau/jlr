@@ -4601,10 +4601,11 @@
     <!-- 预计划：计算过程详情（居中弹窗，展示计算实例的完整推算表） -->
     <a-modal v-if="activeMenu==='po-preplan'" v-model:open="preDetailOpen" :title="'计算详情 · ' + (preDetailRow ? preDetailRow.part_code : '')" :width="1180" :footer="null" :mask-closable="false">
       <template v-if="preDetailRow">
-        <a-descriptions class="pre-detail-params" bordered size="small" :column="3">
+        <a-descriptions class="pre-detail-params" bordered size="small" :column="4">
           <a-descriptions-item label="预期库存">{{ preDetailRow.expected_stock }}</a-descriptions-item>
           <a-descriptions-item label="供应商">{{ preDetailRow.supplier }}</a-descriptions-item>
           <a-descriptions-item label="MOQ">{{ preDetailRow.moq }}</a-descriptions-item>
+          <a-descriptions-item label="供应商在途数量">{{ preDetailRow.asn_qty }}</a-descriptions-item>
         </a-descriptions>
         <a-table :columns="preDetailCols" :data-source="preDetailRows" row-key="label" size="small" :pagination="false" bordered>
           <template #bodyCell="{ column, record }"><span>{{ record[column.dataIndex] }}</span></template>
@@ -6118,7 +6119,8 @@ function fcPreCalc(raw, stock, moq){
   const open_po_qty = Math.round(stock*0.55);
   const available_qty = Math.round(stock*0.30);
   const in_transit_qty = Math.round(stock*0.25);
-  const bo_qty = Math.max(0, open_po_qty+available_qty+in_transit_qty-stock);
+  const asn_qty = Math.round(stock*0.20);
+  const bo_qty = Math.max(0, open_po_qty+available_qty+asn_qty+in_transit_qty-stock);
   const deducted_qty = Math.max(0, S-stock);
   const plan_qty = Math.ceil(deducted_qty/(moq||1))*(moq||1);
   const diff_qty = plan_qty-deducted_qty;
@@ -6137,7 +6139,7 @@ function fcPreCalc(raw, stock, moq){
   const strategy = [];
   if(stock>0) strategy.push('10 库存扣减');
   if(diff_qty>0) strategy.push('20 MOQ 取整');
-  return { S:S, open_po_qty:open_po_qty, available_qty:available_qty, in_transit_qty:in_transit_qty, bo_qty:bo_qty,
+  return { S:S, open_po_qty:open_po_qty, available_qty:available_qty, asn_qty:asn_qty, in_transit_qty:in_transit_qty, bo_qty:bo_qty,
     deducted_qty:deducted_qty, plan_qty:plan_qty, diff_qty:diff_qty, step:step, final:final,
     calc_strategy:strategy.join('、')||'—' };
 }
@@ -6157,7 +6159,7 @@ const fcPrePlanData = Vue.reactive([]);
       part_code:src.part_code, part_name:src.part_name, base:src.base,
       planner:src.planner, abc:src.abc, stopped:src.stopped,
       life_demand:life, expected_stock:stock,
-      open_po_qty:c.open_po_qty, available_qty:c.available_qty, in_transit_qty:c.in_transit_qty, bo_qty:c.bo_qty,
+      open_po_qty:c.open_po_qty, available_qty:c.available_qty, asn_qty:c.asn_qty, in_transit_qty:c.in_transit_qty, bo_qty:c.bo_qty,
       deducted_qty:c.deducted_qty, moq:moq, plan_qty:c.plan_qty, diff_qty:c.diff_qty, calc_strategy:c.calc_strategy,
       calcRaw:raw, calcStep:c.step,
       supplier:(supplierData[i % supplierData.length]||{}).supplier_name || '—',
@@ -6787,7 +6789,7 @@ const app = createApp({
           part_code:r.part_code, part_name:r.part_name, base:r.base,
           planner:r.planner, abc:r.abc, stopped:r.stopped,
           life_demand:total, expected_stock:stock,
-          open_po_qty:c.open_po_qty, available_qty:c.available_qty, in_transit_qty:c.in_transit_qty, bo_qty:c.bo_qty,
+          open_po_qty:c.open_po_qty, available_qty:c.available_qty, asn_qty:c.asn_qty, in_transit_qty:c.in_transit_qty, bo_qty:c.bo_qty,
           deducted_qty:c.deducted_qty, moq:moq, plan_qty:c.plan_qty, diff_qty:c.diff_qty, calc_strategy:c.calc_strategy,
           calcRaw:raw, calcStep:c.step,
           supplier:(supplierData[idx % supplierData.length]||{}).supplier_name || '—',
@@ -9115,6 +9117,7 @@ const app = createApp({
           { title:'预期库存数量', key:'expected_stock', dataIndex:'expected_stock', width:125, sorter:(a,b)=>a.expected_stock-b.expected_stock },
           { title:'欠交数量', key:'open_po_qty', dataIndex:'open_po_qty', width:105 },
           { title:'可用库存数量', key:'available_qty', dataIndex:'available_qty', width:125 },
+          { title:'供应商在途数量', key:'asn_qty', dataIndex:'asn_qty', width:125 },
           { title:'库间在途数量', key:'in_transit_qty', dataIndex:'in_transit_qty', width:125 },
           { title:'缺货数量', key:'bo_qty', dataIndex:'bo_qty', width:105 },
           { title:'扣减后合计', key:'deducted_qty', dataIndex:'deducted_qty', width:115, sorter:(a,b)=>a.deducted_qty-b.deducted_qty },

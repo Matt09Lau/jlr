@@ -1206,7 +1206,13 @@ def check_preplan_page():
         "查询含数据日期": "{ key:'data_date', label:'数据日期', type:'input', w:130 }" in seg,
         "查询无同步状态": "sync_status" not in seg,
         "列表十年预测": "{ title:'数据日期', key:'dd'" in seg and "Array.from({length:10},(_,k)=> ({ title:'第'+(k+1)+'年预测值', key:'y'+(k+1)" in seg and "{ title:'预测合计', key:'life_demand'" in seg,
-        "列表计算输出字段": all(("{ title:'%s'"%n) in seg for n in ['预期库存数量','欠交数量','可用库存数量','库间在途数量','缺货数量','扣减后合计','计算策略']),
+        "列表计算输出字段": all(("{ title:'%s'"%n) in seg for n in ['预期库存数量','欠交数量','可用库存数量','供应商在途数量','库间在途数量','缺货数量','扣减后合计','计算策略']),
+        "ASN列口径": "{ title:'供应商在途数量', key:'asn_qty', dataIndex:'asn_qty', width:125 }" in seg
+                  and seg.find("{ title:'可用库存数量'") < seg.find("{ title:'供应商在途数量'") < seg.find("{ title:'库间在途数量'"),
+        "ASN参与库存构成": "const asn_qty = Math.round(stock*0.20);" in src
+                     and "open_po_qty+available_qty+asn_qty+in_transit_qty-stock" in src
+                     and "available_qty:available_qty, asn_qty:asn_qty, in_transit_qty:in_transit_qty" in src,
+        "ASN写入样例与生成结果": src.count("asn_qty:c.asn_qty") == 2,
         "列表计划数量": "{ title:'计划数量', key:'plan_qty'" in seg,
         "列表无差异字段": "{ title:'差异'" not in seg,
         "列表无同步状态": "sync_status" not in seg,
@@ -1216,7 +1222,7 @@ def check_preplan_page():
         "样例数据": "function buildFcPrePlan" in src and "id:'PRE'+(i+1)" in src,
         "生成函数带十年预测": "const raw = {}; fcLongKeys.forEach(k=> raw[k] = Math.max(0, Math.round(Number(r[k])||0)));" in src,
         "详情表展示推算过程": all(x in src for x in ["openPreDetail", "preDetailRows", "line('原始预测值', r.calcRaw)", "line('扣减库存后', r.calcStep)", "line('差异分摊', alloc)", "line('预计划 10 年预测值', r)"]),
-        "详情公共参数": 'class="pre-detail-params"' in src and all(x in src for x in ['label="预期库存">{{ preDetailRow.expected_stock', 'label="供应商">{{ preDetailRow.supplier', 'label="MOQ">{{ preDetailRow.moq']),
+        "详情公共参数": 'class="pre-detail-params"' in src and all(x in src for x in ['label="预期库存">{{ preDetailRow.expected_stock', 'label="供应商">{{ preDetailRow.supplier', 'label="MOQ">{{ preDetailRow.moq', 'label="供应商在途数量">{{ preDetailRow.asn_qty']),
         "详情无校验行": "校验（合计−Q）" not in src,
         "详情为居中弹窗": "<a-modal v-if=\"activeMenu==='po-preplan'\" v-model:open=\"preDetailOpen\"" in src and ":width=\"1180\"" in src,
         "行操作走预计划详情": "if(activeMenu.value==='po-preplan'){ openPreDetail(r); return; }" in src,
