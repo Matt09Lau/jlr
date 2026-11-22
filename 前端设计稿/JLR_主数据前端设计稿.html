@@ -2977,6 +2977,7 @@ mark {
               <div class="toolbar-row">
                 <a-button v-if="!activeDef.noExport" type="primary" @click="genExportCsv(false)">⬇ 导出</a-button>
                 <a-button v-if="!activeDef.noExport" :type="activeMenu.startsWith('inv-')?'primary':'link'" :style="activeMenu.startsWith('inv-')?{}:{padding:0}" @click="genExportCsv(true)">全量导出</a-button>
+                <a-button v-if="activeMenu==='fc-long'" @click="fcBatchImportOpen=true">⬆ 批量导入调整</a-button>
                 <a-button v-if="isFcLongBuyoutDraft" @click="lcOpenCoeffModal">系数调整</a-button>
                 <a-button v-if="isFcLongBuyout && activeMenu!=='fc-long' && !fcEditMode" @click="fcEditMode=true">编辑</a-button>
                 <a-button v-if="isFcLongBuyout && activeMenu!=='fc-long' && fcEditMode" type="primary" @click="fcSaveForecast">保存</a-button>
@@ -3270,6 +3271,28 @@ mark {
                 <a-button @click="fcLongBatchM.open=false">取 消</a-button>
                 <a-button type="primary" style="margin-left:8px;" @click="fcLongBatchApply">确认批量调整</a-button>
               </div>
+            </a-modal>
+
+            <!-- 长周期预测结果：Excel 批量导入调整 -->
+            <a-modal v-model:open="fcBatchImportOpen" title="批量导入调整 · 长周期预测结果" :footer="null" :mask-closable="false" :width="820">
+              <div style="margin-bottom:12px;text-align:right;">
+                <a-button size="small" @click="fcImportDownloadTpl">⬇ 下载导入模板</a-button>
+              </div>
+              <a-table :columns="fcImportFields" :data-source="fcImportRows" row-key="col" size="small" :pagination="false" bordered>
+                <template #bodyCell="{ column, record }">
+                  <template v-if="column.key==='required'"><span :style="{color:record.required==='是'?'#ff4d4f':'#8c8c8c'}">{{ record.required }}</span></template>
+                </template>
+              </a-table>
+              <div style="margin-top:14px;">
+                <a-upload-dragger :before-upload="fcImportBeforeUpload" :show-upload-list="false" accept=".xlsx">
+                  <p class="ant-upload-drag-icon" style="font-size:40px;margin:10px 0;">⇪</p>
+                  <p class="ant-upload-text">选择 Excel 文件（.xlsx）</p>
+                </a-upload-dragger>
+              </div>
+              <div v-if="fcImportResult" style="margin-top:12px;">
+                <a-alert type="success" show-icon :message="'成功导入 '+fcImportResult.ok+' 行；跳过 '+fcImportResult.skip+' 行'" />
+              </div>
+              <div class="jlrs-modal-footer"><a-button type="primary" @click="fcBatchImportOpen=false">关 闭</a-button></div>
             </a-modal>
 
             <!-- 系数调整弹窗（仅长周期预测报表 / 一次买断预测结果） -->
@@ -7429,6 +7452,33 @@ const app = createApp({
         antd.message.success('已保存，预测值未发生变化');
       }
       fcLongEditId.value = null;
+    }
+    /* ===== 长周期预测结果：Excel 批量导入调整（导入数据项与行内调整一致） ===== */
+    const fcBatchImportOpen = ref(false);
+    const fcImportResult = ref(null);
+    const fcImportFields = [
+      { title:'列名', dataIndex:'col', key:'col', width:150 },
+      { title:'是否必填', dataIndex:'required', key:'required', width:90 },
+      { title:'数据要求', dataIndex:'rule', key:'rule' },
+    ];
+    const fcImportRows = [
+      { col:'配件号', required:'是', rule:'须存在于当期长周期预测结果，唯一' },
+      { col:'第1~10年预测', required:'是', rule:'10 列均为非负、最多 2 位小数；与系统值不同才视为调整' },
+      { col:'调整原因', required:'条件', rule:'任一年度预测值变化时必填，最多 100 字' },
+      { col:'调整有效期', required:'是', rule:'YYYY-MM-DD，不早于当天；到期后恢复系统预测' },
+    ];
+    function fcImportDownloadTpl(){
+      const head=['配件号'].concat(fcLongFctYears.map(y=>y+'年预测')).concat(['调整原因','调整有效期']);
+      const sample=['LR000001'].concat(fcLongFctYears.map(()=> '100')).concat(['样机调整','2027-12-31']);
+      const csv='\ufeff'+[head.join(','),sample.join(',')].join('\r\n');
+      const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+      a.download='长周期预测调整导入模板.csv'; a.click(); URL.revokeObjectURL(a.href);
+      msg('导入模板已下载','success');
+    }
+    function fcImportBeforeUpload(file){
+      fcImportResult.value = { ok: 0, skip: 0 };
+      msg('已解析 '+((file&&file.name)||'文件')+'（设计稿示意）','success');
+      return false;
     }
     /* 审批：拆为「审批」（须勾选、仅审选中）与「全量审批」（无需勾选、审全部待审批）；无驳回 */
     const fcLongTab = ref('待审批');
@@ -12674,6 +12724,7 @@ const app = createApp({
       fcRegMdl, fcOpenRegMdl, closeRegMdl, refreshRegMdlCharts, fcApplyRegMdl,
       canEditFc, fcEditMode, isFcLongBuyout, fcRowEditable, fcSaveForecast,
       fcLongEditId, fcLongEditDraft, fcLongRowEditing, fcLongStartEdit, fcLongCancelEdit, fcLongSaveEdit,
+      fcBatchImportOpen, fcImportResult, fcImportFields, fcImportRows, fcImportDownloadTpl, fcImportBeforeUpload,
       fcLongTab, fcLongApproveOpen, fcLongApproveAll, fcLongApproveRemark, fcLongApproveErr,
       fcLongSelRows, fcLongSelApproved, fcLongApproveTargets, fcLongApproveDesc, fcLongApproveConfirm,
       fcLongLogOpen, fcLongLogRows, fcLongLogTitle, fcLongOpenLog, fcLongLog,

@@ -953,6 +953,27 @@ def check_fc_long_import():
     return {"key": "fc-long-批量圆整", "ok": ok, "msg": detail}
 
 
+def check_fc_long_batch_import():
+    """长周期预测结果：Excel 批量导入调整。源码级断言仅 fc-long 页出现导入按钮、居中弹窗含模板下载/字段说明/Excel 上传，
+    导入字段与行内调整一致（10 年预测 / 调整原因 / 调整有效期），不依赖渲染或登录态。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    checks = {
+        "仅 fc-long 显示导入按钮": "v-if=\"activeMenu==='fc-long'\" @click=\"fcBatchImportOpen=true\"" in src,
+        "居中弹窗": "v-model:open=\"fcBatchImportOpen\"" in src and "a-modal" in src,
+        "下载模板": "@click=\"fcImportDownloadTpl\"" in src and "长周期预测调整导入模板.csv" in src,
+        "Excel 上传": "accept=\".xlsx\"" in src and ":before-upload=\"fcImportBeforeUpload\"" in src,
+        "字段表含配件号": "col:'配件号'" in src,
+        "字段表含 10 年预测": "第1~10年预测" in src,
+        "字段表含调整原因": "col:'调整原因'" in src,
+        "字段表含调整有效期": "col:'调整有效期'" in src,
+        "模板列含 10 年": "fcLongFctYears.map(y=>y+'年预测')" in src,
+        "关闭按钮": "@click=\"fcBatchImportOpen=false\"" in src,
+    }
+    miss = [k for k, v in checks.items() if not v]
+    ok = not miss
+    return {"key": "fc-long-Excel导入", "ok": ok, "msg": f"缺失={miss if miss else '无'}"}
+
+
 def check_po_atb_bridge_integer():
     """All Time Buy / Bridge Buy 计划生成弹窗：计划数量须为整数，生成前须校验来源预测结果（全部配件 10 年）均已圆整。
     源码级断言：两生成函数改为校验全量来源数据（fcBuyoutData / fcLongData），新增全圆整计算属性并用于弹窗警告横幅与生成按钮禁用，
@@ -2439,6 +2460,9 @@ def main():
         r = check_fc_long_import()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-long-批量圆整  {r['msg']}")
+        r = check_fc_long_batch_import()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] fc-long-Excel导入 {r['msg']}")
         r = check_fc_adjust_reason()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-调整原因    {r['msg']}")
