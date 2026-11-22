@@ -375,24 +375,14 @@ mark {
   }
   .batch-expand-btn:hover{background:#e6f4ff;}
   .filter-items .f-item:has(.batch-textarea){align-items:flex-start;}
-  /* 批量搜索大弹窗 textarea */
+  /* 批量搜索弹窗 textarea（窄长布局） */
   .batch-modal-textarea{
-    width:100%;min-height:240px;max-height:400px;padding:10px 12px;
+    width:100%;min-height:380px;max-height:60vh;padding:10px 12px;
     border:1px solid #d9d9d9;border-radius:6px;font-size:13px;line-height:1.6;
     font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,monospace;
     overflow-y:auto;outline:none;transition:border-color .2s;resize:vertical;
   }
   .batch-modal-textarea:focus{border-color:#1677ff;box-shadow:0 0 0 2px rgba(22,119,255,.1);}
-  .batch-modal-preview{
-    margin-top:10px;padding:10px 12px;background:#fafafa;border-radius:6px;
-    min-height:40px;max-height:100px;overflow-y:auto;border:1px solid #f0f0f0;
-    display:flex;flex-wrap:wrap;gap:6px;align-content:flex-start;
-  }
-  .batch-token-chip{
-    display:inline-block;padding:2px 8px;background:#e6f4ff;border:1px solid #91caff;
-    border-radius:4px;font-size:12px;color:#1677ff;line-height:18px;font-family:monospace;
-  }
-  .batch-token-more{color:#8c8c8c;font-size:12px;align-self:center;}
   .filter-actions{display:flex;align-items:center;gap:14px;}
   .filter-actions .act{cursor:pointer;color:rgba(0,0,0,.6);font-size:16px;display:flex;align-items:center;gap:3px;}
   .filter-actions .act:hover{color:#1677ff;}
@@ -647,7 +637,7 @@ mark {
   .chain-empty{color:#bfbfbf;font-size:12px;}
 .mail-tpl-focus td { background:#e6f4ff !important; }
 </style>
-<link rel="stylesheet" href="inventory-strategy.css?v=20261022-7">
+<link rel="stylesheet" href="inventory-strategy.css?v=20261119-ui2">
 </head>
 <body>
 <script type="text/x-template" id="app-tpl">
@@ -719,38 +709,30 @@ mark {
         </div>
       </a-modal>
 
-      <!-- 批量搜索大弹窗：方案二，配件扩展属性专用 -->
-      <a-modal v-model:open="batchModalOpen" :title="batchModalField ? '批量录入 · '+batchModalField.label : '批量录入'" width="640" :footer="null" :mask-closable="false">
-        <div v-if="batchModalField">
-          <div style="font-size:12px;color:#8c8c8c;margin-bottom:6px">
-            支持换行、逗号、分号、Tab、CSV 双引号分隔符粘贴，共识别 <b style="color:#1677ff">{{ batchModalTokens }}</b> 个
-          </div>
-          <textarea
-            v-model="genFilters[activeMenu][batchModalField.key]"
-            class="batch-modal-textarea"
-            :placeholder="'每行一个或用逗号/分号/Tab分隔，支持批量粘贴 100+ 个'"
-            allow-clear
-          ></textarea>
-          <div class="batch-modal-preview">
-            <div v-if="!batchModalTokens" style="color:#bfbfbf;font-size:12px">暂无内容，请在上方粘贴配件号</div>
-            <template v-else>
-              <template v-for="(t,i) in batchModalTokens.slice(0,50)" :key="i">
-                <span class="batch-token-chip">{{ t }}</span>
-              </template>
-              <span v-if="batchModalTokens.length>50" class="batch-token-more">+{{ batchModalTokens.length-50 }} 个</span>
-            </template>
-          </div>
-          <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px;padding-top:12px;border-top:1px solid #f0f0f0">
-            <a-button @click="genFilters[activeMenu][batchModalField.key]='';batchModalOpen=false">清空</a-button>
-            <a-button @click="batchModalOpen=false">取消</a-button>
-            <a-button type="primary" @click="batchModalOpen=false">确定（已录入 {{ batchModalTokens }} 个）</a-button>
-          </div>
-        </div>
-      </a-modal>
     </div>
   </div>
 
   <div v-else class="layout-root">
+
+    <!-- 批量搜索大弹窗：配件号 / 仓库编码等批量录入（登录后主内容区，登录页内不可见） -->
+    <a-modal v-model:open="batchModalOpen" :title="batchModalField ? '批量录入 · '+batchModalField.label : '批量录入'" :width="440" :footer="null" :mask-closable="false">
+      <div v-if="batchModalField">
+        <div style="font-size:12px;color:#8c8c8c;margin-bottom:6px">
+          支持换行、逗号、分号、Tab、双引号分隔符粘贴，共识别 <b style="color:#1677ff">{{ batchModalTokens }}</b> 个
+        </div>
+        <textarea
+          v-model="genFilters[activeMenu][batchModalField.key]"
+          class="batch-modal-textarea"
+          :placeholder="'每行一个或用逗号/分号/Tab分隔，支持批量粘贴 100+ 个'"
+          allow-clear
+        ></textarea>
+        <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid #f0f0f0">
+          <a-button @click="genFilters[activeMenu][batchModalField.key]='';batchModalOpen=false">清空</a-button>
+          <a-button @click="batchModalOpen=false">取消</a-button>
+          <a-button type="primary" @click="batchModalOpen=false">确定（已录入 {{ batchModalTokens }} 个）</a-button>
+        </div>
+      </div>
+    </a-modal>
 
     <!-- ================= 顶部栏 ================= -->
     <div class="top-bar">
@@ -5332,7 +5314,7 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 <script src="global-parameters.js?v=20261026-derived-service"></script>
 <script src="inventory-results.js?v=20261119-plan-v6"></script>
 <script src="inventory-strategy.js?v=20261119-purchase-simplify"></script>
-<script src="fallback-rule.js?v=20261119-cards"></script>
+<script src="fallback-rule.js?v=20261120-fieldsrc3"></script>
 <script>
 /* ================= 模拟数据（确定性随机，每次打开一致） ================= */
 let _seed = 20260918;
@@ -9682,11 +9664,12 @@ const app = createApp({
     /* 批量搜索大弹窗状态 */
     const batchModalOpen = ref(false);
     const batchModalField = ref(null);
-    const batchModalTokens = computed(()=>{
-      if(!batchModalField.value) return 0;
+    const batchModalTokenList = computed(()=>{
+      if(!batchModalField.value) return [];
       const v = genFilters[activeMenu.value]?.[batchModalField.value.key];
-      return v ? parseBatchQuery(v).length : 0;
+      return v ? parseBatchQuery(v) : [];
     });
+    const batchModalTokens = computed(()=> batchModalTokenList.value.length );
     const openBatchModal = (f)=>{ batchModalField.value = f; batchModalOpen.value = true; };
     const activeDef = computed(()=> pageDefs[activeMenu.value] || { detailTitle:'', idField:'id', columns:[], filters:[], isExtension:false, scrollX:1000 });
     const genFiltered = computed(()=>{
@@ -12804,7 +12787,7 @@ const app = createApp({
       rollDetailOpen, rollDetailRow, rollOpenDetail, rollDetailMetricCols, rollDetailMetricRows,
       rollExportOpen, rollExportFields, rollToggleExportField, rollDoExport, rollDoSearch, rollResetFilters, poRegVehicleCodes,
       isBaseMenu, baseMenuKeys, genericKeys, activeDef,
-      genFilters, genApplied, genPage, genHiddenCols, genExpanded, genFav, genVisibleColumns, genPaged, genFiltered, genCustomRow, batchStats, batchExpandKey, toggleBatchExpand, batchModalOpen, batchModalField, batchModalTokens, openBatchModal,
+      genFilters, genApplied, genPage, genHiddenCols, genExpanded, genFav, genVisibleColumns, genPaged, genFiltered, genCustomRow, batchStats, batchExpandKey, toggleBatchExpand, batchModalOpen, batchModalField, batchModalTokens, batchModalTokenList, openBatchModal,
       genDetailOpen, genDetailRow, openGenDetail, modalDetailKeys,
       preDetailOpen, preDetailRow, preDetailCols, preDetailRows, openPreDetail,
       fcTrendSplit, trendModal, openTrendModal, closeTrendModal, hasTrend, fcReasonErr,
