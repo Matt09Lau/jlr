@@ -1226,6 +1226,7 @@ def check_preplan_page():
         "列表计算输出字段": all(("{ title:'%s'"%n) in seg for n in ['预期库存数量','欠交数量','可用库存数量','供应商在途数量','库间在途数量','缺货数量','扣减后合计','计算策略']),
         "ASN列口径": "{ title:'供应商在途数量', key:'asn_qty', dataIndex:'asn_qty', width:125 }" in seg
                   and seg.find("{ title:'可用库存数量'") < seg.find("{ title:'供应商在途数量'") < seg.find("{ title:'库间在途数量'"),
+        "可用库存数量在欠交数量前": seg.find("{ title:'可用库存数量', key:'available_qty'") < seg.find("{ title:'欠交数量', key:'open_po_qty'"),
         "ASN参与库存构成": "const asn_qty = Math.round(stock*0.20);" in src
                      and "open_po_qty+available_qty+asn_qty+in_transit_qty-stock" in src
                      and "available_qty:available_qty, asn_qty:asn_qty, in_transit_qty:in_transit_qty" in src,
