@@ -6649,7 +6649,7 @@ const app = createApp({
     ];
     const fcImportRows = [
       { col:'配件号', required:'是', rule:'须存在于当期长周期预测结果，唯一' },
-      { col:'第1~10年预测', required:'是', rule:'10 列均为非负、最多 2 位小数；与系统值不同才视为调整' },
+      { col:'第1~10年预测', required:'是', rule:'10 列均为非负整数；与系统值不同才视为调整' },
       { col:'调整原因', required:'条件', rule:'任一年度预测值变化时必填，最多 100 字' },
       { col:'调整有效期', required:'是', rule:'YYYY-MM-DD，不早于当天；到期后恢复系统预测' },
     ];
