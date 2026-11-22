@@ -974,6 +974,23 @@ def check_fc_long_batch_import():
     return {"key": "fc-long-Excel导入", "ok": ok, "msg": f"缺失={miss if miss else '无'}"}
 
 
+def check_fc_long_adjusted_flag():
+    """长周期预测结果：「是否调整」字段用于筛选有变更的预测数据。源码级断言：
+    数据行初始化 adjusted=否、演示数据随预测值同步置是、筛选条件与列表列均已挂载，
+    行内保存后按 _orig 快照重算 adjusted（即「调整后打是标签」）。不依赖渲染或登录态。"""
+    src = open(HTML, encoding="utf-8", errors="replace").read()
+    checks = {
+        "数据行初始化否": "r.adjusted = '否';" in src,
+        "演示数据置是": "r.adjusted = '是'; r.adj_times = 1;" in src,
+        "筛选条件": "{ key:'adjusted', label:'是否调整', type:'select', field:'adjusted'" in src,
+        "列表列": "{ title:'是否调整', key:'adjusted', dataIndex:'adjusted'" in src,
+        "保存后按快照重算": "r.adjusted = fcRowAdjusted(r) ? '是' : '否';" in src,
+    }
+    miss = [k for k, v in checks.items() if not v]
+    ok = not miss
+    return {"key": "fc-long-是否调整", "ok": ok, "msg": f"缺失={miss if miss else '无'}"}
+
+
 def check_po_atb_bridge_integer():
     """All Time Buy / Bridge Buy 计划生成弹窗：计划数量须为整数，生成前须校验来源预测结果（全部配件 10 年）均已圆整。
     源码级断言：两生成函数改为校验全量来源数据（fcBuyoutData / fcLongData），新增全圆整计算属性并用于弹窗警告横幅与生成按钮禁用，
@@ -2475,6 +2492,9 @@ def main():
         r = check_fc_long_batch_import()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-long-Excel导入 {r['msg']}")
+        r = check_fc_long_adjusted_flag()
+        all_ok = all_ok and r["ok"]
+        print(f"[{'✓' if r['ok'] else '✗'}] fc-long-是否调整  {r['msg']}")
         r = check_fc_adjust_reason()
         all_ok = all_ok and r["ok"]
         print(f"[{'✓' if r['ok'] else '✗'}] fc-调整原因    {r['msg']}")

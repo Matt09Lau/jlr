@@ -6049,11 +6049,20 @@ fcWhRegularData.forEach(function(r){ r.fct = fcRegKeys.map(function(k){ return r
 function fcSnapshot(list, keys){
   list.forEach(function(r){
     r.adj_reason = '';
+    r.adjusted = '否';
     const o = {}; keys.forEach(function(k){ o[k] = r[k]; });
     r._orig = o;
   });
 }
 fcSnapshot(fcLongData, fcLongKeys);
+/* 是否调整：演示数据预置 3 行人工调整（同步改预测值+原因，保证与 _orig 快照、趋势图一致），供筛选与调整前后对比复核 */
+[2,5,9].forEach(function(i){
+  var r = fcLongData[i]; if(!r) return;
+  var k = 'y'+(3 + i%3);
+  r[k] = Math.round(Number(r[k]) + 5 + i%3);
+  r.adj_reason = i===2 ? '客户上调需求' : (i===5 ? '项目追加订单' : '保守修正');
+  r.adjusted = '是'; r.adj_times = 1;
+});
 fcSnapshot(fcBuyoutData, fcLongKeys);
 fcSnapshot(fcRegularData, fcRegKeys);
 fcSnapshot(fcWhRegularData, fcRegKeys);
@@ -6134,6 +6143,7 @@ const fcFcFilters = [
 /* 长周期预测报表专用查询条件：审核状态由「待审批 / 已审批」页签承载，仅保留「是否取整」 */
 const fcLongFilters = [
   ...fcFcFilters,
+  { key:'adjusted', label:'是否调整', type:'select', field:'adjusted', options:[{value:'是',label:'是'},{value:'否',label:'否'}] },
   { key:'rounded', label:'是否取整', type:'select', field:'rounded', options:[{value:'是',label:'是'},{value:'否',label:'否'}] },
 ];
 /* 调整原因：人工调整预测值后必填（调整过的行未填时保存拦截，并给出行号 / 配件号） */
@@ -6151,13 +6161,14 @@ const fcFcColsBase = [
   { title:'ABC分类', key:'abc', dataIndex:'abc', width:90, render:'tag', colorMap:fcAbcColorMap },
 ];
 const fcLongDef = {
-  detailTitle:'长周期预测记录', idField:'id', scrollX:2960, isExtension:false,
+  detailTitle:'长周期预测记录', idField:'id', scrollX:3065, isExtension:false,
   filters: fcLongFilters,
   columns:[ ...fcFcColsBase,
     ...Array.from({length:10},(_,k)=> Object.assign(fcNumCol((k+1)+'年预测','y'+(k+1)),{render:'editnum'})),
     { title:'汇总值', key:'longtotal', dataIndex:'longtotal', width:110, render:'longtotal', sorter:(a,b)=>fcLongTotal(a)-fcLongTotal(b) },
     { title:'调整有效期', key:'adj_valid', dataIndex:'adj_valid_until', width:120, render:'editval', sorter:(a,b)=>String(a.adj_valid_until||'').localeCompare(String(b.adj_valid_until||'')) },
     fcReasonCol,
+    { title:'是否调整', key:'adjusted', dataIndex:'adjusted', width:105, render:'tag', colorMap:{'是':'red','否':'blue'} },
     { title:'是否取整', key:'rounded', dataIndex:'rounded', width:100, render:'tag', colorMap:{'是':'green','否':'orange'} },
     { title:'审批人', key:'app_by', dataIndex:'app_by', width:100 },
     { title:'审批时间', key:'app_time', dataIndex:'app_time', width:140 },
@@ -7479,6 +7490,7 @@ const app = createApp({
       fcLongKeys.forEach(k=>{ r[k] = fcLongEditDraft[k]; });
       r.rounded = fcLongKeys.every(k=> Number.isInteger(Number(r[k]))) ? '是' : '否';
       r.adj_reason = fcLongEditDraft.adj_reason;
+      r.adjusted = fcRowAdjusted(r) ? '是' : '否';
       if(changed){
         r.app_status = '调整待审批'; r.adj_times = (r.adj_times||0)+1;
         fcLongLog(r, 'Kevin调整预测', 'Kevin', '人工调整 10 年预测值，调整后须重新审批（第 '+r.adj_times+' 次调整）');
