@@ -1216,6 +1216,8 @@ def check_preplan_page():
         "样例数据": "function buildFcPrePlan" in src and "id:'PRE'+(i+1)" in src,
         "生成函数带十年预测": "const raw = {}; fcLongKeys.forEach(k=> raw[k] = Math.max(0, Math.round(Number(r[k])||0)));" in src,
         "详情表展示推算过程": all(x in src for x in ["openPreDetail", "preDetailRows", "line('原始预测值', r.calcRaw)", "line('扣减库存后', r.calcStep)", "line('差异分摊', alloc)", "line('预计划 10 年预测值', r)"]),
+        "详情公共参数": 'class="pre-detail-params"' in src and all(x in src for x in ['label="预期库存">{{ preDetailRow.expected_stock', 'label="供应商">{{ preDetailRow.supplier', 'label="MOQ">{{ preDetailRow.moq']),
+        "详情无校验行": "校验（合计−Q）" not in src,
         "详情为居中弹窗": "<a-modal v-if=\"activeMenu==='po-preplan'\" v-model:open=\"preDetailOpen\"" in src and ":width=\"1180\"" in src,
         "行操作走预计划详情": "if(activeMenu.value==='po-preplan'){ openPreDetail(r); return; }" in src,
         "生成弹窗列无同步状态": "{title:'同步状态',dataIndex:'sync_status'" not in src,

@@ -260,6 +260,7 @@
   .bt-split-lab{font-size:12px;color:#595959;font-weight:600;margin-bottom:8px;}
   /* ===== 统一弹窗风格（对齐「库存策略参数」：居中弹窗 + 双列表单网格 + 右对齐操作栏） ===== */
   .jlrs-modal-footer{display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #edf0f5;margin-top:24px;padding-top:16px;}
+  .pre-detail-params{margin-bottom:16px;}
   .jlrs-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 24px;}
   .jlrs-form-grid>label{display:flex;flex-direction:column;gap:8px;color:#45536a;font-size:13px;}
   .jlrs-form-grid .ant-select,.jlrs-form-grid .ant-input-number,.jlrs-form-grid .ant-picker{width:100%;}
@@ -4600,6 +4601,11 @@
     <!-- 预计划：计算过程详情（居中弹窗，展示计算实例的完整推算表） -->
     <a-modal v-if="activeMenu==='po-preplan'" v-model:open="preDetailOpen" :title="'计算详情 · ' + (preDetailRow ? preDetailRow.part_code : '')" :width="1180" :footer="null" :mask-closable="false">
       <template v-if="preDetailRow">
+        <a-descriptions class="pre-detail-params" bordered size="small" :column="3">
+          <a-descriptions-item label="预期库存">{{ preDetailRow.expected_stock }}</a-descriptions-item>
+          <a-descriptions-item label="供应商">{{ preDetailRow.supplier }}</a-descriptions-item>
+          <a-descriptions-item label="MOQ">{{ preDetailRow.moq }}</a-descriptions-item>
+        </a-descriptions>
         <a-table :columns="preDetailCols" :data-source="preDetailRows" row-key="label" size="small" :pagination="false" bordered>
           <template #bodyCell="{ column, record }"><span>{{ record[column.dataIndex] }}</span></template>
         </a-table>
@@ -6962,8 +6968,6 @@ const app = createApp({
       const alloc = {}; fcLongKeys.forEach(function(k,i){ alloc[k] = (Number(r['y'+(i+1)])||0) - (Number((r.calcStep||{})[k])||0); });
       rows.push(line('差异分摊', alloc));
       rows.push(line('预计划 10 年预测值', r));
-      const chk = {label:'校验（合计−Q）'}; fcLongKeys.forEach(function(k,i){ chk['y'+(i+1)] = ''; }); chk.total = rows[3].total - r.plan_qty;
-      rows.push(chk);
       return rows;
     });
     function openPreDetail(r){ preDetailRow.value = r; preDetailOpen.value = true; }
