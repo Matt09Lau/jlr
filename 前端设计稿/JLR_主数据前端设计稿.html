@@ -3054,8 +3054,10 @@ mark {
                   </template>
                   <!-- 开关型字段：仓库主数据「是否启用」，页面内直接点击切换 -->
                   <template v-else-if="column.render==='switch'">
-                    <a-switch :checked="record[column.dataIndex]==='启用'" size="small"
-                      @change="v=>onSwitchToggle(record, column, v)"/>
+                    <span @click.stop>
+                      <a-switch :checked="record[column.dataIndex]==='启用'" size="small"
+                        @change="v=>onSwitchToggle(record, column, v)"/>
+                    </span>
                   </template>
                   <template v-else-if="column.render==='block'">
                     <a-tag :color="record[column.dataIndex]==='X'?'red':'green'" style="margin:0;">{{ record[column.dataIndex]==='X'?'已冻结':'正常' }}</a-tag>
@@ -10241,7 +10243,6 @@ const app = createApp({
     const whSel = ref([]);
     function onSwitchToggle(record, column, checked){
       record[column.dataIndex] = checked ? '启用' : '禁用';
-      antd.message.success((record.warehouse_code || '') + ' 已' + (checked ? '启用' : '禁用') + '（设计稿示意）');
     }
     function whBatchSet(enable){
       if(!whSel.value.length) return;
