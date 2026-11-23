@@ -2912,7 +2912,7 @@ mark {
 
             <!-- 仓库主数据：仅维护启用/禁用，其余字段由 IPOS 同步 -->
             <a-alert v-if="activeMenu==='wh-master'" type="info" show-icon style="margin-bottom:12px;"
-              message="本页面仅支持维护仓库的「启用 / 禁用」状态（可单条编辑，也可勾选后批量启用/禁用）。仓库编码、仓库名称、仓库类型、国家均由 IPOS 同步，不可修改。"/>
+              message="本页面仅支持维护仓库的「启用 / 禁用」状态：列表中可直接点击开关切换单条，也可勾选多行后批量启用/禁用。仓库编码、仓库名称、仓库类型、国家均由 IPOS 同步，不可修改。"/>
 
             <!-- 金额分类分位边界说明（按销售组织分组计算） -->
             <a-alert v-if="['mat-master','mat-ext'].includes(activeMenu)" type="info" show-icon style="margin-bottom:12px;">
@@ -3051,6 +3051,11 @@ mark {
                   </template>
                   <template v-else-if="column.render==='tag'">
                     <a-tag :color="genTagColor(column, record)" style="margin:0;">{{ record[column.dataIndex] }}</a-tag>
+                  </template>
+                  <!-- 开关型字段：仓库主数据「是否启用」，页面内直接点击切换 -->
+                  <template v-else-if="column.render==='switch'">
+                    <a-switch :checked="record[column.dataIndex]==='启用'" size="small"
+                      @change="v=>onSwitchToggle(record, column, v)"/>
                   </template>
                   <template v-else-if="column.render==='block'">
                     <a-tag :color="record[column.dataIndex]==='X'?'red':'green'" style="margin:0;">{{ record[column.dataIndex]==='X'?'已冻结':'正常' }}</a-tag>
@@ -5858,14 +5863,14 @@ const matExtFilters = [
   {key:'pcat', label:'采购类别', type:'select', field:'purchase_category', options: purchaseCatOptions.map(v=>({value:v,label:v}))},
 ];
 const whMasterDef = {
-  isExtension:false, editable:true, detailTitle:'仓库', idField:'warehouse_code', scrollX:1060,
+  isExtension:false, editable:false, detailTitle:'仓库', idField:'warehouse_code', scrollX:1060,
   columns:[
     {title:'仓库编码', key:'warehouse_code', dataIndex:'warehouse_code', width:120, fixed:'left', render:'link', readonly:true},
     {title:'仓库名称', key:'warehouse_name', dataIndex:'warehouse_name', width:160, readonly:true},
     {title:'仓库类型', key:'warehouse_type', dataIndex:'warehouse_type_text', width:120, render:'tag', colorMap:{1:'blue',2:'geekblue',3:'cyan'}, sorter:(a,b)=>a.warehouse_type-b.warehouse_type},
     {title:'国家', key:'country', dataIndex:'country', width:100, readonly:true, sorter:(a,b)=>a.country.localeCompare(b.country)},
-    {title:'是否启用', key:'is_enabled', dataIndex:'is_enabled', width:110, render:'tag', colorMap:{'启用':'green','禁用':'default'},
-      editable:true, options:[{value:'启用',label:'启用'},{value:'禁用',label:'禁用'}]},
+    {title:'是否启用', key:'is_enabled', dataIndex:'is_enabled', width:110, render:'switch',
+      sorter:(a,b)=>String(a.is_enabled).localeCompare(String(b.is_enabled))},
     {title:'数据同步时间', key:'sync_data_time', dataIndex:'sync_data_time', width:165},
     {title:'操作', key:'action', width:110, fixed:'right'},
   ],
@@ -10234,6 +10239,10 @@ const app = createApp({
 
     /* ---- 仓库主数据（wh-master）：仅维护启用/禁用，支持单条与批量 ---- */
     const whSel = ref([]);
+    function onSwitchToggle(record, column, checked){
+      record[column.dataIndex] = checked ? '启用' : '禁用';
+      antd.message.success((record.warehouse_code || '') + ' 已' + (checked ? '启用' : '禁用') + '（设计稿示意）');
+    }
     function whBatchSet(enable){
       if(!whSel.value.length) return;
       const rows = whData.filter(r=>whSel.value.includes(r.id));
@@ -12963,7 +12972,7 @@ const app = createApp({
       fcBatchable, fcBuyoutSel, fcBatchSelIds,
       fcBridgeOpen, fcBridgeYear, fcBridgeYearsN, fcBridgeYearRange, fcBridgeDone, fcBridgeData, fcBridgeDetailCols, fcBridgeDetailRows, fcBridgeScrollX,
       fcBridgeDetailRowClass, fcBridgeGenSum, fcBridgeCols, fcBridgeGenerate, fcBridgeAllRounded, fcLongFctYears,
-      fcLongTotal, fcLongYearVal, isFcLong, fcLongSel, fcLongBatchM, fcLongBatchApply, genRowSelection, whSel, whBatchSet,
+      fcLongTotal, fcLongYearVal, isFcLong, fcLongSel, fcLongBatchM, fcLongBatchApply, genRowSelection, whSel, whBatchSet, onSwitchToggle,
       fcLongBatchTargets,
       poIssueSel, poIssueSelected, poIssueCanApprove, poIssueCanReject,
       poIssueApproveOpen, poIssueApproveRemark, poIssueApproveErr, poIssueApproveConfirm,
