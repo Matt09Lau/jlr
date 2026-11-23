@@ -2910,6 +2910,10 @@ mark {
             <a-alert v-if="['fc-long-history','fc-regular-history','fc-wh-regular-history'].includes(activeMenu)" type="info" show-icon style="margin-bottom:12px;"
               message="历史预测结果：按数据日期归档、只读；长周期保留过去 6 期，常规预测保留过去 12 期，仓库级常规预测保留过去 12 周。仅供查询、版本对比与导出，如需重新预测或人工调整请回到当期预测页面操作。"/>
 
+            <!-- 仓库主数据：仅维护启用/禁用，其余字段由 IPOS 同步 -->
+            <a-alert v-if="activeMenu==='wh-master'" type="info" show-icon style="margin-bottom:12px;"
+              message="本页面仅支持维护仓库的「启用 / 禁用」状态（可单条编辑，也可勾选后批量启用/禁用）。仓库编码、仓库名称、仓库类型、国家均由 IPOS 同步，不可修改。"/>
+
             <!-- 金额分类分位边界说明（按销售组织分组计算） -->
             <a-alert v-if="['mat-master','mat-ext'].includes(activeMenu)" type="info" show-icon style="margin-bottom:12px;">
               <template #message>金额分类：按 <b>销售组织</b> 分组，对销售价计算 P25 / P50 / P75 分位作为分档边界（左开右闭，四档各约 25%）</template>
@@ -2974,6 +2978,8 @@ mark {
                 <a-button v-if="activeMenu==='fc-long' && fcLongTab==='待审批'" @click="fcLongApproveAll=true;fcLongApproveOpen=true" title="无需勾选，直接对全部待审批零件审批">全量审批</a-button>
                 <a-button v-if="activeMenu==='fc-regular' || activeMenu==='fc-wh-regular'" @click="fcGenRegularPo">生成采购计划</a-button>
                 <a-button v-if="activeDef.isExtension && !activeDef.noImport" type="default" @click="genImportOpen=true">⬆ 导入</a-button>
+                <a-button v-if="activeMenu==='wh-master'" type="primary" :disabled="!whSel.length" @click="whBatchSet('启用')">批量启用（{{ whSel.length }}）</a-button>
+                <a-button v-if="activeMenu==='wh-master'" :disabled="!whSel.length" @click="whBatchSet('禁用')">批量禁用（{{ whSel.length }}）</a-button>
                 <a-button v-if="activeMenu==='part-group'" type="primary" @click="openPgModal('add')">＋ 新建分组</a-button>
                 <a-button v-if="activeMenu==='part-group'" :disabled="!pgSel.length" @click="pgBatchStatus('启用')">批量启用（{{ pgSel.length }}）</a-button>
                 <a-button v-if="activeMenu==='part-group'" :disabled="!pgSel.length" @click="pgBatchStatus('停用')">批量停用（{{ pgSel.length }}）</a-button>
@@ -5854,10 +5860,10 @@ const matExtFilters = [
 const whMasterDef = {
   isExtension:false, editable:true, detailTitle:'仓库', idField:'warehouse_code', scrollX:1060,
   columns:[
-    {title:'仓库编码', key:'warehouse_code', dataIndex:'warehouse_code', width:120, fixed:'left', render:'link', editable:true, readonly:true},
-    {title:'仓库名称', key:'warehouse_name', dataIndex:'warehouse_name', width:160, editable:true, readonly:true},
+    {title:'仓库编码', key:'warehouse_code', dataIndex:'warehouse_code', width:120, fixed:'left', render:'link', readonly:true},
+    {title:'仓库名称', key:'warehouse_name', dataIndex:'warehouse_name', width:160, readonly:true},
     {title:'仓库类型', key:'warehouse_type', dataIndex:'warehouse_type_text', width:120, render:'tag', colorMap:{1:'blue',2:'geekblue',3:'cyan'}, sorter:(a,b)=>a.warehouse_type-b.warehouse_type},
-    {title:'国家', key:'country', dataIndex:'country', width:100, editable:true, readonly:true, sorter:(a,b)=>a.country.localeCompare(b.country)},
+    {title:'国家', key:'country', dataIndex:'country', width:100, readonly:true, sorter:(a,b)=>a.country.localeCompare(b.country)},
     {title:'是否启用', key:'is_enabled', dataIndex:'is_enabled', width:110, render:'tag', colorMap:{'启用':'green','禁用':'default'},
       editable:true, options:[{value:'启用',label:'启用'},{value:'禁用',label:'禁用'}]},
     {title:'数据同步时间', key:'sync_data_time', dataIndex:'sync_data_time', width:165},
@@ -10226,6 +10232,15 @@ const app = createApp({
       msg('导出成功，共 ' + rows.length + ' 条（CSV 已下载）', 'success');
     }
 
+    /* ---- 仓库主数据（wh-master）：仅维护启用/禁用，支持单条与批量 ---- */
+    const whSel = ref([]);
+    function whBatchSet(enable){
+      if(!whSel.value.length) return;
+      const rows = whData.filter(r=>whSel.value.includes(r.id));
+      rows.forEach(r=>{ r.is_enabled = enable; });
+      antd.message.success('已' + enable + ' ' + rows.length + ' 个仓库（设计稿示意）');
+      whSel.value = [];
+    }
     /* ---- 配件组管理（part-group）---- */
     const pgSel = ref([]);
     const pgModal = reactive({ open:false, mode:'add', err:'', form:pgBlankForm() });
@@ -11577,6 +11592,7 @@ const app = createApp({
       if(isFcLong.value) return { selectedRowKeys: fcLongSel.value, onChange: k => { fcLongSel.value = k; }, columnWidth:48 };
       if(isFcBuyoutOnly.value) return { selectedRowKeys: fcBuyoutSel.value, onChange: k => { fcBuyoutSel.value = k; }, columnWidth:48 };
       if(activeMenu.value==='part-group') return { selectedRowKeys: pgSel.value, onChange: k => { pgSel.value = k; }, columnWidth:48 };
+      if(activeMenu.value==='wh-master') return { selectedRowKeys: whSel.value, onChange: k => { whSel.value = k; }, columnWidth:48 };
       if(activeMenu.value==='po-issue') return { selectedRowKeys: poIssueSel.value, onChange: k => { poIssueSel.value = k; }, columnWidth:48 };
       return null;
     });
@@ -12947,7 +12963,7 @@ const app = createApp({
       fcBatchable, fcBuyoutSel, fcBatchSelIds,
       fcBridgeOpen, fcBridgeYear, fcBridgeYearsN, fcBridgeYearRange, fcBridgeDone, fcBridgeData, fcBridgeDetailCols, fcBridgeDetailRows, fcBridgeScrollX,
       fcBridgeDetailRowClass, fcBridgeGenSum, fcBridgeCols, fcBridgeGenerate, fcBridgeAllRounded, fcLongFctYears,
-      fcLongTotal, fcLongYearVal, isFcLong, fcLongSel, fcLongBatchM, fcLongBatchApply, genRowSelection,
+      fcLongTotal, fcLongYearVal, isFcLong, fcLongSel, fcLongBatchM, fcLongBatchApply, genRowSelection, whSel, whBatchSet,
       fcLongBatchTargets,
       poIssueSel, poIssueSelected, poIssueCanApprove, poIssueCanReject,
       poIssueApproveOpen, poIssueApproveRemark, poIssueApproveErr, poIssueApproveConfirm,
