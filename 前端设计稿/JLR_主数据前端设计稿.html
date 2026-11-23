@@ -2910,6 +2910,16 @@ mark {
             <a-alert v-if="['fc-long-history','fc-regular-history','fc-wh-regular-history'].includes(activeMenu)" type="info" show-icon style="margin-bottom:12px;"
               message="历史预测结果：按数据日期归档、只读；长周期保留过去 6 期，常规预测保留过去 12 期，仓库级常规预测保留过去 12 周。仅供查询、版本对比与导出，如需重新预测或人工调整请回到当期预测页面操作。"/>
 
+            <!-- 金额分类分位边界说明（按销售组织分组计算） -->
+            <a-alert v-if="['mat-master','mat-ext'].includes(activeMenu)" type="info" show-icon style="margin-bottom:12px;">
+              <template #message>金额分类：按 <b>销售组织</b> 分组，对销售价计算 P25 / P50 / P75 分位作为分档边界（左开右闭，四档各约 25%）</template>
+              <template #description>
+                <div v-for="(c,org) in priceClassCuts" :key="org">
+                  {{ org }}：P25 = {{ c.p25 }} 元 ｜ P50 = {{ c.p50 }} 元 ｜ P75 = {{ c.p75 }} 元（样本 {{ c.n }} 个）
+                </div>
+              </template>
+            </a-alert>
+
             <!-- 长周期预测报表：待审批 / 已审批 双页签；审批在待审批，生成预计划 / Bridge buy 在已审批，调整两页签均可操作 -->
             <a-tabs v-if="activeMenu==='fc-long'" v-model:activeKey="fcLongTab" type="card" style="margin-bottom:12px;">
               <a-tab-pane key="待审批" tab="待审批"/>
@@ -5513,16 +5523,34 @@ for(let i=0;i<partPool.length;i++){
     mfrPool.push('MFR' + rint(10000,99999));
   }
 }
+/* 销售组织：金额分类按销售组织分组计算分位数，同组内价格才具可比性 */
+const salesOrgList = [
+  'CJ01 捷豹路虎中国',
+  'CJ02 捷豹路虎（上海）',
+  'LR01 路虎中国',
+];
+/* 各销售组织的销售价池：刻意保留并列价格，贴近真实定价（同价位配件往往多条） */
+const salesOrgPricePool = {
+  'CJ01 捷豹路虎中国': [28, 45, 45, 66, 66, 88, 88, 128, 168, 268],
+  'CJ02 捷豹路虎（上海）': [58, 105, 105, 168, 168, 380, 380, 680, 1280, 1280],
+  'LR01 路虎中国': [128, 210, 210, 460, 460, 780, 1580, 1580, 2680, 2680],
+};
+/* 每个组织的价格池打乱后依次取用，保证组内价格集合固定（分位边界稳定），但配件与价格的对应关系随机 */
+const salesOrgPriceQueue = {};
+Object.keys(salesOrgPricePool).forEach(k=>{
+  const arr = salesOrgPricePool[k].slice();
+  for(let i=arr.length-1;i>0;i--){ const j=Math.floor(rnd()*(i+1)); const tmp=arr[i]; arr[i]=arr[j]; arr[j]=tmp; }
+  salesOrgPriceQueue[k] = arr;
+});
 partPool.forEach((p, idx)=>{
   const t = pick(materialTypes);
   const mfr = mfrPool[idx];
-  // sales_price 用于计算金额分类（分 4 档）
-  const salesPrice = +(3 + rnd()*110).toFixed(2);
-  let priceClass = '';
-  if(salesPrice<=25) priceClass='25';
-  else if(salesPrice<=50) priceClass='50';
-  else if(salesPrice<=75) priceClass='75';
-  else priceClass='100';
+  /* 销售组织轮询分配，保证每组织都有足够样本（30 条 → 每组 10 条） */
+  const salesOrg = salesOrgList[idx % salesOrgList.length];
+  /* 销售价从该组织的价格池取用，因此天然存在并列价 */
+  const salesPrice = (salesOrgPriceQueue[salesOrg] && salesOrgPriceQueue[salesOrg].length)
+    ? salesOrgPriceQueue[salesOrg].shift()
+    : pick(salesOrgPricePool[salesOrg]);
   matData.push({
     id: 'M' + (idx+1),
     material_code: p[0],
@@ -5540,10 +5568,39 @@ partPool.forEach((p, idx)=>{
     planner: pick(planners),
     purchase_category: purchaseCatMap[pick(['Y','IH','D'])],
     sales_price: salesPrice,
-    price_class: priceClass,
+    sales_org: salesOrg,
+    price_class: '',
     sync_data_time: '2026-09-' + pad2(rint(10,18)) + ' 0' + rint(1,3) + ':' + pad2(rint(10,59)),
   });
 });
+/* 金额分类：按销售组织分组，对销售价升序求 P25/P50/P75（线性插值），左开右闭分 4 档 */
+const priceClassCuts = {};
+(function computePriceClass(){
+  const groups = {};
+  matData.forEach(r=>{ (groups[r.sales_org] = groups[r.sales_org] || []).push(r); });
+  Object.keys(groups).forEach(org=>{
+    const rows = groups[org];
+    const prices = rows.map(r=>r.sales_price).filter(v=>v>0).sort((a,b)=>a-b);
+    const n = prices.length;
+    const pct = p=>{
+      if(!n) return null;
+      if(n===1) return prices[0];
+      const h = (n-1)*p, k = Math.floor(h), f = h-k;
+      const a = prices[k], b = prices[Math.min(k+1, n-1)];
+      return +(a + f*(b-a)).toFixed(2);
+    };
+    const p25 = pct(0.25), p50 = pct(0.5), p75 = pct(0.75);
+    priceClassCuts[org] = { p25, p50, p75, n };
+    rows.forEach(r=>{
+      const v = r.sales_price;
+      if(v==null || !isFinite(v) || v<=0) r.price_class = '';
+      else if(v<=p25) r.price_class = '25';
+      else if(v<=p50) r.price_class = '50';
+      else if(v<=p75) r.price_class = '75';
+      else r.price_class = '100';
+    });
+  });
+})();
 /* 通用件 common_part：同一 manufacturer_part_no 下的其他配件号（工程件号相同的互为通用件） */
 {
   const mfrMap = {};
@@ -5737,7 +5794,7 @@ function partHasValidContract(code){
 
 /* ================= 通用页面定义（pageDefs，数据驱动） ================= */
 const matMasterDef = {
-  isExtension:false, detailTitle:'配件', idField:'material_code', scrollX:2000,
+  isExtension:false, detailTitle:'配件', idField:'material_code', scrollX:2140,
   columns:[
     {title:'配件号', key:'material_code', dataIndex:'material_code', width:145, fixed:'left', render:'link', sorter:(a,b)=>a.material_code.localeCompare(b.material_code)},
     {title:'配件名称', key:'material_name', dataIndex:'material_name', width:165, ellipsis:true, sorter:(a,b)=>a.material_name.localeCompare(b.material_name)},
@@ -5751,6 +5808,7 @@ const matMasterDef = {
     {title:'通用件', key:'common_part', dataIndex:'common_part', width:120, render:'link', sorter:(a,b)=>String(a.common_part).localeCompare(String(b.common_part))},
     {title:'体积(m³)', key:'volume', dataIndex:'volume', width:100, sorter:(a,b)=>a.volume-b.volume},
     {title:'毛重(kg)', key:'gross_weight', dataIndex:'gross_weight', width:100, sorter:(a,b)=>a.gross_weight-b.gross_weight},
+    {title:'销售组织', key:'sales_org', dataIndex:'sales_org', width:150, sorter:(a,b)=>String(a.sales_org).localeCompare(String(b.sales_org))},
     {title:'销售价(元)', key:'sales_price', dataIndex:'sales_price', width:110, sorter:(a,b)=>a.sales_price-b.sales_price},
     {title:'金额分类', key:'price_class', dataIndex:'price_class', width:100, render:'tag', colorMap:{'25':'default','50':'blue','75':'geekblue','100':'purple'}, sorter:(a,b)=>String(a.price_class).localeCompare(String(b.price_class))},
     {title:'计划员', key:'planner', dataIndex:'planner', width:90, sorter:(a,b)=>a.planner.localeCompare(b.planner)},
@@ -5764,7 +5822,13 @@ const matMasterDef = {
     {key:'group', label:'物料组', type:'select', field:'material_group', options: materialGroups.map(t=>({value:t,label:t}))},
     {key:'planner', label:'计划员', type:'select', field:'planner', options: planners.map(t=>({value:t,label:t}))},
     {key:'mfr', label:'制造商', type:'select', field:'manufacturer', options: manufacturers.map(t=>({value:t,label:t}))},
-    {key:'priceclass', label:'金额分类', type:'select', field:'price_class', options:[{value:'25',label:'0~25'},{value:'50',label:'25~50'},{value:'75',label:'50~75'},{value:'100',label:'75~100'}]},
+    {key:'salesorg', label:'销售组织', type:'select', field:'sales_org', options: salesOrgList.map(v=>({value:v,label:v}))},
+    {key:'priceclass', label:'金额分类', type:'select', field:'price_class', options:[
+      {value:'25',label:'25档（≤P25，最低25%）'},
+      {value:'50',label:'50档（P25~P50）'},
+      {value:'75',label:'75档（P50~P75）'},
+      {value:'100',label:'100档（>P75，最高25%）'},
+    ]},
   ],
   data: matData,
 };
@@ -7240,7 +7304,7 @@ const partGroupDef = {
 
 const pageDefs = {
   'mat-master': matMasterDef,
-  'mat-ext': Object.assign({}, matMasterDef, { isExtension:true, columns: matExtColumns, filters: matExtFilters, scrollX:1880 }),
+  'mat-ext': Object.assign({}, matMasterDef, { isExtension:true, columns: matExtColumns, filters: matExtFilters, scrollX:2030 }),
   'wh-master': whMasterDef,
   'dealer-ext': dealerExtDef,
   'supplier': supplierDef,
@@ -12812,7 +12876,7 @@ const app = createApp({
       rollSelRows, rollRows, rollPaged, rollFiltered, rollTabCount, rollSyncColor,
       rollDetailOpen, rollDetailRow, rollOpenDetail, rollDetailMetricCols, rollDetailMetricRows,
       rollExportOpen, rollExportFields, rollToggleExportField, rollDoExport, rollDoSearch, rollResetFilters, poRegVehicleCodes,
-      isBaseMenu, baseMenuKeys, genericKeys, activeDef,
+      isBaseMenu, baseMenuKeys, genericKeys, activeDef, priceClassCuts,
       genFilters, genApplied, genPage, genHiddenCols, genExpanded, genFav, genVisibleColumns, genPaged, genFiltered, genCustomRow, batchStats, batchExpandKey, toggleBatchExpand, batchModalOpen, batchModalField, batchModalTokens, batchModalTokenList, batchModalValue, openBatchModal, commitBatchModal, clearBatchModal, batchCount,
       genDetailOpen, genDetailRow, openGenDetail, modalDetailKeys,
       preDetailOpen, preDetailRow, preDetailCols, preDetailRows, openPreDetail,

@@ -959,8 +959,18 @@ function validateManual(row,input){
  if(!po&&present(r.adjustReorder)&&!(r.adjustReorder>=0&&r.adjustReorder<=r.adjustTarget))errors.push('STO人工再订购点须在0和调整后目标库存之间');
  return [...new Set(errors)];
 }
+/* 配件号 / 仓库编码：批量粘贴解析与匹配（换行/逗号/分号/Tab 分隔，单值模糊、多值精确命中任一） */
+function parseBatchCodes(v){if(v==null)return [];return String(v).split(/[\n\r,，;；\t]+/).map(s=>s.trim()).filter(Boolean);}
+function matchBatchCodes(recordValue,q){
+ const tokens=parseBatchCodes(q);if(!tokens.length)return true;
+ const raw=String(recordValue==null?'':recordValue).trim();
+ if(tokens.length===1)return raw.toUpperCase().includes(tokens[0].toUpperCase());
+ return tokens.some(t=>t.toUpperCase()===raw.toUpperCase());
+}
 function filterRows(rows,q){return rows.filter(r=>{
- for(const k of ['part','partName','wh','planner','buildVersion','noStockReason'])if(q[k]&&!String(r[k]||'').toLowerCase().includes(q[k].toLowerCase()))return false;
+ if(q.part&&!matchBatchCodes(r.part,q.part))return false;
+ if(q.wh&&!matchBatchCodes(r.wh,q.wh))return false;
+ for(const k of ['partName','planner','buildVersion','noStockReason'])if(q[k]&&!String(r[k]||'').toLowerCase().includes(q[k].toLowerCase()))return false;
  if(q.abc&&r.abc!==q.abc)return false;
  if(q.dateStart&&r.useDate<q.dateStart||q.dateEnd&&r.useDate>q.dateEnd)return false;
  for(const source of Object.values(sourcePairs))if(q[source]&&r[source]!==q[source])return false;
@@ -973,13 +983,20 @@ const poDisplayOrder=["buildType", "buildVersion", "useDate", "part", "partName"
 definitions.PO=poDisplayOrder.map(key=>definitions.PO.find(f=>f.key===key));
 const stoDisplayOrder=["buildType", "buildVersion", "useDate", "part", "partName", "wh", "whName", "shipWh", "shipName", "planner", "abc", "xyz", "volume", "adjustTarget", "adjustReorder", "adjustMin", "adjustMax", "adjustReason", "noStockReason", "riskTarget", "riskReorder", "min", "max", "target", "targetBreak", "reorder", "reorderBreak", "weekly", "weeklyDate", "weeklySales", "volatility", "transferDays", "transferSource", "transferCycle", "transferCycleSource", "days", "daysSource", "start", "end", "rate", "rateSource", "service", "serviceSource", "maxCoef", "maxCoefSource", "maxDays", "maxDaysSource", "minCoef", "minCoefSource", "minDays", "minDaysSource", "updated"];
 definitions.STO=stoDisplayOrder.map(key=>definitions.STO.find(f=>f.key===key));
-const api={definitions,sourcePairs,period,isBreak,hasGlobal,finalize,seed,validateManual,filterRows,sortResults,csv};
+const api={definitions,sourcePairs,period,isBreak,hasGlobal,finalize,seed,validateManual,filterRows,sortResults,csv,parseBatchCodes,matchBatchCodes};
 if(typeof module!=='undefined'&&module.exports)module.exports=api;
 root.CsppStorageResults=api;if(!root.Vue)return;
 const {ref,reactive,computed,watch}=root.Vue;
 root.CsppStorageResultsComponent={props:{resultType:{type:String,default:'PO'}},setup(props){
  const columnFilters=ref({});
  const kind=ref(props.resultType),expanded=ref(false),q=reactive({}),applied=ref({}),page=ref(1),message=ref(''),error=ref(''),modal=ref(false),mode=ref('detail'),current=ref(null),manual=reactive({}),saveErrors=ref([]);
+ /* 配件号 / 建储仓库编码统一弹窗式批量录入（同配件扩展属性页） */
+ const batchModalOpen=ref(false),batchModalField=ref(null),batchModalValue=ref('');
+ const batchModalTokens=computed(()=>batchModalValue.value?parseBatchCodes(batchModalValue.value).length:0);
+ function openBatchModal(f){batchModalField.value=f;batchModalValue.value=String(q[f.key]||'');batchModalOpen.value=true;}
+ function commitBatchModal(){if(batchModalField.value){const k=batchModalField.value.key;if(batchModalValue.value)q[k]=batchModalValue.value;else delete q[k];}batchModalOpen.value=false;}
+ function clearBatchModal(){if(batchModalField.value)delete q[batchModalField.value.key];batchModalValue.value='';batchModalOpen.value=false;}
+ const batchCount=(k)=>q[k]?parseBatchCodes(q[k]).length:0;
  let initial;try{initial=JSON.parse(localStorage.getItem('cspp-storage-results-network-v3'));}catch{}
  const records=ref(Array.isArray(initial)&&initial.length?initial.map(r=>finalize(r)):[...seed('PO'),...seed('STO')]);
  const persist=()=>localStorage.setItem('cspp-storage-results-network-v3',JSON.stringify(records.value));persist();
@@ -999,15 +1016,15 @@ root.CsppStorageResultsComponent={props:{resultType:{type:String,default:'PO'}},
  const valueClass=(r,k)=>isBreak(r,k)?'result-value-limit':hasGlobal(r,k)?'result-value-global':'';
  const groups=computed(()=>{if(!current.value)return[];const r=current.value;return[{title:'基础信息',keys:['buildType','buildVersion','useDate','part','partName','wh','whName',...(kind.value==='STO'?['shipWh','shipName']:[])]},{title:'初始与风控结果',keys:['target','targetBreak','reorder','reorderBreak','min','max','riskTarget','riskReorder']},{title:'采购兜底',keys:['floor','floorApplied','floorReason','floorTarget','floorReorder','floorMin','floorMax']},{title:'不建储与最终结果',keys:['noStockReason','adjustTarget','adjustReorder','adjustMin','adjustMax','adjustReason']},{title:'预测输入与参数来源',keys:fields.value.filter(f=>['abc','xyz','volume','planner','monthly','monthlyDate','monthlySales','weekly','weeklyDate','weeklySales','weeklyRiskSales','volatility',...Object.keys(sourcePairs),...Object.values(sourcePairs),'start','end','updated'].includes(f.key)).map(f=>f.key)}].map(g=>({...g,fields:g.keys.map(k=>fields.value.find(f=>f.key===k)).filter(Boolean)})).filter(g=>g.fields.length);});
  const editFields=computed(()=>[{key:'manualTarget',label:'调整后目标库存'},{key:'manualReorder',label:'调整后再订购点'},{key:'manualMax',label:'调整后最高风控线'},{key:'manualMin',label:'调整后最低风控线'}]);
- return{kind,expanded,q,page,message,error,modal,mode,current,manual,saveErrors,fields,rows,allRows,sourceFields,metricOptions,columns,search,reset,tableChange,open,save,exportData,display,valueClass,groups,editFields,isBreak,hasGlobal,sourcePairs};
+ return{kind,expanded,q,page,message,error,modal,mode,current,manual,saveErrors,fields,rows,allRows,sourceFields,metricOptions,columns,search,reset,tableChange,open,save,exportData,display,valueClass,groups,editFields,isBreak,hasGlobal,sourcePairs,batchModalOpen,batchModalField,batchModalValue,batchModalTokens,openBatchModal,commitBatchModal,clearBatchModal,batchCount};
 },template:`<section class="strategy-page result-page">
 <div class="strategy-heading"><h2>{{kind}} 建储结果</h2></div>
 
 <a-alert v-if="message" :message="message" type="success" closable @close="message=''" style="margin:12px 0"/>
 <div class="card"><div class="result-query-grid">
 <label><span>版本号</span><a-input v-model:value="q.buildVersion" placeholder="如 202643" allow-clear @pressEnter="search"/></label>
-<label><span>配件号</span><a-input v-model:value="q.part" placeholder="请输入配件号" allow-clear @pressEnter="search"/></label>
-<label><span>建储仓库编码</span><a-input v-model:value="q.wh" placeholder="请输入仓库编码" allow-clear @pressEnter="search"/></label>
+<label><span>配件号</span><a-button @click="openBatchModal({key:'part',label:'配件号'})" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ q.part || '点击录入配件号' }}</span><span v-if="batchCount('part')" style="margin-left:auto;color:#1677ff">{{ batchCount('part') }} 个</span></a-button></label>
+<label><span>建储仓库编码</span><a-button @click="openBatchModal({key:'wh',label:'建储仓库编码'})" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ q.wh || '点击录入仓库编码' }}</span><span v-if="batchCount('wh')" style="margin-left:auto;color:#1677ff">{{ batchCount('wh') }} 个</span></a-button></label>
 <template v-if="expanded"><label v-for="f in sourceFields" :key="f.key"><span>{{f.label}}</span><a-select v-model:value="q[f.key]" allow-clear placeholder="全部" :options="(f.key==='purchaseSource'?[{value:'系统同步',label:'系统同步'},{value:'配置表',label:'配置表'},{value:'全局参数',label:'全局参数'}]:[{value:'配置表',label:'配置表'},{value:'全局参数',label:'全局参数'}])"/></label><label><span>配件名称</span><a-input v-model:value="q.partName" allow-clear placeholder="请输入配件名称"/></label><label><span>ABC 分类</span><a-select v-model:value="q.abc" allow-clear placeholder="全部" :options="['A','B','C','D','E'].map(x=>({value:x,label:x}))"/></label><label><span>计划员</span><a-input v-model:value="q.planner" allow-clear placeholder="请输入计划员"/></label><label><span>建储日期开始</span><a-input v-model:value="q.dateStart" type="date"/></label><label><span>建储日期结束</span><a-input v-model:value="q.dateEnd" type="date"/></label><label><span>不建储原因</span><a-input v-model:value="q.noStockReason" allow-clear placeholder="请输入原因"/></label></template>
 </div><div class="strategy-query-actions" style="margin-top:16px"><a-button type="primary" @click="search">查询</a-button><a-button @click="reset">重置</a-button><a-button type="link" @click="expanded=!expanded">{{expanded?'收起':'展开'}}条件</a-button></div></div>
 <div class="card"><div class="strategy-toolbar"><a-button @click="exportData(false)">导出</a-button><a-button @click="exportData(true)">全量导出</a-button><span style="margin-left:auto;color:#8290a4">共 {{rows.length}} 条 · {{fields.length}} 个字段</span></div>
@@ -1016,5 +1033,6 @@ root.CsppStorageResultsComponent={props:{resultType:{type:String,default:'PO'}},
 <template v-if="mode==='logs'"><p>{{current.buildVersion}} · {{current.useDate}} · {{current.part}} · {{current.wh}}</p><a-empty v-if="!current.history?.length" description="暂无操作日志"/><section v-for="(h,i) in [...(current.history||[])].reverse()" :key="i" class="result-detail-group"><h3>{{h.at || '时间未记录'}} · {{h.by || '操作人未记录'}}</h3><p>修改原因：{{h.reason || '—'}}</p><a-table :pagination="false" size="small" row-key="key" :columns="[{title:'修改字段',dataIndex:'label',key:'label'},{title:'修改前',dataIndex:'before',key:'before'},{title:'修改后',dataIndex:'after',key:'after'}]" :data-source="[{key:'target',label:'调整后目标库存'},{key:'reorder',label:'调整后再订购点'},{key:'max',label:'调整后最高风控线'},{key:'min',label:'调整后最低风控线'}].map(f=>({...f,before:display(h.before?.[f.key]),after:display(h.after?.[f.key])}))"><template #bodyCell="{column,record}"><a-tag v-if="['before','after'].includes(column.key)&&String(record.before)!==String(record.after)" :color="column.key==='before'?'volcano':'green'">{{record[column.key]}}</a-tag><template v-else>{{record[column.key]}}</template></template></a-table></section></template><template v-else-if="mode==='detail'"><section v-for="group in groups" :key="group.title" class="result-detail-group"><h3>{{group.title}}</h3><a-descriptions bordered :column="2" size="small"><a-descriptions-item v-for="f in group.fields" :key="f.key" :label="f.label"><a-tag v-if="f.type==='source'" :color="current[f.key]==='全局参数'?'gold':current[f.key]==='系统同步'?'cyan':'blue'">{{display(current[f.key])}}</a-tag><span v-else :class="valueClass(current,f.key)">{{display(current[f.key])}}</span></a-descriptions-item></a-descriptions></section><section v-if="current.history?.length"><h3>人工调整记录</h3><div v-for="(h,i) in current.history" :key="i" class="strategy-history">{{h.at}} {{h.by}} · {{h.reason}}<div>目标库存：{{h.before.target}} → {{h.after.target}}；再订购点：{{h.before.reorder ?? '—'}} → {{h.after.reorder ?? '—'}}；最低/最高线：{{h.before.min}} / {{h.before.max}} → {{h.after.min}} / {{h.after.max}}</div></div></section></template>
 <template v-else><div class="strategy-grid"><label v-for="f in editFields" :key="f.key"><span><b style="color:#ff4d4f">* </b>{{f.label}}</span><a-input-number v-model:value="manual[f.key]" :min="0" style="width:100%"/></label></div><label class="result-reason"><span><b style="color:#ff4d4f">* </b>人工调整原因</span><a-textarea v-model:value="manual.manualReason" :rows="3" placeholder="请填写人工调整原因"/></label></template>
 <div class="strategy-modal-footer"><a-button @click="modal=false">{{['detail','logs'].includes(mode)?'关闭':'取消'}}</a-button><a-button v-if="mode==='edit'" type="primary" @click="save">保存调整</a-button></div></a-modal>
+<a-modal v-model:open="batchModalOpen" :title="batchModalField?('批量录入 · '+batchModalField.label):'批量录入'" :width="440" :footer="null" :mask-closable="false"><div v-if="batchModalField"><div style="font-size:12px;color:#8c8c8c;margin-bottom:6px">支持换行、逗号、分号、Tab 分隔符粘贴，最多 1000 个，共识别 <b style="color:#1677ff">{{ batchModalTokens }}</b> 个</div><a-textarea v-model:value="batchModalValue" class="batch-modal-textarea" placeholder="每行一个或用逗号/分号/Tab分隔，支持批量粘贴，最多 1000 个" allow-clear/><div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid #f0f0f0"><a-button @click="clearBatchModal">清空</a-button><a-button @click="batchModalOpen=false">取消</a-button><a-button type="primary" @click="commitBatchModal">确定（已录入 {{ batchModalTokens }} 个）</a-button></div></div></a-modal>
 </section>`};
 })(typeof window!=='undefined'?window:{});
