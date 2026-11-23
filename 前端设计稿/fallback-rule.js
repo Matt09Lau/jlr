@@ -1,12 +1,12 @@
 /* 兜底规则配置页（分层版·组内自定义条件分档）：
- *   规则组(组级适用范围 AND) → 组内条件分档(任意字段 AND/OR) → 首个命中生效。
- * 每个规则组各自持有独立的分档列表 tiers，组间完全隔离。分档条件由业务自定义，
- * 可基于销量、近一年销售频次、仓库编码、销售价等任意注册字段；不含专门的价格分档机制
- * （无 tierMode / tierField / 共享表 / 价格边界校验），也不预置生产规则。
+ *   规则组(组级适用范围 AND) → 组内分档(任意字段 AND/OR) → 首个命中生效。
+ * 每个规则组各自持有独立的分档列表 tiers，组间完全隔离；分档条件由业务自定义。
  * 「近一年销售频次」采用指标宽表权威口径（按配件号统计近 12 月销售数量>0 且非空的订单行数）。
- * 页面首次打开展示的 4 组仅为示例数据，业务可自行增删改；不提供一键还原入口。
- * 数据仅保存在当前浏览器，不连接原系统。档位/范围条件字段仅来自三类数据源：配件主数据 / 仓库主数据 / 指标宽表
- * （指标范围以《迭代 4：库存策略》4.3 节为准）；全局参数类字段（LT、目标满足率、风控系数、备货标识等）不纳入。
+ * 页面首次打开展示的 4 组仅为示例数据，业务可自行增删改。
+ * 数据仅保存在当前浏览器，不连接原系统。条件字段仅来自三类来源：配件主数据 / 仓库主数据 / 指标宽表（单一类，不细分）；
+ * 全局参数类字段（LT、目标满足率、风控系数、备货标识等）不纳入。
+ * 2026-11-21 体验优化：不再配置「档位名称」，兜底原因改必填；移除「库存供应」5 个字段（旧配置仍可加载/显示/匹配）。
+ * 2026-11-23 组内分档支持拖拽调整优先级，与上移/下移共用位置移动逻辑，结果即时持久化。
  */
 (function(root){
 'use strict';
@@ -15,7 +15,7 @@ const { ref, reactive, computed } = root.Vue || {};
 const OP = { EQ:'=', NE:'≠', GT:'>', GE:'≥', LT:'<', LE:'≤', BETWEEN:'区间', IN:'属于', NOT_IN:'不属于', IS_NULL:'为空', IS_NOT_NULL:'不为空' };
 const ALL_OPS = ['EQ','NE','GT','GE','LT','LE','BETWEEN','IN','NOT_IN','IS_NULL','IS_NOT_NULL'];
 
-// 可配置字段清单：三类来源——配件主数据 / 仓库主数据 / 指标宽表（历史需求、兜底频次、预测、库存供应）
+// 可配置字段清单：三类来源——配件主数据 / 仓库主数据 / 指标宽表（指标宽表为单一类，不再细分）
 const FIELD_REGISTRY = [
   { fieldName:'abcClassification', fieldLabel:'ABC分类', fieldGroup:'配件主数据', valueType:'ENUM', enumValues:[['S0','S0'],['S1','S1'],['S2','S2'],['S3','S3'],['A','A'],['B','B'],['C','C'],['D','D'],['E','E']], supportedOps:['EQ','NE','IN','NOT_IN'] },
   { fieldName:'warehouseCode', fieldLabel:'仓库编码', fieldGroup:'仓库主数据', valueType:'STRING', enumValues:null, supportedOps:['EQ','NE','IN','NOT_IN','IS_NULL','IS_NOT_NULL'] },
@@ -37,34 +37,34 @@ const FIELD_REGISTRY = [
   { fieldName:'tier2Category', fieldLabel:'二级分类', fieldGroup:'配件主数据', valueType:'STRING', enumValues:null, supportedOps:['EQ','NE','IN','NOT_IN'] },
   { fieldName:'planner', fieldLabel:'计划员', fieldGroup:'配件主数据', valueType:'STRING', enumValues:null, supportedOps:['EQ','NE','IN','NOT_IN'] },
   { fieldName:'purchaseType', fieldLabel:'采购类别', fieldGroup:'配件主数据', valueType:'ENUM', enumValues:null, supportedOps:['EQ','NE','IN','NOT_IN'] },
-  { fieldName:'demand_week_avg_12w', fieldLabel:'近12周周均销量', fieldGroup:'指标-历史需求', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_week_avg_8w', fieldLabel:'近8周周均销量', fieldGroup:'指标-历史需求', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_week_std_8w', fieldLabel:'近8周需求标准差', fieldGroup:'指标-历史需求', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_month_avg_3m', fieldLabel:'近3个月月均销量', fieldGroup:'指标-历史需求', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_month_avg_3m_all', fieldLabel:'近3月全仓月均销量', fieldGroup:'指标-历史需求', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_month_std_6m', fieldLabel:'近6个月需求标准差', fieldGroup:'指标-历史需求', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_month_std_6m_all', fieldLabel:'近6月全仓需求标准差', fieldGroup:'指标-历史需求', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_qty_3m', fieldLabel:'近3个月需求量', fieldGroup:'指标-历史需求', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_qty_12m', fieldLabel:'近12个月需求量', fieldGroup:'指标-历史需求', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_qty_12m_all', fieldLabel:'近12月全仓需求量', fieldGroup:'指标-历史需求', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'days_since_last_demand', fieldLabel:'无需求天数', fieldGroup:'指标-历史需求', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'sales_frequency_1y', fieldLabel:'近一年销售频次', fieldGroup:'指标-兜底频次', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'fallback_c_week_avg', fieldLabel:'兜底C类周均销量', fieldGroup:'指标-兜底频次', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'forecast_next_week_manual_qty', fieldLabel:'下周人工预测', fieldGroup:'指标-预测', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'forecast_next_month_manual_qty', fieldLabel:'下月仓库人工预测', fieldGroup:'指标-预测', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'forecast_next_month_manual_qty_all', fieldLabel:'下月全仓人工预测', fieldGroup:'指标-预测', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'on_hand_qty', fieldLabel:'账面库存', fieldGroup:'指标-库存供应', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'available_qty', fieldLabel:'可用库存', fieldGroup:'指标-库存供应', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'purchase_inbound_qty', fieldLabel:'采购在途数量', fieldGroup:'指标-库存供应', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'transfer_inbound_qty', fieldLabel:'调拨在途数量', fieldGroup:'指标-库存供应', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'backorder_qty', fieldLabel:'未交需求数量', fieldGroup:'指标-库存供应', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'demand_week_avg_12w', fieldLabel:'近12周周均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'demand_week_avg_8w', fieldLabel:'近8周周均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'demand_week_std_8w', fieldLabel:'近8周需求标准差', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'demand_month_avg_3m', fieldLabel:'近3个月月均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'demand_month_avg_3m_all', fieldLabel:'近3月全仓月均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'demand_month_std_6m', fieldLabel:'近6个月需求标准差', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'demand_month_std_6m_all', fieldLabel:'近6月全仓需求标准差', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'demand_qty_3m', fieldLabel:'近3个月需求量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'demand_qty_12m', fieldLabel:'近12个月需求量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'demand_qty_12m_all', fieldLabel:'近12月全仓需求量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'days_since_last_demand', fieldLabel:'无需求天数', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'sales_frequency_1y', fieldLabel:'近一年销售频次', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'fallback_c_week_avg', fieldLabel:'兜底C类周均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'forecast_next_week_manual_qty', fieldLabel:'下周人工预测', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'forecast_next_month_manual_qty', fieldLabel:'下月仓库人工预测', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'forecast_next_month_manual_qty_all', fieldLabel:'下月全仓人工预测', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
 ];
-const REGISTRY_ORDER = ['配件主数据','仓库主数据','指标-历史需求','指标-兜底频次','指标-预测','指标-库存供应'];
-// 字段来源仅三类：配件主数据 / 仓库主数据 / 指标宽表。全局参数类字段（LT、目标满足率、风控系数、备货标识等）不纳入档位条件。
-function fieldSourceLabel(k){
-  if(k==='配件主数据'||k==='仓库主数据') return k;
-  return '指标宽表·'+String(k).replace(/^指标-/,'');
-}
+// 【兼容映射】已从可配置清单移除的字段：不出现在字段下拉，但旧配置引用时仍能正确显示中文名/类型并参与匹配。
+const LEGACY_FIELDS = [
+  { fieldName:'on_hand_qty', fieldLabel:'账面库存', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'available_qty', fieldLabel:'可用库存', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'purchase_inbound_qty', fieldLabel:'采购在途数量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'transfer_inbound_qty', fieldLabel:'调拨在途数量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'backorder_qty', fieldLabel:'未交需求数量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+];
+const REGISTRY_ORDER = ['配件主数据','仓库主数据','指标宽表'];
+// 字段来源仅三类：配件主数据 / 仓库主数据 / 指标宽表（指标宽表为单一类，不再细分）。
+function fieldSourceLabel(k){ return k; }
 function fieldSourceGroups(){
   const g={};
   FIELD_REGISTRY.forEach(f=>{ const k=f.fieldGroup||'其他'; (g[k]=g[k]||[]).push(f); });
@@ -76,7 +76,7 @@ function nextId(){ return ++_nid; }
 
 /* ============ 纯逻辑（可被 Node 测试 require，不依赖 Vue/DOM） ============ */
 
-function fieldMeta(fn){ return FIELD_REGISTRY.find(f=>f.fieldName===fn); }
+function fieldMeta(fn){ return FIELD_REGISTRY.find(f=>f.fieldName===fn) || LEGACY_FIELDS.find(f=>f.fieldName===fn); }
 function fieldLabel(fn){ const f=fieldMeta(fn); return f?f.fieldLabel:fn; }
 function fieldType(fn){ const f=fieldMeta(fn); return f?f.valueType:'STRING'; }
 function enumOptions(fn){ const f=fieldMeta(fn); return (f&&f.enumValues)?f.enumValues.map(([v,l])=>({value:v,label:l})):[]; }
@@ -99,24 +99,25 @@ function conds(list){ return list.map((c,i)=>{ const o=mkCond(c[0],c[1],c[2],c[3
 
 // C/D 示例组的价格区间档位：用普通条件（销售价字段 + > / ≤ / 为空）表达，非专门价格分档机制。
 // 区间与 V 取自需求说明 13.6 权威价档表；每次调用返回独立副本，C/D 各自持有、互不影响。
+// 档位不再有「名称」字段，以必填的兜底原因作为说明。
 function priceRangeTiers(prefix){
   const p=prefix||'G';
   return [
-    { id:p+'_T1', seq:10, name:'销售价 空或≤0.01', matchMode:'OR',
-      conditions:conds([['salesPrice','IS_NULL',''],['salesPrice','LE','0.01']]), fallbackValue:5, reason:'价格空或极低兜底', enabled:true },
-    { id:p+'_T2', seq:20, name:'销售价 >0.01 且 ≤2', matchMode:'AND',
+    { id:p+'_T1', seq:10, matchMode:'OR',
+      conditions:conds([['salesPrice','IS_NULL',''],['salesPrice','LE','0.01']]), fallbackValue:5, reason:'价格空或≤0.01兜底', enabled:true },
+    { id:p+'_T2', seq:20, matchMode:'AND',
       conditions:conds([['salesPrice','GT','0.01'],['salesPrice','LE','2']]), fallbackValue:50, reason:'价格0.01~2兜底', enabled:true },
-    { id:p+'_T3', seq:30, name:'销售价 >2 且 ≤20', matchMode:'AND',
+    { id:p+'_T3', seq:30, matchMode:'AND',
       conditions:conds([['salesPrice','GT','2'],['salesPrice','LE','20']]), fallbackValue:10, reason:'价格2~20兜底', enabled:true },
-    { id:p+'_T4', seq:40, name:'销售价 >20 且 ≤60', matchMode:'AND',
+    { id:p+'_T4', seq:40, matchMode:'AND',
       conditions:conds([['salesPrice','GT','20'],['salesPrice','LE','60']]), fallbackValue:8, reason:'价格20~60兜底', enabled:true },
-    { id:p+'_T5', seq:50, name:'销售价 >60 且 ≤200', matchMode:'AND',
+    { id:p+'_T5', seq:50, matchMode:'AND',
       conditions:conds([['salesPrice','GT','60'],['salesPrice','LE','200']]), fallbackValue:6, reason:'价格60~200兜底', enabled:true },
-    { id:p+'_T6', seq:60, name:'销售价 >200 且 ≤500', matchMode:'AND',
+    { id:p+'_T6', seq:60, matchMode:'AND',
       conditions:conds([['salesPrice','GT','200'],['salesPrice','LE','500']]), fallbackValue:5, reason:'价格200~500兜底', enabled:true },
-    { id:p+'_T7', seq:70, name:'销售价 >500 且 ≤2000', matchMode:'AND',
+    { id:p+'_T7', seq:70, matchMode:'AND',
       conditions:conds([['salesPrice','GT','500'],['salesPrice','LE','2000']]), fallbackValue:4, reason:'价格500~2000兜底', enabled:true },
-    { id:p+'_T8', seq:80, name:'销售价 >2000', matchMode:'AND',
+    { id:p+'_T8', seq:80, matchMode:'AND',
       conditions:conds([['salesPrice','GT','2000']]), fallbackValue:3, reason:'价格>2000兜底', enabled:true },
   ];
 }
@@ -129,14 +130,14 @@ function exampleGroups(){
       description:'示例：ABC=S0 且无法行驶=是，固定 V=1（安全件优先，排在最前）',
       scope:{ matchMode:'AND', conditions:conds([['abcClassification','EQ','S0'],['potentialUnitDown','EQ','true']]) },
       tiers:[
-        { id:'S0_T1', seq:10, name:'S0安全件固定示例', matchMode:'AND', conditions:[], fallbackValue:1, reason:'S0类兜底-无法行驶', enabled:true },
+        { id:'S0_T1', seq:10, matchMode:'AND', conditions:[], fallbackValue:1, reason:'S0类兜底-无法行驶', enabled:true },
       ]},
     { id:'G_SE', groupCode:'SE_CLASS_FALLBACK', groupName:'S/E类兜底（示例）', priority:20, enabled:true,
       description:'示例：ABC∈S1/S2/S3/E 且近一年销售频次≥1；频次≥3→V=3，1~2→V=2',
       scope:{ matchMode:'AND', conditions:conds([['abcClassification','IN','S1,S2,S3,E'],['sales_frequency_1y','GE','1']]) },
       tiers:[
-        { id:'SE_T1', seq:10, name:'近一年销售频次 ≥3', matchMode:'AND', conditions:conds([['sales_frequency_1y','GE','3']]), fallbackValue:3, reason:'S/E类兜底-高频卖一补一', enabled:true },
-        { id:'SE_T2', seq:20, name:'近一年销售频次 1~2', matchMode:'AND', conditions:conds([['sales_frequency_1y','BETWEEN','1','2']]), fallbackValue:2, reason:'S/E类兜底-低频卖一补一', enabled:true },
+        { id:'SE_T1', seq:10, matchMode:'AND', conditions:conds([['sales_frequency_1y','GE','3']]), fallbackValue:3, reason:'S/E类兜底-高频卖一补一', enabled:true },
+        { id:'SE_T2', seq:20, matchMode:'AND', conditions:conds([['sales_frequency_1y','BETWEEN','1','2']]), fallbackValue:2, reason:'S/E类兜底-低频卖一补一', enabled:true },
       ]},
     { id:'G_C', groupCode:'C_CLASS_FALLBACK', groupName:'C类兜底（示例）', priority:30, enabled:true,
       description:'示例：ABC=C 且近3个月月均销量<8；按销售价区间给出不同兜底 V（8 档），可按需修改',
@@ -201,19 +202,32 @@ function validateGroup(g){
   else if(!g.scope.conditions.some(c=>c.fieldName==='abcClassification')) errs.push('组级适用范围必须包含 ABC分类 条件（否则会跨类别抢占）');
   const seqs=(g.tiers||[]).filter(t=>t.enabled!==false).map(t=>t.seq);
   if(new Set(seqs).size!==seqs.length) errs.push('组内分档序号不能重复');
-  (g.tiers||[]).forEach(t=>{ if(t.fallbackValue==null||t.fallbackValue<0) errs.push('分档「'+t.name+'」兜底值不能为负'); });
+  (g.tiers||[]).forEach(t=>{ if(t.fallbackValue==null||t.fallbackValue<0) errs.push('序号 '+t.seq+' 的档位兜底值不能为负'); });
   return errs;
 }
 function validateTier(t){
   const errs=[];
-  if(!t.name||!t.name.trim()) errs.push('请填写档位名称');
+  if(!t.reason||!String(t.reason).trim()) errs.push('请填写兜底原因');
   if(t.fallbackValue==null||t.fallbackValue<0) errs.push('兜底值不能为负');
   return errs;
+}
+// 把 fromId 移动到 toId 所在位置：效果等同于连续点击上移/下移（目标及其他档位顺次位移）。
+// 序号槽位保持不变并按新顺序重新分配，避免重复序号；返回按序号升序的新数组（元素仍为原对象）。
+function moveTierTo(tiers, fromId, toId){
+  const list=(tiers||[]).slice().sort((a,b)=>a.seq-b.seq);
+  if(!fromId||!toId||fromId===toId) return list;
+  const i=list.findIndex(t=>t.id===fromId), j=list.findIndex(t=>t.id===toId);
+  if(i<0||j<0) return list;
+  const slots=list.map(t=>t.seq);
+  const [item]=list.splice(i,1);
+  list.splice(j,0,item);
+  list.forEach((t,k)=>{ t.seq=slots[k]; });
+  return list;
 }
 
 const api = { OP, FIELD_REGISTRY, REGISTRY_ORDER, OP_LABELS:OP, fieldSourceLabel, fieldSourceGroups,
   exampleGroups, seedGroups, priceRangeTiers, nextGroupCode, mkCond, conds, fieldMeta, fieldLabel, fieldType, enumOptions, opOptionsFor, condValueText,
-  evalCond, evalRule, evalScope, matchGroup, matchAll, validateGroup, validateTier };
+  evalCond, evalRule, evalScope, matchGroup, matchAll, validateGroup, validateTier, moveTierTo };
 if(typeof module!=='undefined'&&module.exports) module.exports=api;
 if(!root.Vue) return;
 root.JlrFallbackRuleLogic = api;
@@ -234,6 +248,8 @@ root.JlrFallbackRule = {
     // 规则组编码不在表单中：新建由系统自动生成，编辑时沿用原编码。
     const groupForm = reactive({ id:null, groupName:'', priority:99, enabled:true, description:'', scope:{matchMode:'AND',conditions:[]} });
     const tierState = ref(null);          // 组内分档编辑（弹窗）
+    const dragTierId = ref(null);         // 正在拖拽的分档 id
+    const dropTierId = ref(null);         // 当前悬停的目标分档 id（用于高亮）
 
     const groupsSorted = computed(()=>[...groups.value].sort((a,b)=>a.priority-b.priority));
     const activeGroup = computed(()=>groups.value.find(g=>g.id===selectedGroupId.value)||null);
@@ -281,7 +297,7 @@ root.JlrFallbackRule = {
       if(tier){ const e=JSON.parse(JSON.stringify(tier)); normForEdit(e); tierState.value=e; }
       else {
         const maxS=(g.tiers||[]).reduce((m,t)=>Math.max(m,t.seq),0);
-        tierState.value={ id:'T_'+nextId(), seq:maxS+10, name:'新档位', matchMode:'AND',
+        tierState.value={ id:'T_'+nextId(), seq:maxS+10, matchMode:'AND',
           conditions:[], fallbackValue:5, reason:'', enabled:true };
       }
     }
@@ -298,15 +314,46 @@ root.JlrFallbackRule = {
       g.tiers.sort((a,b)=>a.seq-b.seq); tierState.value=null; persist(); notify('已保存本组分档');
     }
     function deleteTier(id){ const g=activeGroup.value; g.tiers=(g.tiers||[]).filter(t=>t.id!==id); persist(); notify('已删除档位'); }
-    function duplicateTier(t){ const g=activeGroup.value; if(!g||!t)return; const copy=JSON.parse(JSON.stringify(t)); copy.id='T_'+nextId(); copy.seq=g.tiers.reduce((m,x)=>Math.max(m,x.seq),0)+10; copy.name=(t.name||'')+'（副本）'; g.tiers.push(copy); g.tiers.sort((a,b)=>a.seq-b.seq); persist(); notify('已复制档位'); }
+    function duplicateTier(t){ const g=activeGroup.value; if(!g||!t)return; const copy=JSON.parse(JSON.stringify(t)); copy.id='T_'+nextId(); copy.seq=g.tiers.reduce((m,x)=>Math.max(m,x.seq),0)+10; delete copy.name; g.tiers.push(copy); g.tiers.sort((a,b)=>a.seq-b.seq); persist(); notify('已复制档位'); }
+    // 排序复用同一套位置移动逻辑：上移/下移是相邻移动，拖拽是移动到目标位置，最终顺序一致。
+    function reorderTier(fromId, toId){
+      const g=activeGroup.value; if(!g||!fromId||fromId===toId)return;
+      const before=(g.tiers||[]).slice().sort((a,b)=>a.seq-b.seq).map(t=>t.id).join(',');
+      const list=moveTierTo(g.tiers,fromId,toId);
+      if(list.map(t=>t.id).join(',')===before) return;
+      g.tiers=list; persist(); notify('已调整分档顺序');
+    }
     function moveTier(id, dir){
       const g=activeGroup.value; if(!g)return;
       const list=[...(g.tiers||[])].sort((a,b)=>a.seq-b.seq);
       const i=list.findIndex(t=>t.id===id); const j=i+dir;
       if(i<0||j<0||j>=list.length)return;
-      const tmp=list[i].seq; list[i].seq=list[j].seq; list[j].seq=tmp;
-      g.tiers=list; persist();
+      reorderTier(id,list[j].id);
     }
+    function clearTierDrag(){ dragTierId.value=null; dropTierId.value=null; }
+    function onTierDragStart(e, t){
+      // 卡片内的链接/输入框仍可正常点击，不从它们发起拖拽
+      if(e.target&&e.target.closest&&e.target.closest('a,button,input,textarea')){ e.preventDefault(); return; }
+      dragTierId.value=t.id; dropTierId.value=null;
+      if(e.dataTransfer){ e.dataTransfer.effectAllowed='move'; try{ e.dataTransfer.setData('text/plain',t.id); }catch(err){} }
+    }
+    function onTierDragOver(e, t){
+      if(!dragTierId.value||dragTierId.value===t.id) return;
+      e.preventDefault();
+      if(e.dataTransfer) e.dataTransfer.dropEffect='move';
+      dropTierId.value=t.id;
+    }
+    function onTierDragLeave(e, t){
+      if(e.currentTarget&&e.relatedTarget&&e.currentTarget.contains(e.relatedTarget)) return;
+      if(dropTierId.value===t.id) dropTierId.value=null;
+    }
+    function onTierDrop(e, t){
+      e.preventDefault();
+      const fromId=dragTierId.value||(e.dataTransfer&&e.dataTransfer.getData('text/plain'));
+      clearTierDrag();
+      reorderTier(fromId,t.id);
+    }
+    function onTierDragEnd(){ clearTierDrag(); }
 
     const fieldSelectOptions=fieldSourceGroups().map(k=>({label:k.label+'（'+k.fields.length+'）',options:k.fields.map(f=>({value:f.fieldName,label:f.fieldLabel}))}));
 
@@ -315,6 +362,7 @@ root.JlrFallbackRule = {
       selectGroup, persist,
       groupModalOpen, groupForm, openGroupModal, saveGroup, deleteGroup, duplicateGroup,
       tierState, tierModalOpen, openTierEditor, saveTier, deleteTier, duplicateTier, moveTier,
+      dragTierId, dropTierId, onTierDragStart, onTierDragOver, onTierDragLeave, onTierDrop, onTierDragEnd,
       addCondToList, onCondFieldChange, normForEdit, normForSave,
       fieldMeta, fieldLabel, fieldType, enumOptions, opOptionsFor, condValueText, fieldSelectOptions,
     };
@@ -322,10 +370,9 @@ root.JlrFallbackRule = {
   template:`
   <section class="strategy-page fallback-page">
     <div class="strategy-heading"><div><h2>兜底规则</h2>
-      <div class="strategy-sub">分层配置：规则组（组级适用范围，AND）→ 组内条件分档（配件主数据/指标宽表字段 AND/OR）→ 首个命中生效；命中后仅当 S1&lt;V 才实际应用兜底。</div></div>
-      <a-tag color="blue">当前 4 组为示例数据</a-tag>
+      <div class="strategy-sub">按优先级依次匹配规则组 → 组内分档，首个命中生效；命中后仅当 S1&lt;V 才应用兜底。</div></div>
+      <a-tag color="blue">示例数据</a-tag>
     </div>
-    <a-alert type="info" show-icon style="margin-bottom:14px" message="系统不预置生产规则：首次进入展示的 4 组仅为示例数据，可自行增删改。每个规则组各自维护一套独立分档：第一层限定配件适用范围（如 ABC 分类、仓库编码、销量门槛，全部满足才进入该组）；第二层在该组内按序号分档取兜底值 V。档位条件字段仅取自配件主数据与指标宽表，组间互不影响；无销售价分档逻辑。" />
 
     <div class="fallback-layout">
       <div class="card fallback-side">
@@ -355,21 +402,24 @@ root.JlrFallbackRule = {
           </div>
           <div class="strategy-sub" style="margin:2px 0 12px">{{ activeGroup.description }}</div>
 
-          <div class="bt-sec-t">第一层 · 适用范围（组级前置条件，{{ (activeGroup.scope.conditions||[]).length }} 条，全部满足才进入本组）</div>
+          <div class="bt-sec-t">适用范围 · 全部满足才进入本组（{{ (activeGroup.scope.conditions||[]).length }} 条）</div>
           <div class="fallback-cond-box" style="margin-bottom:16px">
             <div v-for="(c,i) in activeGroup.scope.conditions" :key="i" class="fallback-cond-box" style="margin-bottom:6px;border:none;padding:0">
               <span class="fb-seq" style="margin-right:8px">{{ i+1 }}</span>
               <span class="fb-chip">{{ c.fieldLabel }}</span><span class="fb-chip fb-op">{{ OP[c.operator] }}</span><span class="fb-chip">{{ condValueText(c) }}</span>
             </div>
-            <div class="strategy-sub">在「编辑组与适用范围」中修改；建议至少保留一条 ABC 分类条件以保证各组互斥。</div>
           </div>
 
-          <div class="bt-sec-t">第二层 · 本组分档（{{ activeTiers.length }} 条，自定义条件，按序号首个命中生效）</div>
-          <div class="strategy-toolbar" style="margin:2px 0 10px"><span class="strategy-sub">按序号升序匹配，首个命中生效；本组分档独立维护，条件字段仅限配件主数据/指标宽表</span><div style="margin-left:auto"><a-button size="small" type="primary" @click="openTierEditor(null)">+ 新增档位</a-button></div></div>
+          <div class="bt-sec-t">本组分档 · 按序号首个命中生效（{{ activeTiers.length }} 条）</div>
+          <div class="strategy-toolbar" style="margin:2px 0 10px"><span class="strategy-sub">条件字段来自配件主数据 / 仓库主数据 / 指标宽表 · 拖动卡片可调整优先级（等同上移 / 下移）</span><div style="margin-left:auto"><a-button size="small" type="primary" @click="openTierEditor(null)">+ 新增档位</a-button></div></div>
           <div v-if="!activeTiers.length" class="fallback-empty"><a-empty description="本组暂无分档，点击右上角新增"/></div>
           <div v-else class="fb-rule-list">
-            <div v-for="t in activeTiers" :key="t.id" class="fb-rule-card" :class="{disabled:t.enabled===false}">
-              <div class="fbrc-hd"><span class="fb-prio">{{ t.seq }}</span><span class="fbrc-name">{{ t.name }}</span>
+            <div v-for="t in activeTiers" :key="t.id" class="fb-rule-card"
+              :class="{disabled:t.enabled===false, 'fb-dragging':dragTierId===t.id, 'fb-drop-target':dropTierId===t.id}"
+              draggable="true"
+              @dragstart="onTierDragStart($event,t)" @dragover="onTierDragOver($event,t)"
+              @dragleave="onTierDragLeave($event,t)" @drop="onTierDrop($event,t)" @dragend="onTierDragEnd">
+              <div class="fbrc-hd"><span class="fb-drag-handle" title="按住拖动调整优先级">⋮⋮</span><span class="fb-prio">{{ t.seq }}</span><span class="fbrc-name">{{ t.reason||'未填写兜底原因' }}</span>
                 <a-tag v-if="t.enabled!==false" color="green">启用</a-tag><a-tag v-else color="default">停用</a-tag></div>
               <div class="fbrc-body"><template v-if="!(t.conditions||[]).length"><span class="fbrc-none">无条件（本组默认命中）</span></template><template v-else><template v-for="(c,i) in t.conditions" :key="i"><span v-if="i>0" class="fb-link">{{ t.matchMode }}</span><span class="fb-chip">{{ c.fieldLabel }}</span><span class="fb-chip fb-op">{{ OP[c.operator] }}</span><span class="fb-chip">{{ condValueText(c) }}</span></template></template></div>
               <div class="fbrc-ft">兜底值 <b>{{ t.fallbackValue }}</b>
@@ -381,7 +431,7 @@ root.JlrFallbackRule = {
       </div>
     </div>
 
-    <div class="strategy-footnote">匹配顺序：规则组优先级升序 → 组级适用范围（全部条件满足）→ 本组分档序号升序 → 首个命中生效；命中后仅当风控后目标 S1&lt;V 才应用兜底，写回兜底值与原因。各组独立配置，互不影响。</div>
+    <div class="strategy-footnote">匹配顺序：规则组优先级升序 → 适用范围全部满足 → 本组分档按序号首个命中；命中后仅当 S1&lt;V 才应用兜底，写回兜底值与原因。各组独立配置。</div>
 
     <!-- 规则组 + 适用范围 -->
     <a-modal v-model:open="groupModalOpen" :title="groupForm.id?'编辑规则组与适用范围':'新增规则组'" :width="720" :footer="null" :mask-closable="false">
@@ -391,7 +441,7 @@ root.JlrFallbackRule = {
         <label><span>状态</span><a-select v-model:value="groupForm.enabled" :options="[{value:true,label:'启用'},{value:false,label:'停用'}]"/></label>
         <label style="grid-column:1 / -1"><span>描述</span><a-input v-model:value="groupForm.description" placeholder="如 ABC=C 且近3个月月均销量<8"/></label>
       </div>
-      <div class="bt-sec-t" style="margin-top:16px">第一层 · 适用范围（组级前置条件，全部满足才进入本组）</div>
+      <div class="bt-sec-t" style="margin-top:16px">适用范围 · 全部满足才进入本组</div>
       <div class="fallback-cond-box">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:13px;color:#45536a">条件逻辑：AND（全部满足）</span><a-button type="primary" size="small" @click="addCondToList(groupForm.scope.conditions)">+ 添加条件</a-button></div>
         <div v-for="(c,idx) in groupForm.scope.conditions" :key="idx" class="fallback-cond-row">
@@ -413,15 +463,14 @@ root.JlrFallbackRule = {
     <a-modal v-model:open="tierModalOpen" :title="tierState&&tierState.id?'编辑本组分档':'新增本组分档'" :width="760" :mask-closable="false" @cancel="tierState=null">
       <template v-if="tierState">
         <div class="strategy-grid">
-          <label><span><span class="jlrs-req">*</span>档位名称</span><a-input v-model:value="tierState.name" placeholder="如 销售价>2 且 ≤20"/></label>
           <label><span><span class="jlrs-req">*</span>序号</span><a-input-number v-model:value="tierState.seq" :min="1" style="width:100%"/></label>
           <label><span><span class="jlrs-req">*</span>兜底值 V(件)</span><a-input-number v-model:value="tierState.fallbackValue" :min="0" :precision="0" style="width:100%"/></label>
           <label><span>状态</span><a-select v-model:value="tierState.enabled" :options="[{value:true,label:'启用'},{value:false,label:'停用'}]"/></label>
+          <label style="grid-column:1 / -1"><span><span class="jlrs-req">*</span>兜底原因（命中后写入结果表）</span><a-input v-model:value="tierState.reason" placeholder="如 价格2~20兜底"/></label>
         </div>
         <div style="margin:14px 0 8px;display:flex;align-items:center;gap:12px">
           <span style="font-size:13px;color:#45536a">条件逻辑：</span>
           <a-radio-group v-model:value="tierState.matchMode" button-style="solid"><a-radio-button value="AND">AND（全部满足）</a-radio-button><a-radio-button value="OR">OR（任一满足）</a-radio-button></a-radio-group>
-          <span class="strategy-sub">无销售价分档逻辑；如需按其他字段分档，直接添加条件即可</span>
         </div>
         <div class="fallback-cond-box">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><span style="font-size:13px;font-weight:600;color:#1f1f1f">档位条件</span><a-button type="primary" size="small" @click="addCondToList(tierState.conditions)">+ 添加条件</a-button></div>
@@ -438,7 +487,6 @@ root.JlrFallbackRule = {
             <a style="margin-left:8px;color:#ff4d4f" @click="tierState.conditions.splice(idx,1)">删除</a>
           </div>
         </div>
-        <div class="strategy-grid" style="margin-top:14px"><label style="grid-column:1 / -1"><span>兜底原因（命中后写入结果表）</span><a-input v-model:value="tierState.reason" placeholder="如 价格2~20兜底"/></label></div>
       </template>
       <div class="strategy-modal-footer"><a-button @click="tierState=null">取消</a-button><a-button type="primary" @click="saveTier">保存档位</a-button></div>
     </a-modal>

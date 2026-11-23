@@ -718,18 +718,18 @@ mark {
     <a-modal v-model:open="batchModalOpen" :title="batchModalField ? '批量录入 · '+batchModalField.label : '批量录入'" :width="440" :footer="null" :mask-closable="false">
       <div v-if="batchModalField">
         <div style="font-size:12px;color:#8c8c8c;margin-bottom:6px">
-          支持换行、逗号、分号、Tab、双引号分隔符粘贴，共识别 <b style="color:#1677ff">{{ batchModalTokens }}</b> 个
+          支持换行、逗号、分号、Tab 分隔符粘贴，最多 1000 个，共识别 <b style="color:#1677ff">{{ batchModalTokens }}</b> 个
         </div>
         <textarea
-          v-model="genFilters[activeMenu][batchModalField.key]"
+          v-model="batchModalValue"
           class="batch-modal-textarea"
-          :placeholder="'每行一个或用逗号/分号/Tab分隔，支持批量粘贴 100+ 个'"
+          :placeholder="'每行一个或用逗号/分号/Tab分隔，支持批量粘贴，最多 1000 个'"
           allow-clear
         ></textarea>
         <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid #f0f0f0">
-          <a-button @click="genFilters[activeMenu][batchModalField.key]='';batchModalOpen=false">清空</a-button>
+          <a-button @click="clearBatchModal">清空</a-button>
           <a-button @click="batchModalOpen=false">取消</a-button>
-          <a-button type="primary" @click="batchModalOpen=false">确定（已录入 {{ batchModalTokens }} 个）</a-button>
+          <a-button type="primary" @click="commitBatchModal">确定（已录入 {{ batchModalTokens }} 个）</a-button>
         </div>
       </div>
     </a-modal>
@@ -807,10 +807,10 @@ mark {
               <div class="filter-row">
                 <div class="filter-items">
                   <div class="f-item"><span class="f-label">仓库编码</span>
-                    <a-textarea v-model:value="filters.wh" :auto-size="{minRows:1,maxRows:3}" placeholder="仓库编码，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
+                    <a-button @click="openBatchModal({key:'wh',label:'仓库编码',placeholder:'点击录入仓库编码'}, filters)" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ filters.wh || '点击录入仓库编码' }}</span><span v-if="batchCount(filters,'wh')" style="margin-left:auto;color:#1677ff">{{ batchCount(filters,'wh') }} 个</span></a-button></div>
                   <div class="f-item"><span class="f-label">仓库名称</span><a-input v-model:value="filters.whName" placeholder="请输入仓库名称" style="width:170px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-textarea v-model:value="filters.code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
+                    <a-button @click="openBatchModal({key:'code',label:'配件号',placeholder:'点击录入配件号'}, filters)" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ filters.code || '点击录入配件号' }}</span><span v-if="batchCount(filters,'code')" style="margin-left:auto;color:#1677ff">{{ batchCount(filters,'code') }} 个</span></a-button></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="filters.name" placeholder="配件名称" style="width:170px" allow-clear/></div>
                   <template v-if="filterExpanded">
@@ -1189,13 +1189,13 @@ mark {
               <div class="filter-row">
                 <div class="filter-items">
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-textarea v-model:value="poRegFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
+                    <a-button @click="openBatchModal({key:'part_code',label:'配件号',placeholder:'点击录入配件号'}, poRegFilters)" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ poRegFilters.part_code || '点击录入配件号' }}</span><span v-if="batchCount(poRegFilters,'part_code')" style="margin-left:auto;color:#1677ff">{{ batchCount(poRegFilters,'part_code') }} 个</span></a-button></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="poRegFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">当前采购件号</span>
-                    <a-textarea v-model:value="poRegFilters.cur_purchase_code" :auto-size="{minRows:1,maxRows:3}" placeholder="当前采购件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
+                    <a-button @click="openBatchModal({key:'cur_purchase_code',label:'当前采购件号',placeholder:'点击录入当前采购件号'}, poRegFilters)" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ poRegFilters.cur_purchase_code || '点击录入当前采购件号' }}</span><span v-if="batchCount(poRegFilters,'cur_purchase_code')" style="margin-left:auto;color:#1677ff">{{ batchCount(poRegFilters,'cur_purchase_code') }} 个</span></a-button></div>
                   <div class="f-item"><span class="f-label">建储仓库编码</span>
-                    <a-textarea v-model:value="poRegFilters.wh_code" :auto-size="{minRows:1,maxRows:3}" placeholder="建储仓库编码，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
+                    <a-button @click="openBatchModal({key:'wh_code',label:'建储仓库编码',placeholder:'点击录入建储仓库编码'}, poRegFilters)" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ poRegFilters.wh_code || '点击录入建储仓库编码' }}</span><span v-if="batchCount(poRegFilters,'wh_code')" style="margin-left:auto;color:#1677ff">{{ batchCount(poRegFilters,'wh_code') }} 个</span></a-button></div>
                   <div class="f-item"><span class="f-label">建储仓库名称</span>
                     <a-input v-model:value="poRegFilters.wh_name" placeholder="建储仓库名称" style="width:150px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">计划类型</span>
@@ -1605,13 +1605,13 @@ mark {
               <div class="filter-row">
                 <div class="filter-items">
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-textarea v-model:value="poHistFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
+                    <a-button @click="openBatchModal({key:'part_code',label:'配件号',placeholder:'点击录入配件号'}, poHistFilters)" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ poHistFilters.part_code || '点击录入配件号' }}</span><span v-if="batchCount(poHistFilters,'part_code')" style="margin-left:auto;color:#1677ff">{{ batchCount(poHistFilters,'part_code') }} 个</span></a-button></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="poHistFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">当前采购件号</span>
-                    <a-textarea v-model:value="poHistFilters.cur_purchase_code" :auto-size="{minRows:1,maxRows:3}" placeholder="当前采购件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
+                    <a-button @click="openBatchModal({key:'cur_purchase_code',label:'当前采购件号',placeholder:'点击录入当前采购件号'}, poHistFilters)" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ poHistFilters.cur_purchase_code || '点击录入当前采购件号' }}</span><span v-if="batchCount(poHistFilters,'cur_purchase_code')" style="margin-left:auto;color:#1677ff">{{ batchCount(poHistFilters,'cur_purchase_code') }} 个</span></a-button></div>
                   <div class="f-item"><span class="f-label">建储仓库编码</span>
-                    <a-textarea v-model:value="poHistFilters.wh_code" :auto-size="{minRows:1,maxRows:3}" placeholder="建储仓库编码，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
+                    <a-button @click="openBatchModal({key:'wh_code',label:'建储仓库编码',placeholder:'点击录入建储仓库编码'}, poHistFilters)" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ poHistFilters.wh_code || '点击录入建储仓库编码' }}</span><span v-if="batchCount(poHistFilters,'wh_code')" style="margin-left:auto;color:#1677ff">{{ batchCount(poHistFilters,'wh_code') }} 个</span></a-button></div>
                   <div class="f-item"><span class="f-label">建储仓库名称</span>
                     <a-input v-model:value="poHistFilters.wh_name" placeholder="建储仓库名称" style="width:150px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">计划类型</span>
@@ -2084,7 +2084,7 @@ mark {
               <div class="filter-row">
                 <div class="filter-items">
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-textarea v-model:value="stoFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
+                    <a-button @click="openBatchModal({key:'part_code',label:'配件号',placeholder:'点击录入配件号'}, stoFilters)" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ stoFilters.part_code || '点击录入配件号' }}</span><span v-if="batchCount(stoFilters,'part_code')" style="margin-left:auto;color:#1677ff">{{ batchCount(stoFilters,'part_code') }} 个</span></a-button></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="stoFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">发货仓</span>
@@ -2271,7 +2271,7 @@ mark {
               <div class="filter-row">
                 <div class="filter-items">
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-textarea v-model:value="stoExpFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
+                    <a-button @click="openBatchModal({key:'part_code',label:'配件号',placeholder:'点击录入配件号'}, stoExpFilters)" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ stoExpFilters.part_code || '点击录入配件号' }}</span><span v-if="batchCount(stoExpFilters,'part_code')" style="margin-left:auto;color:#1677ff">{{ batchCount(stoExpFilters,'part_code') }} 个</span></a-button></div>
                   <div class="f-item"><span class="f-label">发货仓</span>
                     <a-select v-model:value="stoExpFilters.from_wh" placeholder="发货仓" style="width:160px" allow-clear
                       :options="stoFromWhs.map(v=>({value:v,label:v}))"/></div>
@@ -2391,7 +2391,7 @@ mark {
                   <div class="f-item"><span class="f-label">快照日期</span>
                     <a-input v-model:value="stoSumFilters.snapshot_date" placeholder="如 2026-09-21" style="width:130px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-textarea v-model:value="stoSumFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
+                    <a-button @click="openBatchModal({key:'part_code',label:'配件号',placeholder:'点击录入配件号'}, stoSumFilters)" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ stoSumFilters.part_code || '点击录入配件号' }}</span><span v-if="batchCount(stoSumFilters,'part_code')" style="margin-left:auto;color:#1677ff">{{ batchCount(stoSumFilters,'part_code') }} 个</span></a-button></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="stoSumFilters.part_name" placeholder="配件名称" style="width:170px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">ABC分类</span>
@@ -2523,7 +2523,7 @@ mark {
                   <div class="f-item"><span class="f-label">供应商名称</span>
                     <a-input v-model:value="rollFilters.supplier_name" placeholder="供应商名称" style="width:190px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-textarea v-model:value="rollFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
+                    <a-button @click="openBatchModal({key:'part_code',label:'配件号',placeholder:'点击录入配件号'}, rollFilters)" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ rollFilters.part_code || '点击录入配件号' }}</span><span v-if="batchCount(rollFilters,'part_code')" style="margin-left:auto;color:#1677ff">{{ batchCount(rollFilters,'part_code') }} 个</span></a-button></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="rollFilters.part_name" placeholder="配件名称" style="width:160px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">计划批次</span>
@@ -2689,7 +2689,7 @@ mark {
                   <div class="f-item"><span class="f-label">活动名称</span>
                     <a-input v-model:value="actRegFilters.activity_name" placeholder="活动名称" style="width:180px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">配件号</span>
-                    <a-textarea v-model:value="actRegFilters.part_code" :auto-size="{minRows:1,maxRows:3}" placeholder="配件号，支持批量粘贴（换行/逗号分隔）" style="width:200px" allow-clear/></div>
+                    <a-button @click="openBatchModal({key:'part_code',label:'配件号',placeholder:'点击录入配件号'}, actRegFilters)" style="width:200px;text-align:left"><span style="color:#8c8c8c">{{ actRegFilters.part_code || '点击录入配件号' }}</span><span v-if="batchCount(actRegFilters,'part_code')" style="margin-left:auto;color:#1677ff">{{ batchCount(actRegFilters,'part_code') }} 个</span></a-button></div>
                   <div class="f-item"><span class="f-label">配件名称</span>
                     <a-input v-model:value="actRegFilters.part_name" placeholder="配件名称" style="width:180px" allow-clear/></div>
                   <div class="f-item"><span class="f-label">活动状态</span>
@@ -2924,21 +2924,11 @@ mark {
                     <span class="f-label">{{ f.label }}</span>
                     <a-select v-if="f.type==='select'" v-model:value="genFilters[activeMenu][f.key]" :placeholder="f.placeholder||'请选择'" style="width:160px" allow-clear :show-search="!!f.search" :option-filter-prop="f.search?'label':'value'" :options="f.options"/>
                     <div v-else-if="isBatchField(f)" style="display:flex;flex-direction:column">
-                      <!-- 方案二：配件扩展属性用弹窗式批量搜索 -->
-                      <template v-if="activeMenu==='mat-ext'">
-                        <a-button @click="openBatchModal(f)" style="width:220px;text-align:left">
-                          <span style="color:#8c8c8c">{{ f.placeholder||'点击录入批量条件' }}</span>
-                          <span v-if="batchStats(f)>0" style="margin-left:auto;color:#1677ff">{{ batchStats(f) }} 个</span>
-                        </a-button>
-                      </template>
-                      <!-- 其他页面：方案一 textarea + 展开/收起 -->
-                      <template v-else>
-                        <div class="batch-textarea-wrap">
-                          <textarea v-model="genFilters[activeMenu][f.key]" :placeholder="(f.placeholder||'请输入')+'，支持批量粘贴'" allow-clear class="batch-textarea" :style="{height: batchExpandKey(f) ? '192px' : '44px'}"></textarea>
-                          <span class="batch-expand-btn" @click="toggleBatchExpand(f)">{{ batchExpandKey(f) ? '收起' : '展开' }}</span>
-                        </div>
-                        <span v-if="batchStats(f)>0" style="font-size:11px;color:#1677ff;margin-top:2px;line-height:1.4">已识别 {{ batchStats(f) }} 个</span>
-                      </template>
+                      <!-- 统一方案：所有含配件号/仓库编码的页面均用弹窗式批量录入（同配件扩展属性） -->
+                      <a-button @click="openBatchModal(f)" style="width:220px;text-align:left">
+                        <span style="color:#8c8c8c">{{ f.placeholder||'点击录入批量条件' }}</span>
+                        <span v-if="batchStats(f)>0" style="margin-left:auto;color:#1677ff">{{ batchStats(f) }} 个</span>
+                      </a-button>
                     </div>
                     <a-input v-else v-model:value="genFilters[activeMenu][f.key]" :placeholder="f.placeholder||'请输入'" style="width:170px" allow-clear/>
                   </div>
@@ -5315,7 +5305,7 @@ dayjs.extend(dayjs_plugin_quarterOfYear);
 <script src="global-parameters.js?v=20261026-derived-service"></script>
 <script src="inventory-results.js?v=20261119-plan-v6"></script>
 <script src="inventory-strategy.js?v=20261119-purchase-simplify"></script>
-<script src="fallback-rule.js?v=20261120-fieldsrc3"></script>
+<script src="fallback-rule.js?v=20261123-dragsort"></script>
 <script>
 /* ================= 模拟数据（确定性随机，每次打开一致） ================= */
 let _seed = 20260918;
@@ -5327,17 +5317,20 @@ function rint(a,b){ return Math.floor(a+rnd()*(b-a+1)); }
    支持从 Excel 直接复制多行，或用逗号/分号/制表符分隔，粘贴进搜索框 */
 function parseBatchQuery(v){
   if(v==null) return [];
-  return String(v).split(/[\n\r,，;；\t"]+/).map(s=>s.trim()).filter(Boolean);
+  return String(v).split(/[\n\r,，;；\t]+/).map(s=>s.trim()).filter(Boolean);
 }
-/* 单值保持模糊匹配；多值（批量粘贴）按「精确命中任一」匹配 */
+/* 单值保持模糊匹配；多值（批量粘贴）按「精确命中任一」匹配；兼容字段值本身为逗号拼接串（如组内配件号） */
 function matchBatchQuery(recordValue, q){
   const tokens = parseBatchQuery(q);
   if(!tokens.length) return true;
-  const val = String(recordValue==null?'':recordValue).trim().toUpperCase();
-  if(tokens.length===1) return val.includes(tokens[0].toUpperCase());
-  return tokens.some(t=>t.toUpperCase()===val);
+  const raw = String(recordValue==null?'':recordValue).trim();
+  if(tokens.length===1) return raw.toUpperCase().includes(tokens[0].toUpperCase());
+  const values = parseBatchQuery(raw);
+  const pool = values.length ? values : [raw];
+  return tokens.some(t=>pool.some(v=>v.toUpperCase()===t.toUpperCase()));
 }
-const BATCH_FILTER_FIELDS = ['part_code','material_code','warehouse_code'];
+/* 所有配件号 / 仓库编码类文本查询字段统一走弹窗式批量录入 */
+const BATCH_FILTER_FIELDS = ['part_code','material_code','warehouse_code','new_material_code','latest_purchasable_material_code','manual_purchasable_material_code','part_codes'];
 
 const warehouses = window.CSPPWarehouseNetwork.warehouses;
 const vehicles = [
@@ -9678,13 +9671,31 @@ const app = createApp({
     /* 批量搜索大弹窗状态 */
     const batchModalOpen = ref(false);
     const batchModalField = ref(null);
-    const batchModalTokenList = computed(()=>{
-      if(!batchModalField.value) return [];
-      const v = genFilters[activeMenu.value]?.[batchModalField.value.key];
-      return v ? parseBatchQuery(v) : [];
-    });
+    const batchModalTarget = ref(null);   /* 目标 filters 对象；为空时默认写 genFilters[activeMenu] */
+    const batchModalValue = ref('');      /* 弹窗文本框中转值，确定/清空时写回目标对象 */
+    const batchModalTokenList = computed(()=> batchModalValue.value ? parseBatchQuery(batchModalValue.value) : []);
     const batchModalTokens = computed(()=> batchModalTokenList.value.length );
-    const openBatchModal = (f)=>{ batchModalField.value = f; batchModalOpen.value = true; };
+    /* 统一批量录入弹窗：openBatchModal(fieldCfg, targetObj)
+       fieldCfg: {key,label,placeholder}；targetObj: 要写入 key 的响应式对象（省略则写当前通用页 genFilters） */
+    const openBatchModal = (f, targetObj)=>{
+      batchModalField.value = f;
+      batchModalTarget.value = targetObj || null;
+      batchModalValue.value = String((targetObj || genFilters[activeMenu.value] || {})[f.key] || '');
+      batchModalOpen.value = true;
+    };
+    function commitBatchModal(){
+      const obj = batchModalTarget.value || genFilters[activeMenu.value];
+      if(obj && batchModalField.value) obj[batchModalField.value.key] = batchModalValue.value;
+      batchModalOpen.value = false;
+    }
+    function clearBatchModal(){
+      const obj = batchModalTarget.value || genFilters[activeMenu.value];
+      if(obj && batchModalField.value) obj[batchModalField.value.key] = '';
+      batchModalValue.value = '';
+      batchModalOpen.value = false;
+    }
+    /* 供各独立筛选页按钮显示已录入数量 */
+    const batchCount = (obj, key)=> obj && obj[key] ? parseBatchQuery(obj[key]).length : 0;
     const activeDef = computed(()=> pageDefs[activeMenu.value] || { detailTitle:'', idField:'id', columns:[], filters:[], isExtension:false, scrollX:1000 });
     const genFiltered = computed(()=>{
       const def = pageDefs[activeMenu.value];
@@ -12802,7 +12813,7 @@ const app = createApp({
       rollDetailOpen, rollDetailRow, rollOpenDetail, rollDetailMetricCols, rollDetailMetricRows,
       rollExportOpen, rollExportFields, rollToggleExportField, rollDoExport, rollDoSearch, rollResetFilters, poRegVehicleCodes,
       isBaseMenu, baseMenuKeys, genericKeys, activeDef,
-      genFilters, genApplied, genPage, genHiddenCols, genExpanded, genFav, genVisibleColumns, genPaged, genFiltered, genCustomRow, batchStats, batchExpandKey, toggleBatchExpand, batchModalOpen, batchModalField, batchModalTokens, batchModalTokenList, openBatchModal,
+      genFilters, genApplied, genPage, genHiddenCols, genExpanded, genFav, genVisibleColumns, genPaged, genFiltered, genCustomRow, batchStats, batchExpandKey, toggleBatchExpand, batchModalOpen, batchModalField, batchModalTokens, batchModalTokenList, batchModalValue, openBatchModal, commitBatchModal, clearBatchModal, batchCount,
       genDetailOpen, genDetailRow, openGenDetail, modalDetailKeys,
       preDetailOpen, preDetailRow, preDetailCols, preDetailRows, openPreDetail,
       fcTrendSplit, trendModal, openTrendModal, closeTrendModal, hasTrend, fcReasonErr,

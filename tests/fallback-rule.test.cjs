@@ -97,7 +97,7 @@ test('近一年销售频次采用指标宽表权威字段：注册存在且旧�
   const meta=m.fieldMeta('sales_frequency_1y');
   assert.ok(meta,'应注册近一年销售频次字段');
   assert.equal(meta.fieldLabel,'近一年销售频次');
-  assert.equal(meta.fieldGroup,'指标-兜底频次');
+  assert.equal(meta.fieldGroup,'指标宽表');
   for(const old of ['positive_order_line_cnt_12m','positive_order_line_cnt_12m_all']){
     assert.equal(m.fieldMeta(old),undefined,'旧自定义频次字段应移除：'+old);
   }
@@ -161,9 +161,9 @@ test('自定义配置：在按销售价区间示例档之前插入普通条件�
   assert.equal(m.matchAll(g2,{abcClassification:'D'}).rule.fallbackValue,5,'销售价缺失落到首档（空或≤0.01）');
 });
 
-test('字段来源收窄：配件主数据 / 仓库主数据 / 指标宽表三类，仓库编码单独归入仓库主数据',()=>{
+test('字段来源收窄：配件主数据 / 仓库主数据 / 指标宽表三类（指标宽表不再细分），仓库编码单独归入仓库主数据',()=>{
   const groups=m.fieldSourceGroups();
-  assert.deepEqual(groups.map(k=>k.label),['配件主数据','仓库主数据','指标宽表·历史需求','指标宽表·兜底频次','指标宽表·预测','指标宽表·库存供应']);
+  assert.deepEqual(groups.map(k=>k.label),['配件主数据','仓库主数据','指标宽表']);
   const allowed=new Set();
   groups.forEach(k=>k.fields.forEach(f=>allowed.add(f.fieldName)));
   assert.equal(allowed.size,m.FIELD_REGISTRY.length,'所有注册字段都应出现在来源分组中');
@@ -203,8 +203,114 @@ test('页面已去掉字段注册表/命中试算/恢复默认三个按钮及对
   for(const word of ['字段注册表','命中试算','恢复默认','registryOpen','testOpen','resetDefaults','clearStore']){
     assert.ok(!src.includes(word),'配置页不应再出现：'+word);
   }
-  assert.ok(src.includes('当前 4 组为示例数据'),'页面应标注示例数据');
+  assert.ok(src.includes('示例数据'),'页面应标注示例数据');
   assert.ok(src.includes('JLR_FALLBACK_RULE_COND_TIERS_V8'),'数据结构变更后存储键应升级，避免加载旧价档示例');
+});
+
+// ===== 2026-11-21 体验优化新增断言 =====
+test('库存供应 5 字段从可配置参数移除，但旧配置仍能识别（兼容映射）',()=>{
+  const groups=m.fieldSourceGroups();
+  const allowed=new Set();
+  groups.forEach(k=>k.fields.forEach(f=>allowed.add(f.fieldName)));
+  const removed=['on_hand_qty','available_qty','purchase_inbound_qty','transfer_inbound_qty','backorder_qty'];
+  for(const fn of removed){
+    assert.ok(!allowed.has(fn),'字段下拉不应再出现已移除字段：'+fn);
+    assert.ok(!m.FIELD_REGISTRY.some(f=>f.fieldName===fn),'FIELD_REGISTRY 不应再注册：'+fn);
+  }
+  // 兼容：旧配置引用这些字段时仍可显示中文名、值类型并参与匹配
+  assert.equal(m.fieldLabel('on_hand_qty'),'账面库存');
+  assert.equal(m.fieldType('on_hand_qty'),'NUMBER');
+  const legacy=m.conds([['on_hand_qty','GT','10']]);
+  assert.equal(m.evalRule({matchMode:'AND',conditions:legacy},{on_hand_qty:20}),true,'旧配置条件仍应能参与匹配');
+  assert.equal(m.evalRule({matchMode:'AND',conditions:legacy},{on_hand_qty:5}),false);
+});
+
+test('指标宽表为单一类：不再有历史需求/兜底频次/预测/库存供应细分',()=>{
+  const labels=m.fieldSourceGroups().map(k=>k.label);
+  assert.deepEqual(labels,['配件主数据','仓库主数据','指标宽表']);
+  assert.ok(!labels.some(l=>l.includes('·')),'来源标签不应再包含细分点号');
+  const metric=m.fieldSourceGroups().find(k=>k.label==='指标宽表');
+  assert.ok(metric.fields.length>0,'指标宽表应仍含字段');
+  assert.ok(metric.fields.some(f=>f.fieldName==='sales_frequency_1y'),'近一年销售频次应归入指标宽表');
+  // 所有指标类字段的 fieldGroup 统一为「指标宽表」
+  for(const f of m.FIELD_REGISTRY.filter(f=>f.fieldGroup!=='配件主数据'&&f.fieldGroup!=='仓库主数据')){
+    assert.equal(f.fieldGroup,'指标宽表','指标字段分组应统一：'+f.fieldName);
+  }
+});
+
+test('取消档位名称：示例档位不再含 name 字段，卡片以兜底原因展示',()=>{
+  for(const g of examples()){
+    for(const t of g.tiers){
+      assert.ok(!('name' in t),'档位不应再有 name 字段：'+t.id);
+      assert.ok(t.reason&&String(t.reason).trim(),'档位兜底原因不应为空：'+t.id);
+    }
+  }
+  const src=fs.readFileSync(path.join(__dirname,'../前端设计稿/fallback-rule.js'),'utf8');
+  assert.ok(!src.includes('>档位名称<')&&!src.includes('jlrs-req">*</span>档位名称'),'页面不应再出现「档位名称」表单项');
+  assert.ok(!src.includes('请填写档位名称'),'校验不应再要求档位名称');
+  assert.ok(!src.includes('v-model:value="tierState.name"'),'档位编辑弹窗不应再绑定 name');
+  assert.ok(src.includes('t.reason||\'未填写兜底原因\''),'分档卡片应以兜底原因作为展示标题');
+});
+
+test('兜底原因改为必填：validateTier 拦截空原因、放行已填原因，不再校验名称',()=>{
+  const ok=m.validateTier({seq:10,fallbackValue:5,reason:'价格2~20兜底'});
+  assert.deepEqual(ok,[]);
+  const noReason=m.validateTier({seq:10,fallbackValue:5,reason:''});
+  assert.ok(noReason.some(s=>s.includes('兜底原因')),'空兜底原因应被拦截');
+  const blankReason=m.validateTier({seq:10,fallbackValue:5,reason:'   '});
+  assert.ok(blankReason.some(s=>s.includes('兜底原因')),'纯空格兜底原因应被拦截');
+  const noName=m.validateTier({seq:10,fallbackValue:5,reason:'有原因',name:''});
+  assert.deepEqual(noName,[],'缺少 name 不应再导致校验失败');
+  const neg=m.validateTier({seq:10,fallbackValue:-1,reason:'有原因'});
+  assert.ok(neg.some(s=>s.includes('不能为负')));
+});
+
+test('精简页面：去除顶部冗长说明 alert 与冗余层级文案',()=>{
+  const src=fs.readFileSync(path.join(__dirname,'../前端设计稿/fallback-rule.js'),'utf8');
+  assert.ok(!src.includes('系统不预置生产规则'),'不应再展示冗长的预置规则说明');
+  assert.ok(!src.includes('第二层 · 本组分档'),'不应再展示第二层层级文案');
+  assert.ok(!src.includes('档位条件字段仅取自'),'不应再展示冗余的来源说明');
+});
+
+// ===== 2026-11-23 分档拖拽排序 =====
+test('拖拽排序：移动到目标位置与连续点击上移/下移效果一致，其他档位不受影响',()=>{
+  const ts=JSON.parse(JSON.stringify(tiersOf(examples(),'C_CLASS_FALLBACK')));
+  const originalIds=ts.map(t=>t.id);
+  const moved=m.moveTierTo(ts,'C_T1','C_T3');
+  assert.deepEqual(moved.map(t=>t.id),['C_T2','C_T3','C_T1','C_T4','C_T5','C_T6','C_T7','C_T8']);
+  assert.deepEqual(moved.map(t=>t.seq),[10,20,30,40,50,60,70,80],'档位序号应随展示顺序连续，不出现重复');
+  assert.deepEqual(moved.slice(3).map(t=>t.id),originalIds.slice(3),'目标之后的分档顺序应保持不变');
+  // 将 C_T1 连续下移两次，结果应与直接拖到 C_T3 一致
+  let twice=JSON.parse(JSON.stringify(tiersOf(examples(),'C_CLASS_FALLBACK')));
+  twice=m.moveTierTo(twice,'C_T1','C_T2');
+  twice=m.moveTierTo(twice,'C_T1','C_T3');
+  assert.deepEqual(twice.map(t=>t.id),moved.map(t=>t.id));
+});
+
+test('拖拽排序：同档位/无效 id 不改变顺序，匹配结果按新序号取首个命中',()=>{
+  const g=examples();
+  const cIdx=g.findIndex(x=>x.groupCode==='C_CLASS_FALLBACK');
+  const ts=JSON.parse(JSON.stringify(g[cIdx].tiers));
+  assert.deepEqual(m.moveTierTo(ts,'C_T1','C_T1').map(t=>t.id),ts.map(t=>t.id));
+  assert.deepEqual(m.moveTierTo(ts,'C_T1','NOT_EXIST').map(t=>t.id),ts.map(t=>t.id));
+  // 把 >2000 档拖到最前：同一物料应命中新首位（V=3）而非原首位（V=5）
+  const reordered=m.moveTierTo(JSON.parse(JSON.stringify(tiersOf(examples(),'C_CLASS_FALLBACK'))),'C_T8','C_T1');
+  const g2=g.map((x,i)=>i===cIdx?{...x,tiers:reordered}:x);
+  assert.equal(m.matchAll(g2,{abcClassification:'C',demand_month_avg_3m:5,salesPrice:3000}).rule.fallbackValue,3);
+  assert.equal(m.matchAll(g2,{abcClassification:'C',demand_month_avg_3m:5,salesPrice:0.01}).rule.fallbackValue,5,'新首位不满足时应继续按后续档位条件匹配');
+});
+
+test('分档卡片已接入拖拽事件与视觉反馈，且不影响原有操作按钮',()=>{
+  const src=fs.readFileSync(path.join(__dirname,'../前端设计稿/fallback-rule.js'),'utf8');
+  for(const token of ['draggable="true"','@dragstart="onTierDragStart($event,t)"','@dragover="onTierDragOver($event,t)"','@drop="onTierDrop($event,t)"','@dragend="onTierDragEnd"','fb-dragging','fb-drop-target','fb-drag-handle','拖动卡片可调整优先级']){
+    assert.ok(src.includes(token),'分档卡片缺少拖拽支持：'+token);
+  }
+  assert.ok(src.includes('moveTier(t.id,-1)')&&src.includes('moveTier(t.id,1)'),'上移/下移入口应保留');
+  assert.ok(src.includes('duplicateTier(t)')&&src.includes('openTierEditor(t)')&&src.includes('deleteTier(t.id)'),'复制/编辑/删除入口应保留');
+  const css=fs.readFileSync(path.join(__dirname,'../前端设计稿/inventory-strategy.css'),'utf8');
+  for(const token of ['.fb-rule-card.fb-dragging','.fb-rule-card.fb-drop-target','.fb-drag-handle']){
+    assert.ok(css.includes(token),'拖拽样式缺失：'+token);
+  }
 });
 
 console.log(checks+' meaningful checks passed');

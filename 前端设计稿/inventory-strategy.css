@@ -40,6 +40,12 @@
 .fb-rule-card:hover{border-color:#91caff;box-shadow:0 2px 6px rgba(22,119,255,.08)}
 .fb-rule-card.disabled{border-left-color:#d9d9d9;background:#fafafa}
 .fb-rule-card.disabled .fbrc-name{color:#bfbfbf}
+.fb-rule-card[draggable="true"]{cursor:grab}
+.fb-rule-card.fb-dragging{opacity:.5;border-style:dashed}
+.fb-rule-card.fb-dragging .fb-drag-handle{cursor:grabbing}
+.fb-rule-card.fb-drop-target{border-color:#1677ff;background:#f0f7ff;box-shadow:0 0 0 2px rgba(22,119,255,.16)}
+.fb-drag-handle{color:#bfbfbf;font-size:12px;letter-spacing:-2px;cursor:grab;user-select:none;flex-shrink:0}
+.fbrc-ft a{cursor:pointer}
 .fbrc-hd{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
 .fb-prio{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#fff7e6;border:1px solid #ffd591;color:#fa8c16;font-size:12px;font-weight:600;flex-shrink:0}
 .fbrc-name{font-size:14px;font-weight:600;color:#1f1f1f;margin-right:auto}
