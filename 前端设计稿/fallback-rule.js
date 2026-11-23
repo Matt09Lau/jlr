@@ -23,7 +23,7 @@ const FIELD_REGISTRY = [
   { fieldName:'volumeClassification', fieldLabel:'体积分类', fieldGroup:'配件主数据', valueType:'ENUM', enumValues:[['S','小'],['M','中'],['L','大']], supportedOps:['EQ','NE','IN','NOT_IN'] },
   { fieldName:'moneyClassification', fieldLabel:'金额分类', fieldGroup:'配件主数据', valueType:'ENUM', enumValues:[['H','高'],['M','中'],['L','低']], supportedOps:['EQ','NE','IN','NOT_IN'] },
   { fieldName:'salesPrice', fieldLabel:'销售价', fieldGroup:'配件主数据', valueType:'NUMBER', enumValues:null, supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN','IS_NULL'] },
-  { fieldName:'minPackageQty', fieldLabel:'最小包装量', fieldGroup:'配件主数据', valueType:'NUMBER', enumValues:null, supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  { fieldName:'minPackageQty', fieldLabel:'MPQ', fieldGroup:'配件主数据', valueType:'NUMBER', enumValues:null, supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
   { fieldName:'minOrderQty', fieldLabel:'起订量', fieldGroup:'配件主数据', valueType:'NUMBER', enumValues:null, supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
   { fieldName:'grossWeight', fieldLabel:'毛重', fieldGroup:'配件主数据', valueType:'NUMBER', enumValues:null, supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
   { fieldName:'netWeight', fieldLabel:'净重', fieldGroup:'配件主数据', valueType:'NUMBER', enumValues:null, supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },

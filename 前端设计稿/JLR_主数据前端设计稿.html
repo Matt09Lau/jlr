@@ -4867,7 +4867,7 @@ mark {
           <a-descriptions-item label="车型代码">{{ detailRow.vehicle }}</a-descriptions-item>
           <a-descriptions-item label="车型名称">{{ detailRow.vehicleName }}</a-descriptions-item>
           <a-descriptions-item label="体积（m³）">{{ detailRow.volume.toFixed(3) }}</a-descriptions-item>
-          <a-descriptions-item label="最小包装量">{{ detailRow.minPack }}</a-descriptions-item>
+          <a-descriptions-item label="MPQ">{{ detailRow.minPack }}</a-descriptions-item>
           <a-descriptions-item label="采购类别">{{ detailRow.purchaseType }}</a-descriptions-item>
           <a-descriptions-item label="销售单价">¥ {{ detailRow.price.toFixed(2) }}</a-descriptions-item>
           <a-descriptions-item label="计划员">{{ detailRow.planner }}</a-descriptions-item>
@@ -5188,6 +5188,7 @@ mark {
               <a-input v-if="c.readonly" :value="genEditRow[c.dataIndex]" disabled/>
               <a-auto-complete v-else-if="c.freeInput" v-model:value="genEditRow[c.dataIndex]" :options="(c.options||[]).map(v=>({value:v}))" style="width:100%" placeholder="可选择，也可直接录入"/>
               <a-select v-else-if="c.options" v-model:value="genEditRow[c.dataIndex]" :options="c.options" style="width:100%"/>
+              <a-input-number v-else-if="c.numInt" v-model:value="genEditRow[c.dataIndex]" :precision="0" :min="1" style="width:100%" placeholder="正整数，默认 1"/>
               <a-input v-else v-model:value="genEditRow[c.dataIndex]" :placeholder="c.placeholder||''" style="width:100%"/>
               <div v-if="c.placeholder && !c.readonly" style="color:#8c8c8c;font-size:12px;line-height:1.6;">{{ c.placeholder }}</div>
             </a-form-item>
@@ -5201,6 +5202,9 @@ mark {
       <a-alert v-if="activeMenu==='replace-ext'" style="margin-bottom:12px;" type="info" show-icon
         message="导入范围：人工调整可采购件"
         :description="'模板字段：配件号、人工调整可采购件。配件号须已存在于替代链；人工调整可采购件须存在于配件主数据，留空表示清除人工覆盖。不存在于配件主数据的行按失败返回，不写入。'"/>
+      <a-alert v-if="activeMenu==='mat-ext'" style="margin-bottom:12px;" type="info" show-icon
+        message="导入范围：MPQ（最小包装量），手工录入字段"
+        :description="'模板字段：配件号、MPQ。MPQ 为正整数（留空按默认 1 处理，非法值整行按失败返回）。导入后覆盖该配件现有 MPQ，不从 IPOS 同步。'"/>
       <a-upload-dragger :before-upload="()=>false" multiple>
         <p class="ant-upload-drag-icon" style="font-size:40px;margin:10px 0;">⇪</p>
         <p class="ant-upload-text">将文件拖到此处，或点击选择 Excel / CSV 文件</p>
@@ -5558,6 +5562,8 @@ partPool.forEach((p, idx)=>{
     material_type: t,
     material_group: pick(materialGroups),
     base_unit: pick(baseUnits),
+    /* MPQ（最小包装量）：手工录入字段，正整数，默认 1；不再从 IPOS 同步 */
+    mpq: pick([1,1,1,2,2,4,6,10]),
     old_material_code: rnd()<0.3 ? (p[0].slice(0,6)+'00') : '',
     manufacturer_part_no: mfr,
     mfr_part_no: mfr,   /* 兼容旧字段名 */
@@ -5794,13 +5800,14 @@ function partHasValidContract(code){
 
 /* ================= 通用页面定义（pageDefs，数据驱动） ================= */
 const matMasterDef = {
-  isExtension:false, detailTitle:'配件', idField:'material_code', scrollX:2140,
+  isExtension:false, editable:true, detailTitle:'配件', idField:'material_code', scrollX:2230,
   columns:[
     {title:'配件号', key:'material_code', dataIndex:'material_code', width:145, fixed:'left', render:'link', sorter:(a,b)=>a.material_code.localeCompare(b.material_code)},
     {title:'配件名称', key:'material_name', dataIndex:'material_name', width:165, ellipsis:true, sorter:(a,b)=>a.material_name.localeCompare(b.material_name)},
     {title:'物料类型', key:'material_type', dataIndex:'material_type', width:120, sorter:(a,b)=>a.material_type.localeCompare(b.material_type)},
     {title:'物料组', key:'material_group', dataIndex:'material_group', width:130, sorter:(a,b)=>a.material_group.localeCompare(b.material_group)},
     {title:'基础计量单位', key:'base_unit', dataIndex:'base_unit', width:110},
+    {title:'MPQ', key:'mpq', dataIndex:'mpq', width:100, editable:true, numInt:true, placeholder:'正整数，默认 1（手工录入，不从 IPOS 同步）', sorter:(a,b)=>a.mpq-b.mpq},
     {title:'旧配件号', key:'old_material_code', dataIndex:'old_material_code', width:120},
     {title:'制造商件号', key:'manufacturer_part_no', dataIndex:'manufacturer_part_no', width:120},
     {title:'制造商', key:'manufacturer', dataIndex:'manufacturer', width:130, sorter:(a,b)=>a.manufacturer.localeCompare(b.manufacturer)},
@@ -7304,7 +7311,7 @@ const partGroupDef = {
 
 const pageDefs = {
   'mat-master': matMasterDef,
-  'mat-ext': Object.assign({}, matMasterDef, { isExtension:true, columns: matExtColumns, filters: matExtFilters, scrollX:2030 }),
+  'mat-ext': Object.assign({}, matMasterDef, { isExtension:true, editable:false, columns: matExtColumns, filters: matExtFilters, scrollX:2120 }),
   'wh-master': whMasterDef,
   'dealer-ext': dealerExtDef,
   'supplier': supplierDef,
@@ -8166,7 +8173,7 @@ const app = createApp({
       { title:'成套采购分组', key:'set_group', dataIndex:'set_group', width:94 },
       { title:'凑成套采购量', key:'set_fill_qty', dataIndex:'set_fill_qty', width:90 },
       { title:'推荐计划数量(凑成套采购后)', key:'suggest_set_qty', dataIndex:'suggest_set_qty', width:134, ellipsis:true },
-      { title:'最小包装量', key:'mpq', dataIndex:'mpq', width:82 },
+      { title:'MPQ', key:'mpq', dataIndex:'mpq', width:82 },
       { title:'推荐计划数量', key:'suggest_qty', dataIndex:'suggest_qty', width:100, sorter:(a,b)=>a.suggest_qty-b.suggest_qty },
       { title:'是否多供应商', key:'multi_supplier', dataIndex:'multi_supplier', width:96 },
       { title:'计划到货日期', key:'required_arrival_date', dataIndex:'required_arrival_date', width:104 },
@@ -9849,6 +9856,16 @@ const app = createApp({
           row.manual_purchasable_material_code = manual;
           row.updater_name = '当前用户';
           row.update_time = new Date().toLocaleString('zh-CN',{hour12:false}).replace(/\//g,'-');
+        }
+        /* MPQ（最小包装量）：手工录入，必须为正整数；清空时按默认 1 处理 */
+        if(activeMenu.value==='mat-master' || activeMenu.value==='mat-ext'){
+          const v = row.mpq;
+          const n = Number(v);
+          if(v==='' || v==null){ row.mpq = 1; }
+          else if(!Number.isInteger(n) || n<1){
+            antd.message.error('MPQ 必须为大于等于 1 的整数');
+            return;
+          } else { row.mpq = n; }
         }
         Object.assign(genEditTarget.value, row);
       }
