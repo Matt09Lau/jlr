@@ -6148,8 +6148,8 @@ function fcPreCalc(raw, stock, moq){
   for(let i=0; i<diff_qty && nonzero.length; i++) alloc[nonzero[i%nonzero.length]] += 1;
   const final = {}; Y.forEach(k=> final[k]=step[k]+alloc[k]);
   const strategy = [];
-  if(stock>0) strategy.push('10 库存扣减');
-  if(diff_qty>0) strategy.push('20 MOQ 取整');
+  if(stock>0) strategy.push('库存扣减');
+  if(diff_qty>0) strategy.push('MOQ 取整');
   return { S:S, open_po_qty:open_po_qty, available_qty:available_qty, asn_qty:asn_qty, in_transit_qty:in_transit_qty, bo_qty:bo_qty,
     deducted_qty:deducted_qty, plan_qty:plan_qty, diff_qty:diff_qty, step:step, final:final,
     calc_strategy:strategy.join('、')||'—' };
