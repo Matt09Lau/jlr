@@ -7,6 +7,7 @@
  * 全局参数类字段（LT、目标满足率、风控系数、备货标识等）不纳入。
  * 2026-11-21 体验优化：不再配置「档位名称」，兜底原因改必填；移除「库存供应」5 个字段（旧配置仍可加载/显示/匹配）。
  * 2026-11-23 组内分档支持拖拽调整优先级，与上移/下移共用位置移动逻辑，结果即时持久化。
+ * 2026-11-25 配件主数据字段全量纳入（masterField 对齐源字段）；新增 DATE 类型与格式校验/匹配，兼容空值、缺字段与非法格式。
  */
 (function(root){
 'use strict';
@@ -15,44 +16,67 @@ const { ref, reactive, computed } = root.Vue || {};
 const OP = { EQ:'=', NE:'≠', GT:'>', GE:'≥', LT:'<', LE:'≤', BETWEEN:'区间', IN:'属于', NOT_IN:'不属于', IS_NULL:'为空', IS_NOT_NULL:'不为空' };
 const ALL_OPS = ['EQ','NE','GT','GE','LT','LE','BETWEEN','IN','NOT_IN','IS_NULL','IS_NOT_NULL'];
 
-// 可配置字段清单：三类来源——配件主数据 / 仓库主数据 / 指标宽表（指标宽表为单一类，不再细分）
+// 可配置字段清单：三类来源——配件主数据 / 仓库主数据 / 指标宽表（指标宽表为单一类，不再细分）。
+// 2026-11-25：配件主数据字段按前端设计稿 matMasterDef / matExtColumns 全量纳入；masterField 指向源字段名，
+// 既有 camelCase 配置名保留兼容，取值时同时读取 camelCase 与 masterField。dateFormat 定义日期/时间配置格式。
+const STR_OPS = ['EQ','NE','IN','NOT_IN','IS_NULL','IS_NOT_NULL'];
+const NUM_OPS = ['EQ','NE','GT','GE','LT','LE','BETWEEN','IS_NULL','IS_NOT_NULL'];
+const DATE_OPS = ['EQ','NE','GT','GE','LT','LE','BETWEEN','IS_NULL','IS_NOT_NULL'];
+const ENUM_OPS = ['EQ','NE','IN','NOT_IN','IS_NULL','IS_NOT_NULL'];
 const FIELD_REGISTRY = [
-  { fieldName:'abcClassification', fieldLabel:'ABC分类', fieldGroup:'配件主数据', valueType:'ENUM', enumValues:[['S0','S0'],['S1','S1'],['S2','S2'],['S3','S3'],['A','A'],['B','B'],['C','C'],['D','D'],['E','E']], supportedOps:['EQ','NE','IN','NOT_IN'] },
-  { fieldName:'warehouseCode', fieldLabel:'仓库编码', fieldGroup:'仓库主数据', valueType:'STRING', enumValues:null, supportedOps:['EQ','NE','IN','NOT_IN','IS_NULL','IS_NOT_NULL'] },
-  { fieldName:'xyzClassification', fieldLabel:'XYZ分类', fieldGroup:'配件主数据', valueType:'ENUM', enumValues:[['X','X'],['Y','Y'],['Z','Z']], supportedOps:['EQ','NE','IN','NOT_IN'] },
-  { fieldName:'volumeClassification', fieldLabel:'体积分类', fieldGroup:'配件主数据', valueType:'ENUM', enumValues:[['S','小'],['M','中'],['L','大']], supportedOps:['EQ','NE','IN','NOT_IN'] },
-  { fieldName:'moneyClassification', fieldLabel:'金额分类', fieldGroup:'配件主数据', valueType:'ENUM', enumValues:[['H','高'],['M','中'],['L','低']], supportedOps:['EQ','NE','IN','NOT_IN'] },
-  { fieldName:'salesPrice', fieldLabel:'销售价', fieldGroup:'配件主数据', valueType:'NUMBER', enumValues:null, supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN','IS_NULL'] },
-  { fieldName:'minPackageQty', fieldLabel:'MPQ', fieldGroup:'配件主数据', valueType:'NUMBER', enumValues:null, supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'minOrderQty', fieldLabel:'起订量', fieldGroup:'配件主数据', valueType:'NUMBER', enumValues:null, supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'grossWeight', fieldLabel:'毛重', fieldGroup:'配件主数据', valueType:'NUMBER', enumValues:null, supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'netWeight', fieldLabel:'净重', fieldGroup:'配件主数据', valueType:'NUMBER', enumValues:null, supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'potentialUnitDown', fieldLabel:'无法行驶', fieldGroup:'配件主数据', valueType:'BOOLEAN', enumValues:[['true','是'],['false','否']], supportedOps:['EQ','NE'] },
-  { fieldName:'isCutOffPart', fieldLabel:'是否断供件', fieldGroup:'配件主数据', valueType:'BOOLEAN', enumValues:[['true','是'],['false','否']], supportedOps:['EQ','NE'] },
-  { fieldName:'isBreakPointPart', fieldLabel:'是否断点件', fieldGroup:'配件主数据', valueType:'BOOLEAN', enumValues:[['true','是'],['false','否']], supportedOps:['EQ','NE'] },
-  { fieldName:'isDangerousGoods', fieldLabel:'是否危险品', fieldGroup:'配件主数据', valueType:'BOOLEAN', enumValues:[['true','是'],['false','否']], supportedOps:['EQ','NE'] },
-  { fieldName:'isExpiryPart', fieldLabel:'是否效期件', fieldGroup:'配件主数据', valueType:'BOOLEAN', enumValues:[['true','是'],['false','否']], supportedOps:['EQ','NE'] },
-  { fieldName:'partsClassify', fieldLabel:'配件分类', fieldGroup:'配件主数据', valueType:'STRING', enumValues:null, supportedOps:['EQ','NE','IN','NOT_IN'] },
-  { fieldName:'tier1Category', fieldLabel:'一级分类', fieldGroup:'配件主数据', valueType:'STRING', enumValues:null, supportedOps:['EQ','NE','IN','NOT_IN'] },
-  { fieldName:'tier2Category', fieldLabel:'二级分类', fieldGroup:'配件主数据', valueType:'STRING', enumValues:null, supportedOps:['EQ','NE','IN','NOT_IN'] },
-  { fieldName:'planner', fieldLabel:'计划员', fieldGroup:'配件主数据', valueType:'STRING', enumValues:null, supportedOps:['EQ','NE','IN','NOT_IN'] },
-  { fieldName:'purchaseType', fieldLabel:'采购类别', fieldGroup:'配件主数据', valueType:'ENUM', enumValues:null, supportedOps:['EQ','NE','IN','NOT_IN'] },
-  { fieldName:'demand_week_avg_12w', fieldLabel:'近12周周均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_week_avg_8w', fieldLabel:'近8周周均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_week_std_8w', fieldLabel:'近8周需求标准差', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_month_avg_3m', fieldLabel:'近3个月月均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_month_avg_3m_all', fieldLabel:'近3月全仓月均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_month_std_6m', fieldLabel:'近6个月需求标准差', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_month_std_6m_all', fieldLabel:'近6月全仓需求标准差', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_qty_3m', fieldLabel:'近3个月需求量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_qty_12m', fieldLabel:'近12个月需求量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'demand_qty_12m_all', fieldLabel:'近12月全仓需求量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'days_since_last_demand', fieldLabel:'无需求天数', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'sales_frequency_1y', fieldLabel:'近一年销售频次', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'fallback_c_week_avg', fieldLabel:'兜底C类周均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'forecast_next_week_manual_qty', fieldLabel:'下周人工预测', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'forecast_next_month_manual_qty', fieldLabel:'下月仓库人工预测', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
-  { fieldName:'forecast_next_month_manual_qty_all', fieldLabel:'下月全仓人工预测', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:['EQ','NE','GT','GE','LT','LE','BETWEEN'] },
+  // —— 配件主数据：与设计稿字段一一对应 ——
+  { fieldName:'abcClassification', fieldLabel:'ABC分类', fieldGroup:'配件主数据', valueType:'ENUM', enumValues:[['S0','S0'],['S1','S1'],['S2','S2'],['S3','S3'],['A','A'],['B','B'],['C','C'],['D','D'],['E','E']], supportedOps:ENUM_OPS },
+  { fieldName:'materialCode', fieldLabel:'配件号', fieldGroup:'配件主数据', masterField:'material_code', valueType:'STRING', supportedOps:STR_OPS },
+  { fieldName:'materialName', fieldLabel:'配件名称', fieldGroup:'配件主数据', masterField:'material_name', valueType:'STRING', supportedOps:STR_OPS },
+  { fieldName:'materialType', fieldLabel:'物料类型', fieldGroup:'配件主数据', masterField:'material_type', valueType:'ENUM', enumValues:[['ZSP 备件','ZSP 备件'],['ZATT 附件','ZATT 附件'],['ZOL 油液','ZOL 油液'],['ZTY 轮胎','ZTY 轮胎'],['ZBAT 电瓶','ZBAT 电瓶']], supportedOps:ENUM_OPS },
+  { fieldName:'materialGroup', fieldLabel:'物料组', fieldGroup:'配件主数据', masterField:'material_group', valueType:'ENUM', enumValues:[['001 发动机系统','001 发动机系统'],['002 底盘系统','002 底盘系统'],['003 车身系统','003 车身系统'],['004 电气系统','004 电气系统'],['005 保养耗材','005 保养耗材'],['006 外观件','006 外观件']], supportedOps:ENUM_OPS },
+  { fieldName:'baseUnit', fieldLabel:'基础计量单位', fieldGroup:'配件主数据', masterField:'base_unit', valueType:'ENUM', enumValues:[['PC（个）','PC（个）'],['EA（件）','EA（件）'],['L（升）','L（升）'],['SET（套）','SET（套）']], supportedOps:ENUM_OPS },
+  { fieldName:'minPackageQty', fieldLabel:'MPQ', fieldGroup:'配件主数据', masterField:'mpq', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'oldMaterialCode', fieldLabel:'旧配件号', fieldGroup:'配件主数据', masterField:'old_material_code', valueType:'STRING', supportedOps:STR_OPS },
+  { fieldName:'manufacturerPartNo', fieldLabel:'制造商件号', fieldGroup:'配件主数据', masterField:'manufacturer_part_no', valueType:'STRING', supportedOps:STR_OPS },
+  { fieldName:'manufacturer', fieldLabel:'制造商', fieldGroup:'配件主数据', masterField:'manufacturer', valueType:'ENUM', enumValues:[['JLR Genuine','JLR Genuine'],['Bosch 博世','Bosch 博世'],['Continental 大陆','Continental 大陆'],['Mahle 马勒','Mahle 马勒'],['Denso 电装','Denso 电装'],['Valeo 法雷奥','Valeo 法雷奥'],['ZF 采埃孚','ZF 采埃孚']], supportedOps:ENUM_OPS },
+  { fieldName:'productHierarchy', fieldLabel:'产品层次', fieldGroup:'配件主数据', masterField:'product_hierarchy', valueType:'ENUM', enumValues:[['A1 发动机系统','A1 发动机系统'],['A2 制动系统','A2 制动系统'],['A3 悬挂系统','A3 悬挂系统'],['A4 电气系统','A4 电气系统'],['A5 保养耗材','A5 保养耗材']], supportedOps:ENUM_OPS },
+  { fieldName:'commonPart', fieldLabel:'通用件', fieldGroup:'配件主数据', masterField:'common_part', valueType:'STRING', supportedOps:STR_OPS },
+  { fieldName:'volume', fieldLabel:'体积(m³)', fieldGroup:'配件主数据', masterField:'volume', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'grossWeight', fieldLabel:'毛重(kg)', fieldGroup:'配件主数据', masterField:'gross_weight', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'salesOrg', fieldLabel:'销售组织', fieldGroup:'配件主数据', masterField:'sales_org', valueType:'ENUM', enumValues:[['CJ01 捷豹路虎中国','CJ01 捷豹路虎中国'],['CJ02 捷豹路虎（上海）','CJ02 捷豹路虎（上海）'],['LR01 路虎中国','LR01 路虎中国']], supportedOps:ENUM_OPS },
+  { fieldName:'salesPrice', fieldLabel:'销售价(元)', fieldGroup:'配件主数据', masterField:'sales_price', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'moneyClassification', fieldLabel:'金额分类', fieldGroup:'配件主数据', masterField:'price_class', valueType:'ENUM', enumValues:[['25','25档'],['50','50档'],['75','75档'],['100','100档']], supportedOps:ENUM_OPS },
+  { fieldName:'planner', fieldLabel:'计划员', fieldGroup:'配件主数据', masterField:'planner', valueType:'STRING', supportedOps:STR_OPS },
+  { fieldName:'syncDataTime', fieldLabel:'数据同步时间', fieldGroup:'配件主数据', masterField:'sync_data_time', valueType:'DATE', dateFormat:'YYYY-MM-DD HH:mm', supportedOps:DATE_OPS },
+  { fieldName:'purchaseType', fieldLabel:'采购类别', fieldGroup:'配件主数据', masterField:'purchase_category', valueType:'ENUM', enumValues:[['CJLR国产','CJLR国产'],['CJLR自制','CJLR自制'],['CJLR直供','CJLR直供'],['JLRC国产','JLRC国产'],['JLR进口','JLR进口']], supportedOps:ENUM_OPS },
+  // —— 原有扩展分类字段：保留兼容，继续可作为规则条件 ——
+  { fieldName:'xyzClassification', fieldLabel:'XYZ分类', fieldGroup:'配件主数据', valueType:'ENUM', enumValues:[['X','X'],['Y','Y'],['Z','Z']], supportedOps:ENUM_OPS },
+  { fieldName:'volumeClassification', fieldLabel:'体积分类', fieldGroup:'配件主数据', valueType:'ENUM', enumValues:[['S','小'],['M','中'],['L','大']], supportedOps:ENUM_OPS },
+  { fieldName:'minOrderQty', fieldLabel:'起订量', fieldGroup:'配件主数据', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'netWeight', fieldLabel:'净重', fieldGroup:'配件主数据', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'potentialUnitDown', fieldLabel:'无法行驶', fieldGroup:'配件主数据', valueType:'BOOLEAN', enumValues:[['true','是'],['false','否']], supportedOps:['EQ','NE','IS_NULL','IS_NOT_NULL'] },
+  { fieldName:'isCutOffPart', fieldLabel:'是否断供件', fieldGroup:'配件主数据', valueType:'BOOLEAN', enumValues:[['true','是'],['false','否']], supportedOps:['EQ','NE','IS_NULL','IS_NOT_NULL'] },
+  { fieldName:'isBreakPointPart', fieldLabel:'是否断点件', fieldGroup:'配件主数据', valueType:'BOOLEAN', enumValues:[['true','是'],['false','否']], supportedOps:['EQ','NE','IS_NULL','IS_NOT_NULL'] },
+  { fieldName:'isDangerousGoods', fieldLabel:'是否危险品', fieldGroup:'配件主数据', valueType:'BOOLEAN', enumValues:[['true','是'],['false','否']], supportedOps:['EQ','NE','IS_NULL','IS_NOT_NULL'] },
+  { fieldName:'isExpiryPart', fieldLabel:'是否效期件', fieldGroup:'配件主数据', valueType:'BOOLEAN', enumValues:[['true','是'],['false','否']], supportedOps:['EQ','NE','IS_NULL','IS_NOT_NULL'] },
+  { fieldName:'partsClassify', fieldLabel:'配件分类', fieldGroup:'配件主数据', valueType:'STRING', supportedOps:STR_OPS },
+  { fieldName:'tier1Category', fieldLabel:'一级分类', fieldGroup:'配件主数据', valueType:'STRING', supportedOps:STR_OPS },
+  { fieldName:'tier2Category', fieldLabel:'二级分类', fieldGroup:'配件主数据', valueType:'STRING', supportedOps:STR_OPS },
+  // —— 仓库主数据 ——
+  { fieldName:'warehouseCode', fieldLabel:'仓库编码', fieldGroup:'仓库主数据', masterField:'warehouse_code', valueType:'STRING', supportedOps:STR_OPS },
+  // —— 指标宽表（单一类，不细分）——
+  { fieldName:'demand_week_avg_12w', fieldLabel:'近12周周均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'demand_week_avg_8w', fieldLabel:'近8周周均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'demand_week_std_8w', fieldLabel:'近8周需求标准差', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'demand_month_avg_3m', fieldLabel:'近3个月月均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'demand_month_avg_3m_all', fieldLabel:'近3月全仓月均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'demand_month_std_6m', fieldLabel:'近6个月需求标准差', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'demand_month_std_6m_all', fieldLabel:'近6月全仓需求标准差', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'demand_qty_3m', fieldLabel:'近3个月需求量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'demand_qty_12m', fieldLabel:'近12个月需求量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'demand_qty_12m_all', fieldLabel:'近12月全仓需求量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'days_since_last_demand', fieldLabel:'无需求天数', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'sales_frequency_1y', fieldLabel:'近一年销售频次', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'fallback_c_week_avg', fieldLabel:'兜底C类周均销量', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'forecast_next_week_manual_qty', fieldLabel:'下周人工预测', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'forecast_next_month_manual_qty', fieldLabel:'下月仓库人工预测', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
+  { fieldName:'forecast_next_month_manual_qty_all', fieldLabel:'下月全仓人工预测', fieldGroup:'指标宽表', valueType:'NUMBER', supportedOps:NUM_OPS },
 ];
 // 【兼容映射】已从可配置清单移除的字段：不出现在字段下拉，但旧配置引用时仍能正确显示中文名/类型并参与匹配。
 const LEGACY_FIELDS = [
@@ -79,8 +103,43 @@ function nextId(){ return ++_nid; }
 function fieldMeta(fn){ return FIELD_REGISTRY.find(f=>f.fieldName===fn) || LEGACY_FIELDS.find(f=>f.fieldName===fn); }
 function fieldLabel(fn){ const f=fieldMeta(fn); return f?f.fieldLabel:fn; }
 function fieldType(fn){ const f=fieldMeta(fn); return f?f.valueType:'STRING'; }
+function dateFormat(fn){ const f=fieldMeta(fn); return (f&&f.dateFormat)||'YYYY-MM-DD'; }
 function enumOptions(fn){ const f=fieldMeta(fn); return (f&&f.enumValues)?f.enumValues.map(([v,l])=>({value:v,label:l})):[]; }
 function opOptionsFor(c){ const f=fieldMeta(c.fieldName); const ops=f?f.supportedOps:ALL_OPS; return ops.map(o=>({value:o,label:OP[o]})); }
+
+// 按字段配置的格式严格解析日期：支持 YYYY / MM / DD / HH / mm / ss，拒绝空值、错格式与不存在的日期。
+function parseDateValue(value, format){
+  if(value==null) return null;
+  if(value instanceof Date) return isNaN(value.getTime())?null:value.getTime();
+  const s=String(value).trim();
+  if(!s) return null;
+  const fmt=String(format||'YYYY-MM-DD');
+  const tokens=fmt.match(/YYYY|MM|DD|HH|mm|ss|./g)||[];
+  let pattern='^'; const partsOrder=[];
+  tokens.forEach(t=>{
+    if(/^(YYYY|MM|DD|HH|mm|ss)$/.test(t)){
+      pattern+='(\\d{'+(t==='YYYY'?4:2)+'})'; partsOrder.push(t);
+    } else {
+      pattern+=t.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+    }
+  });
+  pattern+='$';
+  const m=s.match(new RegExp(pattern));
+  if(!m) return null;
+  const p={}; partsOrder.forEach((t,i)=>{ p[t]=Number(m[i+1]); });
+  const y=p.YYYY||0, mo=p.MM||0, d=p.DD||1, h=p.HH||0, mi=p.mm||0, se=p.ss||0;
+  if(!y||y<1000||mo<1||mo>12||d<1||d>31||h>23||mi>59||se>59) return null;
+  const dt=new Date(y,mo-1,d,h,mi,se);
+  if(dt.getFullYear()!==y||dt.getMonth()!==mo-1||dt.getDate()!==d||dt.getHours()!==h||dt.getMinutes()!==mi||dt.getSeconds()!==se) return null;
+  return dt.getTime();
+}
+// 条件取值兼容 camelCase 配置名与源字段名（如 salesPrice / sales_price）。
+function condActual(c, mat){
+  if(!mat) return undefined;
+  if(mat[c.fieldName]!==undefined) return mat[c.fieldName];
+  const f=fieldMeta(c.fieldName);
+  return (f&&f.masterField&&mat[f.masterField]!==undefined)?mat[f.masterField]:undefined;
+}
 function condValueText(c){
   if(['IS_NULL','IS_NOT_NULL'].includes(c.operator)) return '';
   if(c.operator==='BETWEEN') return (c.value1||'')+' ~ '+(c.value2||'');
@@ -153,10 +212,27 @@ const seedGroups = exampleGroups; // 兼容既有调用方；语义为"示例数
 
 function evalCond(c, mat){
   if(!c || !mat) return false;
-  const actual = mat[c.fieldName];
+  const actual = condActual(c, mat);
   if(c.operator==='IS_NULL') return actual===null||actual===undefined||actual==='';
   if(c.operator==='IS_NOT_NULL') return !(actual===null||actual===undefined||actual==='');
   if(actual===null||actual===undefined) return false;
+  // 日期：按字段配置的格式解析实际值与条件值；任一为空/非法格式均不命中。
+  if(fieldType(c.fieldName)==='DATE' || c.valueType==='DATE'){
+    const fmt=dateFormat(c.fieldName);
+    const a=parseDateValue(actual,fmt);
+    if(a==null) return false;
+    const b1=parseDateValue(c.value1,fmt), b2=parseDateValue(c.value2,fmt);
+    switch(c.operator){
+      case'EQ':return b1!=null&&a===b1;
+      case'NE':return b1!=null&&a!==b1;
+      case'GT':return b1!=null&&a>b1;
+      case'GE':return b1!=null&&a>=b1;
+      case'LT':return b1!=null&&a<b1;
+      case'LE':return b1!=null&&a<=b1;
+      case'BETWEEN':return b1!=null&&b2!=null&&a>=b1&&a<=b2;
+      default:return false;
+    }
+  }
   if(fieldType(c.fieldName)==='NUMBER' || (c.valueType==='NUMBER')){
     const a=parseFloat(actual), b1=parseFloat(c.value1), b2=parseFloat(c.value2);
     if(isNaN(a)) return false;
@@ -195,11 +271,27 @@ function matchAll(groups, mat){
 }
 // 规则组编码由系统自动生成，无需人工填写；新建时为空会在保存前自动补号。
 function nextGroupCode(){ return 'FG_'+String(nextId()); }
+// 日期条件保存前校验：非空、符合字段配置格式；区间需两端都合法。
+function validateConditions(cs, label){
+  const errs=[];
+  (cs||[]).forEach((c,i)=>{
+    if(!c || ['IS_NULL','IS_NOT_NULL'].includes(c.operator)) return;
+    if(fieldType(c.fieldName)!=='DATE' && c.valueType!=='DATE') return;
+    const fmt=dateFormat(c.fieldName);
+    const values=c.operator==='BETWEEN'?[c.value1,c.value2]:[c.value1];
+    values.forEach(v=>{
+      if(v==null||String(v).trim()==='') errs.push(label+'第 '+(i+1)+' 条条件的日期不能为空');
+      else if(parseDateValue(v,fmt)==null) errs.push(label+'第 '+(i+1)+' 条条件的日期格式应为 '+fmt);
+    });
+  });
+  return errs;
+}
 function validateGroup(g){
   const errs=[];
   if(!g.groupName||!g.groupName.trim()) errs.push('请填写规则组名称');
   if(!(g.scope&&g.scope.conditions&&g.scope.conditions.length)) errs.push('组级适用范围至少要有一条条件（防止跨类别误命中）');
   else if(!g.scope.conditions.some(c=>c.fieldName==='abcClassification')) errs.push('组级适用范围必须包含 ABC分类 条件（否则会跨类别抢占）');
+  errs.push(...validateConditions(g.scope&&g.scope.conditions,'适用范围'));
   const seqs=(g.tiers||[]).filter(t=>t.enabled!==false).map(t=>t.seq);
   if(new Set(seqs).size!==seqs.length) errs.push('组内分档序号不能重复');
   (g.tiers||[]).forEach(t=>{ if(t.fallbackValue==null||t.fallbackValue<0) errs.push('序号 '+t.seq+' 的档位兜底值不能为负'); });
@@ -209,6 +301,7 @@ function validateTier(t){
   const errs=[];
   if(!t.reason||!String(t.reason).trim()) errs.push('请填写兜底原因');
   if(t.fallbackValue==null||t.fallbackValue<0) errs.push('兜底值不能为负');
+  errs.push(...validateConditions(t.conditions,'分档'));
   return errs;
 }
 // 把 fromId 移动到 toId 所在位置：效果等同于连续点击上移/下移（目标及其他档位顺次位移）。
@@ -226,7 +319,8 @@ function moveTierTo(tiers, fromId, toId){
 }
 
 const api = { OP, FIELD_REGISTRY, REGISTRY_ORDER, OP_LABELS:OP, fieldSourceLabel, fieldSourceGroups,
-  exampleGroups, seedGroups, priceRangeTiers, nextGroupCode, mkCond, conds, fieldMeta, fieldLabel, fieldType, enumOptions, opOptionsFor, condValueText,
+  exampleGroups, seedGroups, priceRangeTiers, nextGroupCode, mkCond, conds, fieldMeta, fieldLabel, fieldType, dateFormat, parseDateValue, condActual,
+  enumOptions, opOptionsFor, condValueText, validateConditions,
   evalCond, evalRule, evalScope, matchGroup, matchAll, validateGroup, validateTier, moveTierTo };
 if(typeof module!=='undefined'&&module.exports) module.exports=api;
 if(!root.Vue) return;
@@ -355,7 +449,7 @@ root.JlrFallbackRule = {
     }
     function onTierDragEnd(){ clearTierDrag(); }
 
-    const fieldSelectOptions=fieldSourceGroups().map(k=>({label:k.label+'（'+k.fields.length+'）',options:k.fields.map(f=>({value:f.fieldName,label:f.fieldLabel}))}));
+    const fieldSelectOptions=fieldSourceGroups().map(k=>({label:k.label+'（'+k.fields.length+'）',options:k.fields.map(f=>({value:f.fieldName,label:f.fieldLabel+(f.valueType==='DATE'?'（日期）':'')}))}));
 
     return {
       OP, groups, groupsSorted, selectedGroupId, activeGroup, activeTiers,
@@ -364,7 +458,7 @@ root.JlrFallbackRule = {
       tierState, tierModalOpen, openTierEditor, saveTier, deleteTier, duplicateTier, moveTier,
       dragTierId, dropTierId, onTierDragStart, onTierDragOver, onTierDragLeave, onTierDrop, onTierDragEnd,
       addCondToList, onCondFieldChange, normForEdit, normForSave,
-      fieldMeta, fieldLabel, fieldType, enumOptions, opOptionsFor, condValueText, fieldSelectOptions,
+      fieldMeta, fieldLabel, fieldType, dateFormat, enumOptions, opOptionsFor, condValueText, fieldSelectOptions,
     };
   },
   template:`
@@ -449,9 +543,20 @@ root.JlrFallbackRule = {
           <a-select v-model:value="c.fieldName" style="width:200px" @change="onCondFieldChange(c)" :options="fieldSelectOptions"/>
           <a-select v-model:value="c.operator" style="width:110px" :options="opOptionsFor(c)"/>
           <template v-if="!['IS_NULL','IS_NOT_NULL'].includes(c.operator)">
-            <template v-if="c.operator==='BETWEEN'"><a-input v-model:value="c.value1" placeholder="下限" style="width:100px"/><span style="color:#8c8c8c">~</span><a-input v-model:value="c.value2" placeholder="上限" style="width:100px"/></template>
-            <a-select v-else-if="fieldType(c.fieldName)==='ENUM'" v-model:value="c.value1" mode="multiple" allow-clear style="min-width:160px" :options="enumOptions(c.fieldName)"/>
-            <a-input v-else v-model:value="c.value1" placeholder="值" :type="fieldType(c.fieldName)==='NUMBER'?'number':'text'" style="width:130px"/>
+            <template v-if="fieldType(c.fieldName)==='DATE'">
+              <template v-if="c.operator==='BETWEEN'">
+                <a-date-picker v-model:value="c.value1" :format="dateFormat(c.fieldName)" :value-format="dateFormat(c.fieldName)" :show-time="dateFormat(c.fieldName).includes('HH')" placeholder="开始日期" style="width:170px"/>
+                <span style="color:#8c8c8c">~</span>
+                <a-date-picker v-model:value="c.value2" :format="dateFormat(c.fieldName)" :value-format="dateFormat(c.fieldName)" :show-time="dateFormat(c.fieldName).includes('HH')" placeholder="结束日期" style="width:170px"/>
+              </template>
+              <a-date-picker v-else v-model:value="c.value1" :format="dateFormat(c.fieldName)" :value-format="dateFormat(c.fieldName)" :show-time="dateFormat(c.fieldName).includes('HH')" placeholder="选择日期" style="width:170px"/>
+              <span class="strategy-sub" style="font-size:11px">{{ dateFormat(c.fieldName) }}</span>
+            </template>
+            <template v-else>
+              <template v-if="c.operator==='BETWEEN'"><a-input v-model:value="c.value1" placeholder="下限" style="width:100px"/><span style="color:#8c8c8c">~</span><a-input v-model:value="c.value2" placeholder="上限" style="width:100px"/></template>
+              <a-select v-else-if="fieldType(c.fieldName)==='ENUM'" v-model:value="c.value1" mode="multiple" allow-clear style="min-width:160px" :options="enumOptions(c.fieldName)"/>
+              <a-input v-else v-model:value="c.value1" placeholder="值" :type="fieldType(c.fieldName)==='NUMBER'?'number':'text'" style="width:130px"/>
+            </template>
           </template>
           <a style="margin-left:8px;color:#ff4d4f" @click="groupForm.scope.conditions.splice(idx,1)">删除</a>
         </div>
@@ -480,9 +585,20 @@ root.JlrFallbackRule = {
             <a-select v-model:value="c.fieldName" style="width:200px" @change="onCondFieldChange(c)" :options="fieldSelectOptions"/>
             <a-select v-model:value="c.operator" style="width:110px" :options="opOptionsFor(c)"/>
             <template v-if="!['IS_NULL','IS_NOT_NULL'].includes(c.operator)">
-              <template v-if="c.operator==='BETWEEN'"><a-input v-model:value="c.value1" placeholder="下限" style="width:100px"/><span style="color:#8c8c8c">~</span><a-input v-model:value="c.value2" placeholder="上限" style="width:100px"/></template>
-              <a-select v-else-if="fieldType(c.fieldName)==='ENUM'" v-model:value="c.value1" mode="multiple" allow-clear style="min-width:160px" :options="enumOptions(c.fieldName)"/>
-              <a-input v-else v-model:value="c.value1" placeholder="值" :type="fieldType(c.fieldName)==='NUMBER'?'number':'text'" style="width:130px"/>
+              <template v-if="fieldType(c.fieldName)==='DATE'">
+                <template v-if="c.operator==='BETWEEN'">
+                  <a-date-picker v-model:value="c.value1" :format="dateFormat(c.fieldName)" :value-format="dateFormat(c.fieldName)" :show-time="dateFormat(c.fieldName).includes('HH')" placeholder="开始日期" style="width:170px"/>
+                  <span style="color:#8c8c8c">~</span>
+                  <a-date-picker v-model:value="c.value2" :format="dateFormat(c.fieldName)" :value-format="dateFormat(c.fieldName)" :show-time="dateFormat(c.fieldName).includes('HH')" placeholder="结束日期" style="width:170px"/>
+                </template>
+                <a-date-picker v-else v-model:value="c.value1" :format="dateFormat(c.fieldName)" :value-format="dateFormat(c.fieldName)" :show-time="dateFormat(c.fieldName).includes('HH')" placeholder="选择日期" style="width:170px"/>
+                <span class="strategy-sub" style="font-size:11px">{{ dateFormat(c.fieldName) }}</span>
+              </template>
+              <template v-else>
+                <template v-if="c.operator==='BETWEEN'"><a-input v-model:value="c.value1" placeholder="下限" style="width:100px"/><span style="color:#8c8c8c">~</span><a-input v-model:value="c.value2" placeholder="上限" style="width:100px"/></template>
+                <a-select v-else-if="fieldType(c.fieldName)==='ENUM'" v-model:value="c.value1" mode="multiple" allow-clear style="min-width:160px" :options="enumOptions(c.fieldName)"/>
+                <a-input v-else v-model:value="c.value1" placeholder="值" :type="fieldType(c.fieldName)==='NUMBER'?'number':'text'" style="width:130px"/>
+              </template>
             </template>
             <a style="margin-left:8px;color:#ff4d4f" @click="tierState.conditions.splice(idx,1)">删除</a>
           </div>

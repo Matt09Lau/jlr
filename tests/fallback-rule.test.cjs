@@ -313,4 +313,82 @@ test('分档卡片已接入拖拽事件与视觉反馈，且不影响原有操�
   }
 });
 
+// ===== 2026-11-25 配件主数据全量纳入 + 日期配置 =====
+test('配件主数据字段全量纳入兜底参数，masterField 与设计稿源字段一一对应',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'../前端设计稿/JLR_主数据前端设计稿.html'),'utf8');
+  const block=html.match(/const matMasterDef = \{[\s\S]*?columns:\[([\s\S]*?)\],\s*filters:/);
+  assert.ok(block,'应能定位配件主数据列定义');
+  const sourceFields=[...block[1].matchAll(/dataIndex:'([^']+)'/g)].map(x=>x[1]).filter(x=>x!=='action');
+  assert.ok(sourceFields.length>=18,'配件主数据字段数异常：'+sourceFields.length);
+  const partFields=m.FIELD_REGISTRY.filter(f=>f.fieldGroup==='配件主数据');
+  const mapped=partFields.map(f=>f.masterField).filter(Boolean);
+  for(const source of sourceFields){
+    assert.ok(mapped.includes(source),'兜底参数缺少配件主数据字段 '+source);
+  }
+  assert.equal(new Set(mapped).size,mapped.length,'masterField 不应重复');
+  assert.ok(mapped.includes('purchase_category'),'采购类别（配件扩展属性）应纳入兜底参数');
+  // 与源字段语义一致的关键字段
+  assert.equal(m.fieldMeta('minPackageQty').masterField,'mpq');
+  assert.equal(m.fieldMeta('minPackageQty').fieldLabel,'MPQ');
+  assert.equal(m.fieldMeta('moneyClassification').masterField,'price_class');
+  assert.deepEqual(m.enumOptions('moneyClassification').map(o=>o.value),['25','50','75','100'],'金额分类枚举应与主数据分档一致');
+  assert.equal(m.fieldMeta('salesPrice').masterField,'sales_price');
+  // 兼容：camelCase 配置可匹配源字段名数据
+  assert.equal(m.evalCond(m.conds([['salesPrice','GT','100']])[0],{sales_price:128}),true);
+  assert.equal(m.evalCond(m.conds([['materialCode','EQ','M001']])[0],{material_code:'M001'}),true);
+});
+
+test('日期格式解析：按配置格式识别，拒绝空值、错格式与不存在的日期',()=>{
+  const fmt='YYYY-MM-DD HH:mm';
+  assert.ok(m.parseDateValue('2026-09-18 08:35',fmt)>0);
+  assert.ok(m.parseDateValue('2026-01-01','YYYY-MM-DD')>0);
+  assert.ok(m.parseDateValue('2026/09/18','YYYY/MM/DD')>0);
+  for(const bad of ['','   ',null,undefined,'2026-02-30','2026-13-01','2026-09-18 25:00','2026/09/18 08:35','09-18-2026']){
+    assert.equal(m.parseDateValue(bad,fmt),null,'应拒绝非法日期：'+JSON.stringify(bad));
+  }
+  const meta=m.fieldMeta('syncDataTime');
+  assert.equal(meta.valueType,'DATE');
+  assert.equal(meta.dateFormat,fmt);
+  for(const op of ['GT','GE','LT','LE','BETWEEN','IS_NULL','IS_NOT_NULL']) assert.ok(meta.supportedOps.includes(op),'日期应支持 '+op);
+});
+
+test('日期条件匹配：支持比较/区间/空值，字段缺失、空值与非法日期均不命中',()=>{
+  const gt=m.conds([['syncDataTime','GT','2026-09-01 00:00']])[0];
+  assert.equal(m.evalCond(gt,{sync_data_time:'2026-09-18 08:35'}),true,'源字段名应可命中');
+  assert.equal(m.evalCond(gt,{syncDataTime:'2026-09-18 08:35'}),true,'camelCase 数据应兼容');
+  assert.equal(m.evalCond(gt,{}),false,'字段缺失不命中');
+  assert.equal(m.evalCond(gt,{sync_data_time:''}),false,'空值不命中');
+  assert.equal(m.evalCond(gt,{sync_data_time:'2026-02-30 08:35'}),false,'非法日期不命中');
+  assert.equal(m.evalCond(m.conds([['syncDataTime','GT','']])[0],{sync_data_time:'2026-09-18 08:35'}),false,'配置值为空不命中');
+  assert.equal(m.evalCond(m.conds([['syncDataTime','GT','2026/09/01 00:00']])[0],{sync_data_time:'2026-09-18 08:35'}),false,'配置格式错误不命中');
+  const between=m.conds([['syncDataTime','BETWEEN','2026-09-01 00:00','2026-09-30 23:59']])[0];
+  assert.equal(m.evalCond(between,{sync_data_time:'2026-09-18 08:35'}),true);
+  assert.equal(m.evalCond(between,{sync_data_time:'2026-10-01 00:00'}),false);
+  assert.equal(m.evalCond(m.conds([['syncDataTime','IS_NULL','']])[0],{}),true);
+  assert.equal(m.evalCond(m.conds([['syncDataTime','IS_NOT_NULL','']])[0],{sync_data_time:'2026-09-18 08:35'}),true);
+});
+
+test('日期配置保存校验：空值、非法格式、区间缺一端被拦截，空值操作符放行',()=>{
+  const valid=m.conds([['syncDataTime','GE','2026-09-01 00:00']]);
+  assert.deepEqual(m.validateTier({seq:10,fallbackValue:5,reason:'按同步时间兜底',conditions:valid}),[]);
+  const invalid=m.conds([['syncDataTime','GE','2026/09/01']]);
+  assert.ok(m.validateTier({seq:10,fallbackValue:5,reason:'x',conditions:invalid}).some(s=>s.includes('日期格式应为')));
+  const empty=m.conds([['syncDataTime','GE','']]);
+  assert.ok(m.validateTier({seq:10,fallbackValue:5,reason:'x',conditions:empty}).some(s=>s.includes('日期不能为空')));
+  const range=m.conds([['syncDataTime','BETWEEN','2026-09-01 00:00','']]);
+  assert.ok(m.validateTier({seq:10,fallbackValue:5,reason:'x',conditions:range}).some(s=>s.includes('日期不能为空')));
+  const nullOp=m.conds([['syncDataTime','IS_NULL','']]);
+  assert.deepEqual(m.validateTier({seq:10,fallbackValue:5,reason:'x',conditions:nullOp}),[]);
+  const group=m.exampleGroups()[3];
+  const badScope={...group,scope:{matchMode:'AND',conditions:[...group.scope.conditions,...m.conds([['syncDataTime','LE','2026-02-30 10:00']])]}};
+  assert.ok(m.validateGroup(badScope).some(s=>s.includes('适用范围')&&s.includes('日期')));
+});
+
+test('配置界面：日期字段使用日期选择器并按字段格式回显',()=>{
+  const src=fs.readFileSync(path.join(__dirname,'../前端设计稿/fallback-rule.js'),'utf8');
+  for(const token of ['a-date-picker',':format="dateFormat(c.fieldName)"',':value-format="dateFormat(c.fieldName)"','f.fieldLabel+(f.valueType===\'DATE\'?\'（日期）\':\'\')','validateConditions']){
+    assert.ok(src.includes(token),'配置界面缺少日期支持：'+token);
+  }
+});
+
 console.log(checks+' meaningful checks passed');
