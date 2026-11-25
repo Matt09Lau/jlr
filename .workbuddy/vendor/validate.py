@@ -1227,6 +1227,8 @@ def check_preplan_page():
         "ASN列口径": "{ title:'供应商在途数量', key:'asn_qty', dataIndex:'asn_qty', width:125 }" in seg
                   and seg.find("{ title:'可用库存数量'") < seg.find("{ title:'供应商在途数量'") < seg.find("{ title:'库间在途数量'"),
         "可用库存数量在欠交数量前": seg.find("{ title:'可用库存数量', key:'available_qty'") < seg.find("{ title:'欠交数量', key:'open_po_qty'"),
+        "计算策略仅展示文字": "strategy.push('库存扣减')" in src and "strategy.push('MOQ 取整')" in src
+                       and "strategy.push('10 " not in src and "strategy.push('20 " not in src,
         "ASN参与库存构成": "const asn_qty = Math.round(stock*0.20);" in src
                      and "open_po_qty+available_qty+asn_qty+in_transit_qty-stock" in src
                      and "available_qty:available_qty, asn_qty:asn_qty, in_transit_qty:in_transit_qty" in src,
